@@ -1,0 +1,28 @@
+# =============================================================================
+# Standardized /etc/hosts — Apply IDENTICALLY on all 3 PVE nodes (its, node2, pve)
+# =============================================================================
+# Purpose: Unify Corosync cluster resolution and FL-CL training traffic
+#          on the low-latency secondary network (vmbr1 / 10.10.10.x).
+#          Management access uses vmbr0 IPs via separate *-mgmt aliases.
+#
+# Usage:
+#   1. SSH into each hypervisor as root
+#   2. Backup existing file:  cp /etc/hosts /etc/hosts.bak
+#   3. Replace contents:      cat hosts.txt > /etc/hosts
+#   4. Verify:                ping its && ping node2 && ping pve
+# =============================================================================
+
+127.0.0.1       localhost
+
+# --- Cluster & FL-CL Traffic (vmbr1 – Secondary Network / LACP Bond) ---
+10.10.10.11     its
+10.10.10.12     node2
+10.10.10.13     pve
+
+# --- Out-of-Band Management Only (vmbr0) ---
+192.168.10.2    its-mgmt
+192.168.20.2    node2-mgmt
+192.168.30.2    pve-mgmt
+
+# NOTE: Do NOT add static entries for its.ac.id here.
+#       Use a centralized DNS forwarder (dnsmasq on LXC 300) instead.
