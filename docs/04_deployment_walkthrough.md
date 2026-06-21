@@ -14,9 +14,9 @@ This testbed combines **Federated Learning (FL)** for collaborative decentralize
 ```mermaid
 graph RL
     subgraph Conceptual_Pipeline ["Federated Continual Learning Cycle"]
-        DataStream["Encrypted Traffic Stream (Non-Stationary)"] -->|Layer 4: NFStream Extraction| FeatureTensors["Feature Vectors (32 features)"]
-        FeatureTensors -->|Layer 5: Local CL with EWC| LocalUpdates["Local Parameter Updates (Regularized by FIM)"]
-        LocalUpdates -->|Layer 6: FL Sync - Flower and gRPC| GlobalAggregator["Global Aggregation (FedAvg)"]
+        DataStream["Encrypted Traffic Stream <br> (Non-Stationary)"] -->|Layer 4: NFStream Extraction| FeatureTensors["Feature Vectors <br> (32 features)"]
+        FeatureTensors -->|Layer 5: Local CL with EWC| LocalUpdates["Local Parameter Updates <br> (Regularized by FIM)"]
+        LocalUpdates -->|Layer 6: FL Sync - Flower and gRPC| GlobalAggregator["Global Aggregation <br> (FedAvg)"]
         GlobalAggregator -->|Broadcast Global Model| DataStream
     end
 ```
