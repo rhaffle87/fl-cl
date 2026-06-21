@@ -15,8 +15,8 @@ This testbed combines **Federated Learning (FL)** for collaborative decentralize
 graph TD
     subgraph Conceptual_Pipeline ["Federated Continual Learning Cycle"]
         DataStream["Encrypted Traffic Stream (Non-Stationary)"] -->|Layer 4: NFStream Extraction| FeatureTensors["Feature Vectors (32 features)"]
-        FeatureTensors -->|Layer 5: Local CL (Avalanche + EWC)| LocalUpdates["Local Parameter Updates (Regularized by FIM)"]
-        LocalUpdates -->|Layer 6: FL Sync (Flower + gRPC)| GlobalAggregator["Global Aggregation (FedAvg)"]
+        FeatureTensors -->|Layer 5: Local CL with EWC| LocalUpdates["Local Parameter Updates (Regularized by FIM)"]
+        LocalUpdates -->|Layer 6: FL Sync - Flower and gRPC| GlobalAggregator["Global Aggregation (FedAvg)"]
         GlobalAggregator -->|Broadcast Global Model| DataStream
     end
 ```
@@ -61,13 +61,13 @@ The underlying infrastructure consists of three physical servers connected to an
 
 ```mermaid
 graph LR
-    subgraph Physical Nodes
+    subgraph physical_nodes ["Physical Nodes"]
         its["its (Compute Node A)<br/>bond0 (LACP)"]
         node2["node2 (Compute Node B)<br/>bond0 (LACP)"]
         pve["pve (Orchestration Node)<br/>eth0"]
     end
     
-    subgraph Network Fabric
+    subgraph network_fabric ["Network Fabric"]
         Switch["L2 Managed Switch<br/>802.1Q Trunking"]
     end
 
@@ -99,7 +99,7 @@ Network isolation and routing boundaries are enforced using Proxmox native Linux
 
 ```mermaid
 graph TD
-    subgraph Node "its"
+    subgraph node_its ["Node 'its'"]
         bond0["Physical bond0"] <--> vmbr1["vmbr1 (VLAN Aware)"]
         vmbr1 <-->|VLAN 110| tap100i1["tap100i1 (Defender A Capture)"]
         vmbr1 <-->|VLAN 110| tap101i0["tap101i0 (Target A1 Access)"]

@@ -21,7 +21,7 @@ To simulate a multi-tenant collaborative defense environment, we virtualize sepa
 
 ```mermaid
 graph TD
-    subgraph Proxmox VE Cluster
+    subgraph PVE_Cluster ["Proxmox VE Cluster"]
         subgraph WAN_Mgmt["WAN / Management Bridge (vmbr0)"]
             Router[PVE Gateway / Internet]
         end
