@@ -14,10 +14,10 @@ This testbed combines **Federated Learning (FL)** for collaborative decentralize
 ```mermaid
 graph RL
     subgraph Conceptual_Pipeline ["Federated Continual Learning Cycle"]
-        DataStream["Encrypted Traffic Stream <br> (Non-Stationary)"] -->|Layer 4: NFStream Extraction| FeatureTensors["Feature Vectors <br> (32 features)"]
-        FeatureTensors -->|Layer 5: Local CL with EWC| LocalUpdates["Local Parameter Updates <br> (Regularized by FIM)"]
-        LocalUpdates -->|Layer 6: FL Sync - Flower and gRPC| GlobalAggregator["Global Aggregation <br> (FedAvg)"]
-        GlobalAggregator -->|Broadcast Global Model| DataStream
+        DataStream["Encrypted Traffic Stream <br> (Non-Stationary)"] -->|Layer 4: NFStream <br> Extraction| FeatureTensors["Feature Vectors <br> (32 features)"]
+        FeatureTensors -->|Layer 5: Local CL <br> with EWC| LocalUpdates["Local Parameter Updates <br> (Regularized by FIM)"]
+        LocalUpdates -->|Layer 6: FL Sync - <br> Flower and gRPC| GlobalAggregator["Global Aggregation <br> (FedAvg)"]
+        GlobalAggregator -->|Broadcast <br> Global Model| DataStream
     end
 ```
 
@@ -27,7 +27,7 @@ In local CL, the neural network faces the **Stability-Plasticity Dilemma**:
 * **Plasticity** is the ability to acquire new knowledge (e.g., detecting a new threat class like DNS-over-HTTPS exfiltration).
 * **Stability** is the ability to retain previously learned knowledge (e.g., detecting older threats like SSH brute-forcing).
 
-Unrestricted training on a new task overrides the weights critical to old tasks, causing **Catastrophic Forgetting**. To address this, we implement **Elastic Weight Consolidation (EWC)** (*Kirkpatrick et al., 2017*, referenced in [2502.07059v2.pdf](file:///e:/Projects/fl-cl/docs/2502.07059v2.pdf) and [2606.11272v1.pdf](file:///e:/Projects/fl-cl/docs/2606.11272v1.pdf)). EWC regularizes weight updates by penalizing changes to weights that are critical to historical tasks, calculated using the diagonal of the **Fisher Information Matrix (FIM)**:
+Unrestricted training on a new task overrides the weights critical to old tasks, causing **Catastrophic Forgetting**. To address this, we implement **Elastic Weight Consolidation (EWC)**. EWC regularizes weight updates by penalizing changes to weights that are critical to historical tasks, calculated using the diagonal of the **Fisher Information Matrix (FIM)**:
 
 $$\mathcal{L}(\theta) = \mathcal{L}_B(\theta) + \sum_{i} \frac{\lambda}{2} F_i (\theta_i - \theta_{A,i}^*)^2$$
 
@@ -39,9 +39,9 @@ Where:
 
 ### VLAN Collision Mitigation
 
-To prevent Layer 2 collisions with the campus management and backup network proposal detailed in the proposal by **Muhammad Nabil Ulya** (`5048221016_Muhammad Nabil Ulya.pdf`), we offset all internal testbed VLAN IDs by **+100**. This ensures strict isolation on the shared physical switch fabric:
+To prevent Layer 2 collisions with the campus management and backup network proposal, we offset all internal testbed VLAN IDs by **+100**. This ensures strict isolation on the shared physical switch fabric:
 
-| Zone / Organization | Proposed VLAN (Nabil) | Actual Shifted VLAN (Testbed) | Subnet | Assigned Nodes / VMs |
+| Zone / Organization | Proposed VLAN | Actual Shifted VLAN (Testbed) | Subnet | Assigned Nodes / VMs |
 | :--- | :--- | :--- | :--- | :--- |
 | **Management / Org A** | VLAN 10 | **VLAN 110** | `10.10.110.0/24` | `defender-a` (VM 100), `target-a1` (VM 101) |
 | **VM Network / Org B** | VLAN 20 | **VLAN 120** | `10.10.120.0/24` | `defender-b` (VM 200), `target-b1` (VM 201) |
