@@ -27,23 +27,23 @@ graph TD
         end
 
         subgraph SDN["Internal Bridge (vmbr1) – VLAN-Aware"]
-            subgraph CentralZone["Central Zone (VLAN 30)"]
+            subgraph CentralZone["Central Zone (VLAN 130)"]
                 Aggregator["FL Aggregator<br/>LXC 300 – Ubuntu 24.04"]
             end
             
-            subgraph OrgA["Organization A (VLAN 10)"]
+            subgraph OrgA["Organization A (VLAN 110)"]
                 DefenderA["Defender Node A<br/>VM 100 – Ubuntu 24.04"]
                 TargetA["Target Host A1<br/>VM 101 – Alpine Linux"]
                 MirrorA["TAP/Bridge Mirror"]
             end
 
-            subgraph OrgB["Organization B (VLAN 20)"]
+            subgraph OrgB["Organization B (VLAN 120)"]
                 DefenderB["Defender Node B<br/>VM 200 – Ubuntu 24.04"]
                 TargetB["Target Host B1<br/>VM 201 – Alpine Linux"]
                 MirrorB["TAP/Bridge Mirror"]
             end
             
-            subgraph TrafficZone["Traffic Generator Zone (VLAN 40)"]
+            subgraph TrafficZone["Traffic Generator Zone (VLAN 140)"]
                 Attacker["Traffic Generator<br/>VM 400 – Kali Linux"]
             end
         end
@@ -68,12 +68,12 @@ Each VM's resources, VLAN assignment, and role are designed to match the workloa
 
 | VM ID | Hostname | Type | OS | Resources | VLAN | Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **300** | `fl-aggregator` | LXC | Ubuntu Server 24.04 | 4 vCPU, 8 GB RAM, 50 GB Disk | 30 | Runs the Flower server, orchestrates FedAvg aggregation, and manages global model checkpoints. |
-| **100** | `defender-a` | VM (GPU-passthrough optional) | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 10 | Runs NFStream (ETA), PyTorch (model), Avalanche (CL), and Flower client (FL). |
-| **200** | `defender-b` | VM | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 20 | Parallel defender node simulating a separate organization. |
-| **101** | `target-a1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 10 | Receives benign browsing and malicious attack traffic from the traffic generator. |
-| **201** | `target-b1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 20 | Receives benign browsing and malicious attack traffic from the traffic generator. |
-| **400** | `traffic-gen` | VM | Kali Linux | 4 vCPU, 4 GB RAM, 50 GB Disk | 40 | Generates benign SSL/TLS traffic (Selenium/Locust) and malicious encrypted channels (Metasploit C2, Hydra SSH brute-force, Slowloris). |
+| **300** | `fl-aggregator` | LXC | Ubuntu Server 24.04 | 4 vCPU, 8 GB RAM, 50 GB Disk | 130 | Runs the Flower server, orchestrates FedAvg aggregation, and manages global model checkpoints. |
+| **100** | `defender-a` | VM (GPU-passthrough optional) | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 110 | Runs NFStream (ETA), PyTorch (model), Avalanche (CL), and Flower client (FL). |
+| **200** | `defender-b` | VM | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 120 | Parallel defender node simulating a separate organization. |
+| **101** | `target-a1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 110 | Receives benign browsing and malicious attack traffic from the traffic generator. |
+| **201** | `target-b1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 120 | Receives benign browsing and malicious attack traffic from the traffic generator. |
+| **400** | `traffic-gen` | VM | Kali Linux | 4 vCPU, 4 GB RAM, 50 GB Disk | 140 | Generates benign SSL/TLS traffic (Selenium/Locust) and malicious encrypted channels (Metasploit C2, Hydra SSH brute-force, Slowloris). |
 
 ---
 
@@ -286,7 +286,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
 
 if __name__ == "__main__":
     fl.client.start_numpy_client(
-        server_address="10.10.10.130:8080",  # Aggregator on VLAN 30
+        server_address="10.10.10.130:8080",  # Aggregator on VLAN 130
         client=CyberDefenseClient()
     )
 ```
@@ -329,9 +329,9 @@ This section provides the generic execution sequence. For cluster-specific provi
 3. Apply the standardized `/etc/hosts` template. *(See [workaround_specs.md](workaround_specs.md) Section 1.A.)*
 
 ### Phase 2: VM & Container Provisioning
-1. Deploy LXC 300 (`fl-aggregator`) on node `pve` with dual NICs (`vmbr0` + `vmbr1` VLAN 30).
-2. Deploy VM 100 (`defender-a`) on node `its` with dual NICs (`vmbr0` + `vmbr1` VLAN 10).
-3. Deploy VM 200 (`defender-b`) on node `node2` with dual NICs (`vmbr0` + `vmbr1` VLAN 20).
+1. Deploy LXC 300 (`fl-aggregator`) on node `pve` with dual NICs (`vmbr0` + `vmbr1` VLAN 130).
+2. Deploy VM 100 (`defender-a`) on node `its` with dual NICs (`vmbr0` + `vmbr1` VLAN 110).
+3. Deploy VM 200 (`defender-b`) on node `node2` with dual NICs (`vmbr0` + `vmbr1` VLAN 120).
 4. Deploy target VMs 101 and 201, and traffic generator VM 400.
 5. Bind hookscripts to target VMs for automatic port mirroring. *(See [workaround_specs.md](workaround_specs.md) Section 4, Phase 3.)*
 

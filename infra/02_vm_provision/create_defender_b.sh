@@ -3,7 +3,7 @@
 # create_defender_b.sh — Deploy Defender Node B VM
 # =============================================================================
 # Run on:  Node 'node2' (hypervisor shell as root)
-# Creates: VM 200 (defender-b) on VLAN 20
+# Creates: VM 200 (defender-b) on VLAN 120
 #
 # Identical role to Defender A but simulates a separate organization.
 # =============================================================================
@@ -11,7 +11,7 @@ set -euo pipefail
 
 VMID=200
 NAME="defender-b"
-VLAN=20
+VLAN=120
 
 echo "============================================"
 echo " Deploying Defender Node B — VM $VMID"

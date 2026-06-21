@@ -36,7 +36,7 @@ Before any VMs can be provisioned, three infrastructure inconsistencies must be 
 
 ### C. Bridge Properties & VLAN Awareness
 * **The Conflict:** Node `node2` has a **VLAN-aware** `vmbr1` bridge. Nodes `its` and `pve` have standard, non-VLAN-aware bridges. Additionally, `its` and `node2` use link aggregation (`bond0` with LACP), while `pve` runs a single physical NIC to `vmbr1`.
-* **The Impact:** Tagged VLAN traffic (VLAN 10 for Organization A, VLAN 20 for Organization B, VLAN 30 for aggregation, VLAN 40 for traffic generation) will be stripped or dropped on non-VLAN-aware bridges, breaking the network isolation design from [research_architecture.md](research_architecture.md) Section 2.
+* **The Impact:** Tagged VLAN traffic (VLAN 110 for Organization A, VLAN 120 for Organization B, VLAN 130 for aggregation, VLAN 140 for traffic generation) will be stripped or dropped on non-VLAN-aware bridges, breaking the network isolation design from [research_architecture.md](research_architecture.md) Section 2.
 * **The Workaround:** Enable **VLAN Awareness** on `vmbr1` across all three nodes.
 * **Action:** 
   1. Open the Proxmox Web GUI on `its` and `pve`.
@@ -53,18 +53,18 @@ The lab requires approximately **26 vCPUs, 46 GB RAM, and 320 GB Disk** to run 1
 graph TD
     subgraph allocation ["PVE Cluster Workload Allocation"]
         subgraph node_its ["Node 'its' (Used: 28.14 GB, Free: 34.63 GB)"]
-            clientA["Defender Node A (VM 100)<br/>8 vCPU · 16 GB · VLAN 10"]
-            targetA["Target Host A1 (VM 101)<br/>1 vCPU · 1 GB · VLAN 10"]
+            clientA["Defender Node A (VM 100)<br/>8 vCPU · 16 GB · VLAN 110"]
+            targetA["Target Host A1 (VM 101)<br/>1 vCPU · 1 GB · VLAN 110"]
         end
 
         subgraph node_node2 ["Node 'node2' (Used: 6.56 GB, Free: 56.21 GB)"]
-            clientB["Defender Node B (VM 200)<br/>8 vCPU · 16 GB · VLAN 20"]
-            targetB["Target Host B1 (VM 201)<br/>1 vCPU · 1 GB · VLAN 20"]
-            trafficGen["Traffic Generator (VM 400)<br/>4 vCPU · 4 GB · VLAN 40"]
+            clientB["Defender Node B (VM 200)<br/>8 vCPU · 16 GB · VLAN 120"]
+            targetB["Target Host B1 (VM 201)<br/>1 vCPU · 1 GB · VLAN 120"]
+            trafficGen["Traffic Generator (VM 400)<br/>4 vCPU · 4 GB · VLAN 140"]
         end
 
         subgraph node_pve ["Node 'pve' (Used: 5.40 GB, Free: 25.46 GB)"]
-            aggregator["FL Aggregator (LXC 300)<br/>4 vCPU · 8 GB · VLAN 30"]
+            aggregator["FL Aggregator (LXC 300)<br/>4 vCPU · 8 GB · VLAN 130"]
         end
     end
 ```
@@ -73,12 +73,12 @@ graph TD
 
 | Hypervisor | VM ID | Hostname | OS | vCPU | RAM | Disk | VLAN | Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **pve** | 300 | `fl-aggregator` | Ubuntu Server 24.04 | 4 | 8 GB | 50 GB | 30 | Flower server orchestration & global model checkpoints. |
-| **its** | 100 | `defender-a` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 10 | NFStream capture, PyTorch/Avalanche training, Flower client. |
-| **its** | 101 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 10 | Receives benign/malicious traffic from traffic generator. |
-| **node2** | 200 | `defender-b` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 20 | Parallel defender node simulating a separate organization. |
-| **node2** | 201 | `target-b1` | Alpine Linux | 1 | 1 GB | 10 GB | 20 | Receives benign/malicious traffic from traffic generator. |
-| **node2** | 400 | `traffic-gen` | Kali Linux | 4 | 4 GB | 50 GB | 40 | Metasploit C2, Hydra brute-force, Selenium benign browsing, tcpreplay dataset replay. |
+| **pve** | 300 | `fl-aggregator` | Ubuntu Server 24.04 | 4 | 8 GB | 50 GB | 130 | Flower server orchestration & global model checkpoints. |
+| **its** | 100 | `defender-a` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 110 | NFStream capture, PyTorch/Avalanche training, Flower client. |
+| **its** | 101 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 110 | Receives benign/malicious traffic from traffic generator. |
+| **node2** | 200 | `defender-b` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 120 | Parallel defender node simulating a separate organization. |
+| **node2** | 201 | `target-b1` | Alpine Linux | 1 | 1 GB | 10 GB | 120 | Receives benign/malicious traffic from traffic generator. |
+| **node2** | 400 | `traffic-gen` | Kali Linux | 4 | 4 GB | 50 GB | 140 | Metasploit C2, Hydra brute-force, Selenium benign browsing, tcpreplay dataset replay. |
 
 ---
 
@@ -149,7 +149,7 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
   -cores 4 -memory 8192 -swap 2048 \
   -hostname fl-aggregator -ostype ubuntu -rootfs local:50 \
   -net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  -net1 name=eth1,bridge=vmbr1,tag=30,ip=10.10.10.130/24 \
+  -net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.10.130/24 \
   -onboot 1 -start 1
 ```
 
@@ -161,7 +161,7 @@ Each defender has **two** network interfaces: `net0` on `vmbr0` (management/inte
 qm create 100 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1,tag=10 \
+  --net1 virtio,bridge=vmbr1,tag=110 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 ```
@@ -171,7 +171,7 @@ qm create 100 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
 qm create 200 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1,tag=20 \
+  --net1 virtio,bridge=vmbr1,tag=120 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 ```
@@ -181,24 +181,24 @@ qm create 200 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
 **On Node `its` (Target A1 – VM 101):**
 ```bash
 qm create 101 --name target-a1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1,tag=10 \
+  --net0 virtio,bridge=vmbr1,tag=110 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 ```
 
 **On Node `node2` (Target B1 – VM 201):**
 ```bash
 qm create 201 --name target-b1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1,tag=20 \
+  --net0 virtio,bridge=vmbr1,tag=120 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 ```
 
 **On Node `node2` (Traffic Generator – VM 400):**
 ```bash
 qm create 400 --name traffic-gen --cores 4 --memory 4096 \
-  --net0 virtio,bridge=vmbr1,tag=40 \
+  --net0 virtio,bridge=vmbr1,tag=140 \
   --scsihw virtio-scsi-pci --scsi0 local:50,discard=on --start 0
 ```
-> **Inter-VLAN routing note:** The traffic generator on VLAN 40 must reach target hosts on VLANs 10 and 20. Configure static routes on your gateway router, or assign target interfaces additional VLAN tags to span the test ranges.
+> **Inter-VLAN routing note:** The traffic generator on VLAN 140 must reach target hosts on VLANs 110 and 120. Configure static routes on your gateway router, or assign target interfaces additional VLAN tags to span the test ranges.
 
 ---
 
@@ -281,7 +281,7 @@ The startup order mirrors the data flow: aggregator → flow extraction → traf
 ```bash
 source /opt/flower-env/bin/activate && python3 server.py
 ```
-*Binds to port 8080 on the VLAN 30 interface (`10.10.10.130`).*
+*Binds to port 8080 on the VLAN 130 interface (`10.10.10.130`).*
 
 #### Step 5.2: Start Flow Extraction (Defender VMs)
 ```bash
@@ -324,21 +324,21 @@ bridge vlan show vmbr1
 ```
 Run a temporary tagged test interface on each node to verify L2 crossing:
 ```bash
-ip link add link vmbr1 name vmbr1.10 type vlan id 10
-ip addr add 10.10.100.11/24 dev vmbr1.10
-ip link set dev vmbr1.10 up
+ip link add link vmbr1 name vmbr1.110 type vlan id 110
+ip addr add 10.10.100.11/24 dev vmbr1.110
+ip link set dev vmbr1.110 up
 # Repeat on node2 with IP 10.10.100.12, then ping to verify
 ping -c 3 10.10.100.12
 ```
 *Clean up:*
 ```bash
-ip link delete vmbr1.10
+ip link delete vmbr1.110
 ```
 
 ### 3. VLAN Isolation Check
 Confirm VMs on different VLANs cannot communicate without explicit routing:
 ```bash
-# From VM 101 (VLAN 10) → should fail (100% packet loss)
+# From VM 101 (VLAN 110) → should fail (100% packet loss)
 ping -c 3 10.10.20.201
 ```
 

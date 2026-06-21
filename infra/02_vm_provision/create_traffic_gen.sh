@@ -3,7 +3,7 @@
 # create_traffic_gen.sh — Deploy Traffic Generator VM (Kali Linux)
 # =============================================================================
 # Run on:  Node 'node2' (hypervisor shell as root)
-# Creates: VM 400 (traffic-gen) on VLAN 40
+# Creates: VM 400 (traffic-gen) on VLAN 140
 #
 # Runs: Metasploit, Hydra, Slowloris, tcpreplay, Selenium
 # =============================================================================
@@ -11,7 +11,7 @@ set -euo pipefail
 
 VMID=400
 NAME="traffic-gen"
-VLAN=40
+VLAN=140
 
 echo "============================================"
 echo " Deploying Traffic Generator — VM $VMID"

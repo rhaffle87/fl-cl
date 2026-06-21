@@ -154,7 +154,7 @@ Node `its` maps `its.ac.id` to `10.3.132.7`; node `node2` maps it to `192.168.18
 **Resolution**: Remove all static `its.ac.id` entries from host files. Deploy a centralized DNS forwarder (e.g., `dnsmasq` on the aggregator LXC) to resolve this domain uniformly across all VMs.
 
 #### C. VLAN Awareness Mismatch
-Node `node2` runs a VLAN-aware `vmbr1`; nodes `its` and `pve` do not. Additionally, `its` and `node2` use LACP link aggregation (`bond0`), while `pve` connects via a single NIC. Tagged VLAN frames (10, 20, 30, 40) will be silently dropped on non-VLAN-aware bridges.
+Node `node2` runs a VLAN-aware `vmbr1`; nodes `its` and `pve` do not. Additionally, `its` and `node2` use LACP link aggregation (`bond0`), while `pve` connects via a single NIC. Tagged VLAN frames (110, 120, 130, 140) will be silently dropped on non-VLAN-aware bridges.
 
 **Resolution**: Enable `bridge-vlan-aware yes` on `vmbr1` across all three hosts (detailed in Chapter 7, Phase 1).
 
@@ -166,16 +166,16 @@ With the network harmonized, VMs are distributed across nodes based on available
 graph TD
     subgraph cluster ["PVE Cluster – Workload Allocation"]
         subgraph its ["Node 'its' (Free: 34.63 GB)"]
-            DA["Defender A (VM 100)<br/>8 vCPU · 16 GB · VLAN 10"]
-            TA["Target A1 (VM 101)<br/>1 vCPU · 1 GB · VLAN 10"]
+            DA["Defender A (VM 100)<br/>8 vCPU · 16 GB · VLAN 110"]
+            TA["Target A1 (VM 101)<br/>1 vCPU · 1 GB · VLAN 110"]
         end
         subgraph node2 ["Node 'node2' (Free: 56.21 GB)"]
-            DB["Defender B (VM 200)<br/>8 vCPU · 16 GB · VLAN 20"]
-            TB["Target B1 (VM 201)<br/>1 vCPU · 1 GB · VLAN 20"]
-            TG["Traffic Gen (VM 400)<br/>4 vCPU · 4 GB · VLAN 40"]
+            DB["Defender B (VM 200)<br/>8 vCPU · 16 GB · VLAN 120"]
+            TB["Target B1 (VM 201)<br/>1 vCPU · 1 GB · VLAN 120"]
+            TG["Traffic Gen (VM 400)<br/>4 vCPU · 4 GB · VLAN 140"]
         end
         subgraph pve ["Node 'pve' (Free: 25.46 GB)"]
-            AG["FL Aggregator (LXC 300)<br/>4 vCPU · 8 GB · VLAN 30"]
+            AG["FL Aggregator (LXC 300)<br/>4 vCPU · 8 GB · VLAN 130"]
         end
     end
     TG -.->|Attacks + Benign Traffic| TA
@@ -186,12 +186,12 @@ graph TD
 
 | Hypervisor | ID | Hostname | OS | vCPU | RAM | Disk | VLAN | Role |
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|
-| **pve** | 300 | `fl-aggregator` | Ubuntu 24.04 | 4 | 8 GB | 50 GB | 30 | Flower server, global model checkpoints |
-| **its** | 100 | `defender-a` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 10 | NFStream capture, PyTorch/Avalanche training, Flower client |
-| **its** | 101 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 10 | Receives benign/malicious traffic from traffic generator |
-| **node2** | 200 | `defender-b` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 20 | Parallel defender simulating a separate organization |
-| **node2** | 201 | `target-b1` | Alpine Linux | 1 | 1 GB | 10 GB | 20 | Receives benign/malicious traffic from traffic generator |
-| **node2** | 400 | `traffic-gen` | Kali Linux | 4 | 4 GB | 50 GB | 40 | Metasploit C2, Hydra brute-force, Selenium benign browsing |
+| **pve** | 300 | `fl-aggregator` | Ubuntu 24.04 | 4 | 8 GB | 50 GB | 130 | Flower server, global model checkpoints |
+| **its** | 100 | `defender-a` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 110 | NFStream capture, PyTorch/Avalanche training, Flower client |
+| **its** | 101 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 110 | Receives benign/malicious traffic from traffic generator |
+| **node2** | 200 | `defender-b` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 120 | Parallel defender simulating a separate organization |
+| **node2** | 201 | `target-b1` | Alpine Linux | 1 | 1 GB | 10 GB | 120 | Receives benign/malicious traffic from traffic generator |
+| **node2** | 400 | `traffic-gen` | Kali Linux | 4 | 4 GB | 50 GB | 140 | Metasploit C2, Hydra brute-force, Selenium benign browsing |
 
 The placement ensures that each defender VM resides on the same hypervisor as its corresponding target VM. This co-location is critical because port mirroring (Chapter 4) operates on hypervisor-local TAP interfaces—traffic cannot be mirrored across physical hosts without SDN overlay encapsulation.
 
@@ -215,12 +215,12 @@ Each simulated organization occupies an isolated VLAN on the shared `vmbr1` brid
 
 | VLAN ID | Subnet | Purpose | Members |
 |:---|:---|:---|:---|
-| 10 | 10.10.10.0/24 | Organization A | `defender-a`, `target-a1` |
-| 20 | 10.10.20.0/24 | Organization B | `defender-b`, `target-b1` |
-| 30 | 10.10.30.0/24 | Aggregation Zone | `fl-aggregator` |
-| 40 | 10.10.40.0/24 | Traffic Generation | `traffic-gen` |
+| 110 | 10.10.110.0/24 | Organization A | `defender-a`, `target-a1` |
+| 120 | 10.10.120.0/24 | Organization B | `defender-b`, `target-b1` |
+| 130 | 10.10.130.0/24 | Aggregation Zone | `fl-aggregator` |
+| 140 | 10.10.140.0/24 | Traffic Generation | `traffic-gen` |
 
-Inter-VLAN routing is deliberately restricted. The traffic generator (VLAN 40) requires routed access to target hosts on VLANs 10 and 20 to deliver attack and benign traffic, but defender nodes communicate only with the aggregator (VLAN 30) for FL weight synchronization. This segmentation mirrors real-world organizational boundaries: each "organization" sees only its own local network, and FL updates traverse a controlled channel to the central server.
+Inter-VLAN routing is deliberately restricted. The traffic generator (VLAN 140) requires routed access to target hosts on VLANs 110 and 120 to deliver attack and benign traffic, but defender nodes communicate only with the aggregator (VLAN 130) for FL weight synchronization. This segmentation mirrors real-world organizational boundaries: each "organization" sees only its own local network, and FL updates traverse a controlled channel to the central server.
 
 ### 4.2 Port Mirroring via Linux Traffic Control (`tc`)
 
@@ -500,7 +500,7 @@ if __name__ == "__main__":
     )
 ```
 
-Note that `server_address` points to the aggregator's VLAN 30 IP (`10.10.10.130`), matching the network layout from Chapter 3's allocation matrix.
+Note that `server_address` points to the aggregator's VLAN 130 IP (`10.10.10.130`), matching the network layout from Chapter 3's allocation matrix.
 
 ### 6.4 Flower Aggregator (`server.py`)
 
@@ -561,7 +561,7 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
   -cores 4 -memory 8192 -swap 2048 -hostname fl-aggregator \
   -rootfs local:50 \
   -net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  -net1 name=eth1,bridge=vmbr1,tag=30,ip=10.10.10.130/24 \
+  -net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.10.130/24 \
   -onboot 1 -start 1
 ```
 
@@ -569,7 +569,7 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
 ```bash
 qm create 100 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
-  --net0 virtio,bridge=vmbr0 --net1 virtio,bridge=vmbr1,tag=10 \
+  --net0 virtio,bridge=vmbr0 --net1 virtio,bridge=vmbr1,tag=110 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1
 ```
@@ -577,7 +577,7 @@ qm create 100 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
 **Target A1 (Node `its`):**
 ```bash
 qm create 101 --name target-a1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1,tag=10 \
+  --net0 virtio,bridge=vmbr1,tag=110 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on
 ```
 
@@ -661,15 +661,15 @@ corosync-cfgtool -s
 ```bash
 bridge vlan show vmbr1
 # Temporary cross-node test:
-ip link add link vmbr1 name vmbr1.10 type vlan id 10
-ip addr add 10.10.100.11/24 dev vmbr1.10 && ip link set dev vmbr1.10 up
+ip link add link vmbr1 name vmbr1.110 type vlan id 110
+ip addr add 10.10.100.11/24 dev vmbr1.110 && ip link set dev vmbr1.110 up
 ping -c 3 10.10.100.12  # From node2
-ip link delete vmbr1.10  # Cleanup
+ip link delete vmbr1.110  # Cleanup
 ```
 
 **VLAN Isolation**: Confirm VMs on different VLANs cannot communicate without explicit routing:
 ```bash
-ping -c 3 10.10.20.201  # From VM 101 (VLAN 10) → should fail
+ping -c 3 10.10.20.201  # From VM 101 (VLAN 110) → should fail
 ```
 
 **Hookscript Execution**: Verify mirroring activates on VM boot:

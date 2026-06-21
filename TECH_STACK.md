@@ -12,7 +12,7 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 |:---|:---|:---|:---|
 | **Proxmox VE** | 8.x | Type-1 hypervisor for VM/CT management | Pre-installed on bare metal |
 | **Linux Bridge (`vmbr0`, `vmbr1`)** | Kernel built-in | Virtual network switching between VMs | Configured in `/etc/network/interfaces` |
-| **802.1Q VLAN Tagging** | Kernel module | Isolate organizational networks (VLAN 10/20/30/40) | `bridge-vlan-aware yes` in `/etc/network/interfaces` |
+| **802.1Q VLAN Tagging** | Kernel module | Isolate organizational networks (VLAN 110/120/130/140) | `bridge-vlan-aware yes` in `/etc/network/interfaces` |
 | **LACP Bond (`bond0`)** | Kernel module | Link aggregation on nodes `its` and `node2` | Configured in `/etc/network/interfaces` |
 | **tc (Traffic Control)** | iproute2 | Port mirroring — copies target VM traffic to defender capture interface | `apt install iproute2` (pre-installed) |
 | **Proxmox Hookscripts** | PVE built-in | Auto-execute scripts on VM lifecycle events (post-start) | `pvesm set local --content ...,snippets` |
@@ -40,10 +40,10 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 
 | Technology | Purpose | Where |
 |:---|:---|:---|
-| **VLAN 10** (10.10.10.0/24) | Organization A network | VM 100, VM 101 |
-| **VLAN 20** (10.10.20.0/24) | Organization B network | VM 200, VM 201 |
-| **VLAN 30** (10.10.30.0/24) | FL Aggregation zone | LXC 300 |
-| **VLAN 40** (10.10.40.0/24) | Traffic generation zone | VM 400 |
+| **VLAN 110** (10.10.110.0/24) | Organization A network | VM 100, VM 101 |
+| **VLAN 120** (10.10.120.0/24) | Organization B network | VM 200, VM 201 |
+| **VLAN 130** (10.10.130.0/24) | FL Aggregation zone | LXC 300 |
+| **VLAN 140** (10.10.140.0/24) | Traffic generation zone | VM 400 |
 | **gRPC over TLS** | FL weight sync (Flower protocol) | Defenders ↔ Aggregator |
 | **TCP/8080** | Flower server port | LXC 300 |
 | **TCP/5000** | MLflow tracking UI | LXC 300 |
