@@ -12,7 +12,7 @@ Traditional machine learning assumes **stationary** data distributions (identica
 This testbed combines **Federated Learning (FL)** for collaborative decentralized knowledge aggregation and **Continual Learning (CL)** to adapt to non-stationary data streams without forgetting previously learned patterns (catastrophic forgetting).
 
 ```mermaid
-graph TD
+graph RL
     subgraph Conceptual_Pipeline ["Federated Continual Learning Cycle"]
         DataStream["Encrypted Traffic Stream (Non-Stationary)"] -->|Layer 4: NFStream Extraction| FeatureTensors["Feature Vectors (32 features)"]
         FeatureTensors -->|Layer 5: Local CL with EWC| LocalUpdates["Local Parameter Updates (Regularized by FIM)"]
