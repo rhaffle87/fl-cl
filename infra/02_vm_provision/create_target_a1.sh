@@ -31,7 +31,7 @@ qm create $VMID \
     --net0 virtio,bridge=vmbr1,tag=$VLAN \
     --scsihw virtio-scsi-pci \
     --scsi0 local-lvm:10,discard=on \
-    --ide2 local:iso/alpine-virt-3.20.0-x86_64.iso,media=cdrom \
+    --ide2 local:iso/alpine-virt-3.24.0-x86_64.iso,media=cdrom \
     --boot order='ide2;scsi0'
 
 echo "✓ VM $VMID ($NAME) created."

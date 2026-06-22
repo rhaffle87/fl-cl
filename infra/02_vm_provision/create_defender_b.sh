@@ -36,7 +36,7 @@ qm create $VMID \
     --net1 virtio,bridge=vmbr1,tag=$VLAN \
     --scsihw virtio-scsi-pci \
     --scsi0 local-lvm:100,discard=on \
-    --ide2 local:iso/ubuntu-24.04.1-live-server-amd64.iso,media=cdrom \
+    --ide2 local:iso/ubuntu-24.04.2-live-server-amd64.iso,media=cdrom \
     --boot order='ide2;scsi0' \
     --onboot 1
 
