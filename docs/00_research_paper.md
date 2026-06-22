@@ -495,12 +495,12 @@ class CyberDefenseClient(fl.client.NumPyClient):
 
 if __name__ == "__main__":
     fl.client.start_numpy_client(
-        server_address="10.10.10.130:8080",
+        server_address="10.10.130.10:8080",
         client=CyberDefenseClient()
     )
 ```
 
-Note that `server_address` points to the aggregator's VLAN 130 IP (`10.10.10.130`), matching the network layout from Chapter 3's allocation matrix.
+Note that `server_address` points to the aggregator's VLAN 130 IP (`10.10.130.10`), matching the network layout from Chapter 3's allocation matrix.
 
 ### 6.4 Flower Aggregator (`server.py`)
 
@@ -561,7 +561,7 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
   -cores 4 -memory 8192 -swap 2048 -hostname fl-aggregator \
   -rootfs local:50 \
   -net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  -net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.10.130/24 \
+  -net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.130.10/24 \
   -onboot 1 -start 1
 ```
 
@@ -638,7 +638,7 @@ The startup order mirrors the data flow: aggregator → flow extraction → traf
 5.  **Start FL-CL Clients** (Defender VMs):
     ```bash
     source ~/fl-cl-env/bin/activate
-    python3 client.py --server 10.10.10.130:8080 --client-id A
+    python3 client.py --server 10.10.130.10:8080 --client-id A
     ```
 
 ---
@@ -669,7 +669,7 @@ ip link delete vmbr1.110  # Cleanup
 
 **VLAN Isolation**: Confirm VMs on different VLANs cannot communicate without explicit routing:
 ```bash
-ping -c 3 10.10.20.201  # From VM 311 (VLAN 110) → should fail
+ping -c 3 10.10.120.15  # From VM 311 (VLAN 110) → should fail
 ```
 
 **Hookscript Execution**: Verify mirroring activates on VM boot:

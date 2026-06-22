@@ -11,7 +11,7 @@ Per federated round:
 
 Deploy on: Defender VMs (VM 310, VM 320)
 Usage:
-    python3 client.py --server 10.10.10.130:8080 --client-id A
+    python3 client.py --server 10.10.130.10:8080 --client-id A
 """
 
 import argparse
@@ -110,7 +110,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
 
 def main():
     parser = argparse.ArgumentParser(description="FL-CL Defender Client")
-    parser.add_argument("--server", default="10.10.10.130:8080", help="Aggregator address")
+    parser.add_argument("--server", default="10.10.130.10:8080", help="Aggregator address")
     parser.add_argument("--client-id", default="A", help="Client identifier (A or B)")
     parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory")
     parser.add_argument("--ewc-lambda", type=float, default=0.4, help="EWC regularization strength")

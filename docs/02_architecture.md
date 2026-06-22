@@ -286,7 +286,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
 
 if __name__ == "__main__":
     fl.client.start_numpy_client(
-        server_address="10.10.10.130:8080",  # Aggregator on VLAN 130
+        server_address="10.10.130.10:8080",  # Aggregator on VLAN 130
         client=CyberDefenseClient()
     )
 ```
@@ -356,7 +356,7 @@ This section provides the generic execution sequence. For cluster-specific provi
    ```
 3. Start FL-CL clients on each defender VM:
    ```bash
-   python3 client.py --server 10.10.10.130:8080 --client-id A
+   python3 client.py --server 10.10.130.10:8080 --client-id A
    ```
 4. Monitor training rounds via MLflow/TensorBoard. *(See [prerequisites_and_tooling.md](prerequisites_and_tooling.md) Section 5.B.)*
 

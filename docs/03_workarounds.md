@@ -149,7 +149,7 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
   -cores 4 -memory 8192 -swap 2048 \
   -hostname fl-aggregator -ostype ubuntu -rootfs local:50 \
   -net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  -net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.10.130/24 \
+  -net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.130.10/24 \
   -onboot 1 -start 1
 ```
 
@@ -281,7 +281,7 @@ The startup order mirrors the data flow: aggregator → flow extraction → traf
 ```bash
 source /opt/flower-env/bin/activate && python3 server.py
 ```
-*Binds to port 8080 on the VLAN 130 interface (`10.10.10.130`).*
+*Binds to port 8080 on the VLAN 130 interface (`10.10.130.10`).*
 
 #### Step 5.2: Start Flow Extraction (Defender VMs)
 ```bash
@@ -301,7 +301,7 @@ Launch attack campaigns and benign browsing scripts per [prerequisites_and_tooli
 #### Step 5.5: Start FL-CL Clients (Defender VMs)
 ```bash
 source ~/fl-cl-env/bin/activate
-python3 client.py --server 10.10.10.130:8080 --client-id A
+python3 client.py --server 10.10.130.10:8080 --client-id A
 ```
 
 ---
@@ -339,7 +339,7 @@ ip link delete vmbr1.110
 Confirm VMs on different VLANs cannot communicate without explicit routing:
 ```bash
 # From VM 311 (VLAN 110) → should fail (100% packet loss)
-ping -c 3 10.10.20.201
+ping -c 3 10.10.120.15
 ```
 
 ### 4. Hookscript Execution Check

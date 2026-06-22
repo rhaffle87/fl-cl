@@ -111,7 +111,7 @@ python3 server.py --rounds 10 --min-clients 2
 # On defender VMs (VM 310 & 320):
 source ~/fl-cl-env/bin/activate
 python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/
-python3 client.py --server 10.10.10.130:8080 --client-id A   # (or B)
+python3 client.py --server 10.10.130.10:8080 --client-id A   # (or B)
 ```
 
 ---

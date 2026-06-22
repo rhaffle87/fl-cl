@@ -130,7 +130,7 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
   --ostype ubuntu \
   --rootfs local:50 \
   --net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  --net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.10.130/24 \
+  --net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.130.10/24 \
   --onboot 1 \
   --start 1
 ```
@@ -485,7 +485,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--server", default="10.10.10.130:8080")
+    parser.add_argument("--server", default="10.10.130.10:8080")
     parser.add_argument("--client-id", required=True)
     args = parser.parse_args()
     
@@ -524,16 +524,16 @@ Simulate threats targeting the client VMs:
 
 ```bash
 # 1. SSH Brute Force via Hydra
-hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://10.10.110.101 -t 4
+hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://10.10.110.15 -t 4
 
 # 2. HTTP Denial-of-Service via Slowloris
-slowloris 10.10.110.101 -p 443 -s 150
+slowloris 10.10.110.15 -p 443 -s 150
 
 # 3. Replay Historical Attacks using tcpreplay
 # Rewrite IPs to match target subnets
 tcprewrite --pcap=input.pcap --out=output.pcap \
-  --srcipmap=0.0.0.0/0:10.10.140.400 \
-  --dstipmap=0.0.0.0/0:10.10.110.101
+  --srcipmap=0.0.0.0/0:10.10.140.10 \
+  --dstipmap=0.0.0.0/0:10.10.110.15
 tcpreplay --intf=eth0 --pps=500 output.pcap
 ```
 
@@ -557,14 +557,14 @@ Ensure client nodes cannot bypass routing controls to communicate directly:
 ```bash
 # From Target VM 311 (VLAN 110) to Target VM 321 (VLAN 120)
 # This request must fail with 100% packet loss
-ping -c 3 10.10.120.201
+ping -c 3 10.10.120.15
 ```
 
 **2. Verify Interface Mirroring (SPAN Verification):**
 Confirm target traffic is duplicated and visible to the Defender node:
 ```bash
 # From Target VM 311, generate background ping
-ping -c 10 10.10.140.1
+ping -c 10 10.10.140.10
 # Simultaneously run capture check inside Defender VM 310
 sudo tcpdump -i ens19 -n icmp
 ```
@@ -591,4 +591,4 @@ Follow this execution sequence to start the FCL framework:
 - [ ] **Phase 3**: Start the Flower server on LXC 300 (`python3 server.py`).
 - [ ] **Phase 4**: Start the flow extractor daemon on Defender nodes (`python3 extractor.py --interface ens19`).
 - [ ] **Phase 5**: Initiate the attack patterns and background traffic from the Traffic Generator (`VM 400`).
-- [ ] **Phase 6**: Launch the client nodes (`python3 client.py --client-id A`). Monitor accuracy metrics on the MLflow UI (`http://10.10.10.130:5000`).
+- [ ] **Phase 6**: Launch the client nodes (`python3 client.py --client-id A`). Monitor accuracy metrics on the MLflow UI (`http://10.10.130.10:5000`).
