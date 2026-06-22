@@ -32,14 +32,14 @@ graph TD
             end
             
             subgraph OrgA["Organization A (VLAN 110)"]
-                DefenderA["Defender Node A<br/>VM 100 – Ubuntu 24.04"]
-                TargetA["Target Host A1<br/>VM 101 – Alpine Linux"]
+                DefenderA["Defender Node A<br/>VM 310 – Ubuntu 24.04"]
+                TargetA["Target Host A1<br/>VM 311 – Alpine Linux"]
                 MirrorA["TAP/Bridge Mirror"]
             end
 
             subgraph OrgB["Organization B (VLAN 120)"]
-                DefenderB["Defender Node B<br/>VM 200 – Ubuntu 24.04"]
-                TargetB["Target Host B1<br/>VM 201 – Alpine Linux"]
+                DefenderB["Defender Node B<br/>VM 320 – Ubuntu 24.04"]
+                TargetB["Target Host B1<br/>VM 321 – Alpine Linux"]
                 MirrorB["TAP/Bridge Mirror"]
             end
             
@@ -69,10 +69,10 @@ Each VM's resources, VLAN assignment, and role are designed to match the workloa
 | VM ID | Hostname | Type | OS | Resources | VLAN | Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **300** | `fl-aggregator` | LXC | Ubuntu Server 24.04 | 4 vCPU, 8 GB RAM, 50 GB Disk | 130 | Runs the Flower server, orchestrates FedAvg aggregation, and manages global model checkpoints. |
-| **100** | `defender-a` | VM (GPU-passthrough optional) | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 110 | Runs NFStream (ETA), PyTorch (model), Avalanche (CL), and Flower client (FL). |
-| **200** | `defender-b` | VM | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 120 | Parallel defender node simulating a separate organization. |
-| **101** | `target-a1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 110 | Receives benign browsing and malicious attack traffic from the traffic generator. |
-| **201** | `target-b1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 120 | Receives benign browsing and malicious attack traffic from the traffic generator. |
+| **310** | `defender-a` | VM (GPU-passthrough optional) | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 110 | Runs NFStream (ETA), PyTorch (model), Avalanche (CL), and Flower client (FL). |
+| **320** | `defender-b` | VM | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 120 | Parallel defender node simulating a separate organization. |
+| **311** | `target-a1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 110 | Receives benign browsing and malicious attack traffic from the traffic generator. |
+| **321** | `target-b1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 120 | Receives benign browsing and malicious attack traffic from the traffic generator. |
 | **400** | `traffic-gen` | VM | Kali Linux | 4 vCPU, 4 GB RAM, 50 GB Disk | 140 | Generates benign SSL/TLS traffic (Selenium/Locust) and malicious encrypted channels (Metasploit C2, Hydra SSH brute-force, Slowloris). |
 
 ---
@@ -86,30 +86,30 @@ To capture traffic on the private cluster without interfering with production ne
 Each defender VM has two network interfaces: `net0` on `vmbr0` (management/internet) and `net1` on `vmbr1` (dedicated capture interface). The target VM's `net0` on `vmbr1` is the mirror source. On the hypervisor host, these map to TAP interfaces named `tap<VMID>i<NET_INDEX>`.
 
 1. Ensure `vmbr1` is configured as a VLAN-aware bridge on all hypervisors. *(See [workaround_specs.md](workaround_specs.md) Section 1.C for reconciliation details.)*
-2. Attach the target VM's NIC (`tap101i0`) and the defender VM's capture NIC (`tap100i1`) to `vmbr1`.
+2. Attach the target VM's NIC (`tap311i0`) and the defender VM's capture NIC (`tap310i1`) to `vmbr1`.
 3. Apply the following `tc` rules on the hypervisor host to mirror all traffic from the target to the defender:
 
 ```bash
 # Enable promiscuous mode on both interfaces
-ip link set dev tap101i0 promisc on
-ip link set dev tap100i1 promisc on
+ip link set dev tap311i0 promisc on
+ip link set dev tap310i1 promisc on
 
 # Mirror all incoming (ingress) traffic from target to defender
-tc qdisc add dev tap101i0 handle ffff: ingress
-tc filter add dev tap101i0 parent ffff: protocol all u32 match u32 0 0 \
-  action mirred egress mirror dev tap100i1
+tc qdisc add dev tap311i0 handle ffff: ingress
+tc filter add dev tap311i0 parent ffff: protocol all u32 match u32 0 0 \
+  action mirred egress mirror dev tap310i1
 
 # Mirror all outgoing (egress) traffic from target to defender
-tc qdisc add dev tap101i0 root handle 1: prio
-tc filter add dev tap101i0 parent 1: protocol all u32 match u32 0 0 \
-  action mirred egress mirror dev tap100i1
+tc qdisc add dev tap311i0 root handle 1: prio
+tc filter add dev tap311i0 parent 1: protocol all u32 match u32 0 0 \
+  action mirred egress mirror dev tap310i1
 ```
 
 > **Critical limitation:** Proxmox destroys TAP interfaces when a VM shuts down, erasing all `tc` rules. The hookscript workaround that solves this is documented in [workaround_specs.md](workaround_specs.md) Section 4, Phase 3.
 
 ### 3.2 Multi-Node Considerations (SDN/VXLAN)
 
-If the cluster spans multiple physical Proxmox nodes (as ours does), mirrored traffic cannot cross physical hosts natively. Each target VM must reside on the **same hypervisor** as its corresponding defender VM. The workload placement in [workaround_specs.md](workaround_specs.md) Section 2 enforces this co-location: `target-a1` (VM 101) and `defender-a` (VM 100) are both placed on node `its`; `target-b1` (VM 201) and `defender-b` (VM 200) are both on node `node2`.
+If the cluster spans multiple physical Proxmox nodes (as ours does), mirrored traffic cannot cross physical hosts natively. Each target VM must reside on the **same hypervisor** as its corresponding defender VM. The workload placement in [workaround_specs.md](workaround_specs.md) Section 2 enforces this co-location: `target-a1` (VM 311) and `defender-a` (VM 310) are both placed on node `its`; `target-b1` (VM 321) and `defender-b` (VM 320) are both on node `node2`.
 
 For future deployments requiring cross-host mirroring, the PVE SDN feature with EVPN/VXLAN can route encapsulated span traffic across hosts.
 
@@ -330,9 +330,9 @@ This section provides the generic execution sequence. For cluster-specific provi
 
 ### Phase 2: VM & Container Provisioning
 1. Deploy LXC 300 (`fl-aggregator`) on node `pve` with dual NICs (`vmbr0` + `vmbr1` VLAN 130).
-2. Deploy VM 100 (`defender-a`) on node `its` with dual NICs (`vmbr0` + `vmbr1` VLAN 110).
-3. Deploy VM 200 (`defender-b`) on node `node2` with dual NICs (`vmbr0` + `vmbr1` VLAN 120).
-4. Deploy target VMs 101 and 201, and traffic generator VM 400.
+2. Deploy VM 310 (`defender-a`) on node `its` with dual NICs (`vmbr0` + `vmbr1` VLAN 110).
+3. Deploy VM 320 (`defender-b`) on node `node2` with dual NICs (`vmbr0` + `vmbr1` VLAN 120).
+4. Deploy target VMs 311 and 321, and traffic generator VM 400.
 5. Bind hookscripts to target VMs for automatic port mirroring. *(See [workaround_specs.md](workaround_specs.md) Section 4, Phase 3.)*
 
 ### Phase 3: Traffic Generation & Data Collection

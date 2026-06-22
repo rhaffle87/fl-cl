@@ -25,15 +25,15 @@ fl-cl/
 │   │
 │   ├── 02_vm_provision/          ← VM/CT creation scripts
 │   │   ├── create_aggregator.sh  ← LXC 300 on node pve
-│   │   ├── create_defender_a.sh  ← VM 100 on node its
-│   │   ├── create_defender_b.sh  ← VM 200 on node node2
-│   │   ├── create_target_a1.sh   ← VM 101 on node its
-│   │   ├── create_target_b1.sh   ← VM 201 on node node2
+│   │   ├── create_defender_a.sh  ← VM 310 on node its
+│   │   ├── create_defender_b.sh  ← VM 320 on node node2
+│   │   ├── create_target_a1.sh   ← VM 311 on node its
+│   │   ├── create_target_b1.sh   ← VM 321 on node node2
 │   │   └── create_traffic_gen.sh ← VM 400 on node node2
 │   │
 │   ├── 03_hookscripts/           ← Proxmox lifecycle hookscripts
-│   │   ├── mirror-hook-a.sh      ← Port mirror: VM 101 → VM 100
-│   │   └── mirror-hook-b.sh      ← Port mirror: VM 201 → VM 200
+│   │   ├── mirror-hook-a.sh      ← Port mirror: VM 311 → VM 310
+│   │   └── mirror-hook-b.sh      ← Port mirror: VM 321 → VM 320
 │   │
 │   └── 04_guest_setup/           ← In-VM software provisioning
 │       ├── setup_aggregator.sh   ← Python + Flower + MLflow
@@ -86,19 +86,19 @@ bash create_traffic_gen.sh
 # On node 'its':
 cp mirror-hook-a.sh /var/lib/vz/snippets/
 chmod +x /var/lib/vz/snippets/mirror-hook-a.sh
-qm set 101 --hookscript local:snippets/mirror-hook-a.sh
+qm set 311 --hookscript local:snippets/mirror-hook-a.sh
 
 # On node 'node2':
 cp mirror-hook-b.sh /var/lib/vz/snippets/
 chmod +x /var/lib/vz/snippets/mirror-hook-b.sh
-qm set 201 --hookscript local:snippets/mirror-hook-b.sh
+qm set 321 --hookscript local:snippets/mirror-hook-b.sh
 ```
 
 ### Step 4: Install Software (run inside each guest VM)
 ```bash
 # Inside LXC 300:  bash setup_aggregator.sh
-# Inside VM 100:   bash setup_defender.sh
-# Inside VM 200:   bash setup_defender.sh
+# Inside VM 310:   bash setup_defender.sh
+# Inside VM 320:   bash setup_defender.sh
 # Inside VM 400:   bash setup_traffic_gen.sh
 ```
 
@@ -108,7 +108,7 @@ qm set 201 --hookscript local:snippets/mirror-hook-b.sh
 source /opt/flower-env/bin/activate
 python3 server.py --rounds 10 --min-clients 2
 
-# On defender VMs (VM 100 & 200):
+# On defender VMs (VM 310 & 320):
 source ~/fl-cl-env/bin/activate
 python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/
 python3 client.py --server 10.10.10.130:8080 --client-id A   # (or B)
@@ -120,12 +120,12 @@ python3 client.py --server 10.10.10.130:8080 --client-id A   # (or B)
 
 | Node | VM ID | Hostname | VLAN | Role |
 |:---|:---|:---|:---|:---|
-| pve | 300 | fl-aggregator | 30 | Flower server, MLflow tracking |
-| its | 100 | defender-a | 10 | NFStream + PyTorch + Avalanche + Flower client |
-| its | 101 | target-a1 | 10 | Attack/benign traffic receiver |
-| node2 | 200 | defender-b | 20 | Parallel defender (separate organization) |
-| node2 | 201 | target-b1 | 20 | Attack/benign traffic receiver |
-| node2 | 400 | traffic-gen | 40 | Kali Linux attack + benign traffic source |
+| pve | 300 | fl-aggregator | 130 | Flower server, MLflow tracking |
+| its | 310 | defender-a | 110 | NFStream + PyTorch + Avalanche + Flower client |
+| its | 311 | target-a1 | 110 | Attack/benign traffic receiver |
+| node2 | 320 | defender-b | 120 | Parallel defender (separate organization) |
+| node2 | 321 | target-b1 | 120 | Attack/benign traffic receiver |
+| node2 | 400 | traffic-gen | 140 | Kali Linux attack + benign traffic source |
 
 ---
 

@@ -1,9 +1,9 @@
 #!/bin/bash
 # =============================================================================
-# mirror-hook-a.sh — Port Mirroring: Target A1 (VM 101) → Defender A (VM 100)
+# mirror-hook-a.sh — Port Mirroring: Target A1 (VM 311) → Defender A (VM 310)
 # =============================================================================
 # Deploy to:  /var/lib/vz/snippets/mirror-hook-a.sh  on Node 'its'
-# Bind with:  qm set 101 --hookscript local:snippets/mirror-hook-a.sh
+# Bind with:  qm set 311 --hookscript local:snippets/mirror-hook-a.sh
 #
 # How it works:
 #   Proxmox fires this script at VM lifecycle events. On 'post-start',
@@ -16,13 +16,13 @@
 vmid=$1
 phase=$2
 
-# Only act on VM 101 post-start
-if [ "$vmid" != "101" ] || [ "$phase" != "post-start" ]; then
+# Only act on VM 311 post-start
+if [ "$vmid" != "311" ] || [ "$phase" != "post-start" ]; then
     exit 0
 fi
 
-SOURCE="tap101i0"   # Target A1's net0 on vmbr1
-MIRROR="tap100i1"   # Defender A's net1 (capture) on vmbr1
+SOURCE="tap311i0"   # Target A1's net0 on vmbr1
+MIRROR="tap310i1"   # Defender A's net1 (capture) on vmbr1
 
 echo "$(date '+%F %T') [mirror-hook-a] VM $vmid $phase — configuring $SOURCE → $MIRROR"
 

@@ -166,12 +166,12 @@ With the network harmonized, VMs are distributed across nodes based on available
 graph TD
     subgraph cluster ["PVE Cluster – Workload Allocation"]
         subgraph its ["Node 'its' (Free: 34.63 GB)"]
-            DA["Defender A (VM 100)<br/>8 vCPU · 16 GB · VLAN 110"]
-            TA["Target A1 (VM 101)<br/>1 vCPU · 1 GB · VLAN 110"]
+            DA["Defender A (VM 310)<br/>8 vCPU · 16 GB · VLAN 110"]
+            TA["Target A1 (VM 311)<br/>1 vCPU · 1 GB · VLAN 110"]
         end
         subgraph node2 ["Node 'node2' (Free: 56.21 GB)"]
-            DB["Defender B (VM 200)<br/>8 vCPU · 16 GB · VLAN 120"]
-            TB["Target B1 (VM 201)<br/>1 vCPU · 1 GB · VLAN 120"]
+            DB["Defender B (VM 320)<br/>8 vCPU · 16 GB · VLAN 120"]
+            TB["Target B1 (VM 321)<br/>1 vCPU · 1 GB · VLAN 120"]
             TG["Traffic Gen (VM 400)<br/>4 vCPU · 4 GB · VLAN 140"]
         end
         subgraph pve ["Node 'pve' (Free: 25.46 GB)"]
@@ -187,10 +187,10 @@ graph TD
 | Hypervisor | ID | Hostname | OS | vCPU | RAM | Disk | VLAN | Role |
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|
 | **pve** | 300 | `fl-aggregator` | Ubuntu 24.04 | 4 | 8 GB | 50 GB | 130 | Flower server, global model checkpoints |
-| **its** | 100 | `defender-a` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 110 | NFStream capture, PyTorch/Avalanche training, Flower client |
-| **its** | 101 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 110 | Receives benign/malicious traffic from traffic generator |
-| **node2** | 200 | `defender-b` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 120 | Parallel defender simulating a separate organization |
-| **node2** | 201 | `target-b1` | Alpine Linux | 1 | 1 GB | 10 GB | 120 | Receives benign/malicious traffic from traffic generator |
+| **its** | 310 | `defender-a` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 110 | NFStream capture, PyTorch/Avalanche training, Flower client |
+| **its** | 311 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 110 | Receives benign/malicious traffic from traffic generator |
+| **node2** | 320 | `defender-b` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 120 | Parallel defender simulating a separate organization |
+| **node2** | 321 | `target-b1` | Alpine Linux | 1 | 1 GB | 10 GB | 120 | Receives benign/malicious traffic from traffic generator |
 | **node2** | 400 | `traffic-gen` | Kali Linux | 4 | 4 GB | 50 GB | 140 | Metasploit C2, Hydra brute-force, Selenium benign browsing |
 
 The placement ensures that each defender VM resides on the same hypervisor as its corresponding target VM. This co-location is critical because port mirroring (Chapter 4) operates on hypervisor-local TAP interfaces—traffic cannot be mirrored across physical hosts without SDN overlay encapsulation.
@@ -231,8 +231,8 @@ Each defender VM has two network interfaces: `net0` on `vmbr0` (management/inter
 ```
   ┌───────────────────────── Proxmox Host ─────────────────────────┐
   │                                                                │
-  │   Target VM 101 (target-a1)         Defender VM 100            │
-  │   net0 → tap101i0                   net1 → tap100i1            │
+  │   Target VM 311 (target-a1)         Defender VM 310            │
+  │   net0 → tap311i0                   net1 → tap310i1            │
   │       │                                  ▲                     │
   │       └──────── tc mirror (ingress) ─────┘                     │
   │       └──────── tc mirror (egress)  ─────┘                     │
@@ -242,18 +242,18 @@ Each defender VM has two network interfaces: `net0` on `vmbr0` (management/inter
 The mirroring commands configure both ingress and egress duplication:
 
 ```bash
-ip link set dev tap101i0 promisc on
-ip link set dev tap100i1 promisc on
+ip link set dev tap311i0 promisc on
+ip link set dev tap310i1 promisc on
 
 # Ingress mirror
-tc qdisc add dev tap101i0 handle ffff: ingress
-tc filter add dev tap101i0 parent ffff: protocol all u32 match u32 0 0 \
-  action mirred egress mirror dev tap100i1
+tc qdisc add dev tap311i0 handle ffff: ingress
+tc filter add dev tap311i0 parent ffff: protocol all u32 match u32 0 0 \
+  action mirred egress mirror dev tap310i1
 
 # Egress mirror
-tc qdisc add dev tap101i0 root handle 1: prio
-tc filter add dev tap101i0 parent 1: protocol all u32 match u32 0 0 \
-  action mirred egress mirror dev tap100i1
+tc qdisc add dev tap311i0 root handle 1: prio
+tc filter add dev tap311i0 parent 1: protocol all u32 match u32 0 0 \
+  action mirred egress mirror dev tap310i1
 ```
 
 ### 4.3 The Hookscript Workaround for Ephemeral TAP Interfaces
@@ -267,8 +267,8 @@ The workaround leverages Proxmox's **hookscript** mechanism—a shell script bou
 # /var/lib/vz/snippets/mirror-hook.sh
 vmid=$1; phase=$2
 
-if [ "$vmid" = "101" ] && [ "$phase" = "post-start" ]; then
-    SOURCE="tap101i0"; MIRROR="tap100i1"
+if [ "$vmid" = "311" ] && [ "$phase" = "post-start" ]; then
+    SOURCE="tap311i0"; MIRROR="tap310i1"
     sleep 3  # Allow TAP interfaces to register in the bridge
     ip link set dev $SOURCE promisc on
     ip link set dev $MIRROR promisc on
@@ -281,7 +281,7 @@ if [ "$vmid" = "101" ] && [ "$phase" = "post-start" ]; then
 fi
 ```
 
-Bind the hookscript to the target VM: `qm set 101 --hookscript local:snippets/mirror-hook.sh`. Repeat on node `node2` for VM 201→VM 200.
+Bind the hookscript to the target VM: `qm set 311 --hookscript local:snippets/mirror-hook.sh`. Repeat on node `node2` for VM 321→VM 320.
 
 This hookscript is the linchpin connecting the network infrastructure (this chapter) to the data pipeline (Chapter 5): without reliable mirroring, the defender nodes receive no traffic, and the entire downstream pipeline—feature extraction, CL training, FL aggregation—has no input.
 
@@ -567,7 +567,7 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
 
 **Defender A (Node `its`):**
 ```bash
-qm create 100 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
+qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 --net1 virtio,bridge=vmbr1,tag=110 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
@@ -576,12 +576,12 @@ qm create 100 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
 
 **Target A1 (Node `its`):**
 ```bash
-qm create 101 --name target-a1 --cores 1 --memory 1024 \
+qm create 311 --name target-a1 --cores 1 --memory 1024 \
   --net0 virtio,bridge=vmbr1,tag=110 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on
 ```
 
-Repeat analogous commands for Defender B (VM 200), Target B1 (VM 201), and Traffic Generator (VM 400) on node `node2`.
+`target-a1` (VM 311) and `defender-a` (VM 310) are both placed on node `its`; `target-b1` (VM 321) and `defender-b` (VM 320) are both on node `node2`.
 
 ### Phase 3: Hookscript Deployment (Hypervisor Shells)
 
@@ -590,8 +590,8 @@ Create and bind the port-mirroring hookscript from Section 4.3 on each hyperviso
 mkdir -p /var/lib/vz/snippets
 # Write mirror-hook.sh (see Section 4.3)
 chmod +x /var/lib/vz/snippets/mirror-hook.sh
-qm set 101 --hookscript local:snippets/mirror-hook.sh  # Node its
-qm set 201 --hookscript local:snippets/mirror-hook.sh  # Node node2
+qm set 311 --hookscript local:snippets/mirror-hook.sh  # Node its
+qm set 321 --hookscript local:snippets/mirror-hook.sh  # Node node2
 ```
 
 ### Phase 4: Software Provisioning (Inside Guest VMs)
@@ -604,7 +604,7 @@ source /opt/flower-env/bin/activate
 pip install --upgrade pip && pip install flwr
 ```
 
-**Defender VMs (100 & 200):**
+**Defender VMs (310 & 320):**
 ```bash
 sudo apt update && sudo apt install -y python3-pip python3-venv libpcap-dev git
 sudo mkdir -p /mnt/ramdisk
@@ -669,7 +669,7 @@ ip link delete vmbr1.110  # Cleanup
 
 **VLAN Isolation**: Confirm VMs on different VLANs cannot communicate without explicit routing:
 ```bash
-ping -c 3 10.10.20.201  # From VM 101 (VLAN 110) → should fail
+ping -c 3 10.10.20.201  # From VM 311 (VLAN 110) → should fail
 ```
 
 **Hookscript Execution**: Verify mirroring activates on VM boot:

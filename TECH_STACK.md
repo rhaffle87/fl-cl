@@ -28,10 +28,10 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 | VM/CT | OS | Version | Purpose |
 |:---|:---|:---|:---|
 | LXC 300 (`fl-aggregator`) | Ubuntu Server | 24.04 LTS | Lightweight container for FL server + MLflow |
-| VM 100 (`defender-a`) | Ubuntu Server | 24.04 LTS | Full VM for GPU passthrough + ML training |
-| VM 200 (`defender-b`) | Ubuntu Server | 24.04 LTS | Full VM for parallel defender |
-| VM 101 (`target-a1`) | Alpine Linux | 3.20 | Minimal OS as attack/traffic target |
-| VM 201 (`target-b1`) | Alpine Linux | 3.20 | Minimal OS as attack/traffic target |
+| VM 310 (`defender-a`) | Ubuntu Server | 24.04 LTS | Full VM for GPU passthrough + ML training |
+| VM 320 (`defender-b`) | Ubuntu Server | 24.04 LTS | Full VM for parallel defender |
+| VM 311 (`target-a1`) | Alpine Linux | 3.20 | Minimal OS as attack/traffic target |
+| VM 321 (`target-b1`) | Alpine Linux | 3.20 | Minimal OS as attack/traffic target |
 | VM 400 (`traffic-gen`) | Kali Linux | 2024.2 | Pre-loaded with offensive security tools |
 
 ---
@@ -40,20 +40,20 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 
 | Technology | Purpose | Where |
 |:---|:---|:---|
-| **VLAN 110** (10.10.110.0/24) | Organization A network | VM 100, VM 101 |
-| **VLAN 120** (10.10.120.0/24) | Organization B network | VM 200, VM 201 |
+| **VLAN 110** (10.10.110.0/24) | Organization A network | VM 310, VM 311 |
+| **VLAN 120** (10.10.120.0/24) | Organization B network | VM 320, VM 321 |
 | **VLAN 130** (10.10.130.0/24) | FL Aggregation zone | LXC 300 |
 | **VLAN 140** (10.10.140.0/24) | Traffic generation zone | VM 400 |
 | **gRPC over TLS** | FL weight sync (Flower protocol) | Defenders ↔ Aggregator |
 | **TCP/8080** | Flower server port | LXC 300 |
 | **TCP/5000** | MLflow tracking UI | LXC 300 |
-| **TCP/6006** | TensorBoard UI | VM 100, VM 200 |
+| **TCP/6006** | TensorBoard UI | VM 310, VM 320 |
 
 ---
 
 ## Layer 4: Python ML/FL-CL Stack (Defender VMs)
 
-These packages run inside VM 100 and VM 200.
+These packages run inside VM 310 and VM 320.
 
 | Package | Version | Purpose | Install |
 |:---|:---|:---|:---|
@@ -113,7 +113,7 @@ These packages run inside VM 100 and VM 200.
 
 | Technology | Purpose | Where |
 |:---|:---|:---|
-| **tmpfs RAM Disk** (4 GB) | Buffer NFStream flow writes to avoid RAID I/O contention | Inside VM 100, VM 200 at `/mnt/ramdisk` |
+| **tmpfs RAM Disk** (4 GB) | Buffer NFStream flow writes to avoid RAID I/O contention | Inside VM 310, VM 320 at `/mnt/ramdisk` |
 | **LVM-Thin Snapshots** | Fast VM checkpoint/rollback for experiment reproducibility | PVE host storage pool (`local-lvm`) |
 | **Parquet** | Columnar storage format for batched flow records | `/mnt/ramdisk/flows/` → persistent storage |
 
@@ -124,7 +124,7 @@ These packages run inside VM 100 and VM 200.
 | Tool | Purpose | Where | Port |
 |:---|:---|:---|:---|
 | **MLflow** | Centralized experiment tracking (loss, accuracy, BWT per round) | LXC 300 | 5000 |
-| **TensorBoard** | Weight distributions, gradient norms, activation statistics | VM 100, VM 200 | 6006 |
+| **TensorBoard** | Weight distributions, gradient norms, activation statistics | VM 310, VM 320 | 6006 |
 | **Weights & Biases** | Cloud-hosted alternative for team collaboration | Any (cloud) | — |
 
 ---

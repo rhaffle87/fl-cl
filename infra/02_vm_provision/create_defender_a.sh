@@ -3,7 +3,7 @@
 # create_defender_a.sh — Deploy Defender Node A VM
 # =============================================================================
 # Run on:  Node 'its' (hypervisor shell as root)
-# Creates: VM 100 (defender-a) on VLAN 110
+# Creates: VM 310 (defender-a) on VLAN 110
 #
 # This VM runs: NFStream capture, PyTorch model, Avalanche EWC, Flower client
 # Dual NIC: net0=vmbr0 (mgmt/internet), net1=vmbr1 VLAN 110 (capture interface)
@@ -14,7 +14,7 @@
 # =============================================================================
 set -euo pipefail
 
-VMID=100
+VMID=310
 NAME="defender-a"
 VLAN=110
 
@@ -41,7 +41,7 @@ qm create $VMID \
     --net1 virtio,bridge=vmbr1,tag=$VLAN \
     --scsihw virtio-scsi-pci \
     --scsi0 local-lvm:100,discard=on \
-    --ide2 local:iso/ubuntu-24.04-live-server-amd64.iso,media=cdrom \
+    --ide2 local:iso/ubuntu-24.04.1-live-server-amd64.iso,media=cdrom \
     --boot order='ide2;scsi0' \
     --onboot 1
 

@@ -43,8 +43,8 @@ To prevent Layer 2 collisions with the campus management and backup network prop
 
 | Zone / Organization | Proposed VLAN | Actual Shifted VLAN (Testbed) | Subnet | Assigned Nodes / VMs |
 | :--- | :--- | :--- | :--- | :--- |
-| **Management / Org A** | VLAN 10 | **VLAN 110** | `10.10.110.0/24` | `defender-a` (VM 100), `target-a1` (VM 101) |
-| **VM Network / Org B** | VLAN 20 | **VLAN 120** | `10.10.120.0/24` | `defender-b` (VM 200), `target-b1` (VM 201) |
+| **Management / Org A** | VLAN 10 | **VLAN 110** | `10.10.110.0/24` | `defender-a` (VM 310), `target-a1` (VM 311) |
+| **VM Network / Org B** | VLAN 20 | **VLAN 120** | `10.10.120.0/24` | `defender-b` (VM 320), `target-b1` (VM 321) |
 | **Backup / FL Aggregator**| VLAN 30 | **VLAN 130** | `10.10.130.0/24` | `fl-aggregator` (LXC 300) |
 | **Migration / Traffic Gen**| VLAN 40 | **VLAN 140** | `10.10.140.0/24` | `traffic-gen` (VM 400) |
 
@@ -140,32 +140,32 @@ Deploy the VM instances. Ensure the Target VMs use the same VLAN tag as their co
 
 **On Node `its` (Defender A & Target A1):**
 ```bash
-# Create Defender VM (ID 100)
-qm create 100 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
+# Create Defender VM (ID 310)
+qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
   --net1 virtio,bridge=vmbr1,tag=110 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 
-# Create Target VM (ID 101)
-qm create 101 --name target-a1 --cores 1 --memory 1024 \
+# Create Target VM (ID 311)
+qm create 311 --name target-a1 --cores 1 --memory 1024 \
   --net0 virtio,bridge=vmbr1,tag=110 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 ```
 
 **On Node `node2` (Defender B, Target B1, & Traffic Generator):**
 ```bash
-# Create Defender VM (ID 200)
-qm create 200 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
+# Create Defender VM (ID 320)
+qm create 320 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
   --net1 virtio,bridge=vmbr1,tag=120 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 
-# Create Target VM (ID 201)
-qm create 201 --name target-b1 --cores 1 --memory 1024 \
+# Create Target VM (ID 321)
+qm create 321 --name target-b1 --cores 1 --memory 1024 \
   --net0 virtio,bridge=vmbr1,tag=120 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 
@@ -186,17 +186,17 @@ To resolve this, we implement a Proxmox Lifecycle Hookscript that automatically 
 ```mermaid
 sequenceDiagram
     participant PVE as Proxmox host (its)
-    participant VM101 as Target VM (101)
-    participant VM100 as Defender VM (100)
+    participant VM311 as Target VM (311)
+    participant VM310 as Defender VM (310)
 
-    VM101->>PVE: Boot Trigger (qm start 101)
-    PVE->>PVE: Create interface tap101i0
+    VM311->>PVE: Boot Trigger (qm start 311)
+    PVE->>PVE: Create interface tap311i0
     PVE->>PVE: Run mirror-hook.sh (post-start)
     Note over PVE: Wait 3 seconds for bridge attachment
-    PVE->>PVE: Set tap101i0 and tap100i1 to promisc
+    PVE->>PVE: Set tap311i0 and tap310i1 to promisc
     PVE->>PVE: Apply tc ingress/egress mirror rules
-    PVE->>VM101: VM execution begins
-    VM101->>VM100: Traffic duplicated to tap100i1 in background
+    PVE->>VM311: VM execution begins
+    VM311->>VM310: Traffic duplicated to tap310i1 in background
 ```
 
 #### Step 3.1: Enable Snippet Storage
@@ -211,15 +211,15 @@ Save this script to `/var/lib/vz/snippets/mirror-hook-a.sh`:
 ```bash
 cat << 'EOF' > /var/lib/vz/snippets/mirror-hook-a.sh
 #!/bin/bash
-# Hookscript for VM 101 (Target A1) -> VM 100 (Defender A) Port Mirroring
+# Hookscript for VM 311 (Target A1) -> VM 310 (Defender A) Port Mirroring
 vmid=$1
 phase=$2
 
-if [ "$vmid" = "101" ] && [ "$phase" = "post-start" ]; then
-    SOURCE="tap101i0"
-    MIRROR="tap100i1"
+if [ "$vmid" = "311" ] && [ "$phase" = "post-start" ]; then
+    SOURCE="tap311i0"
+    MIRROR="tap310i1"
     
-    echo "Hook: VM 101 started. Applying traffic mirroring to $MIRROR..."
+    echo "Hook: VM 311 started. Applying traffic mirroring to $MIRROR..."
     sleep 3  # Wait for bridge initialization
     
     # Configure interfaces to promiscuous mode
@@ -240,7 +240,7 @@ if [ "$vmid" = "101" ] && [ "$phase" = "post-start" ]; then
 fi
 EOF
 chmod +x /var/lib/vz/snippets/mirror-hook-a.sh
-qm set 101 --hookscript local:snippets/mirror-hook-a.sh
+qm set 311 --hookscript local:snippets/mirror-hook-a.sh
 ```
 
 #### Step 3.3: Write the Hookscript on Node `node2` (Organization B)
@@ -249,15 +249,15 @@ Save this script to `/var/lib/vz/snippets/mirror-hook-b.sh`:
 ```bash
 cat << 'EOF' > /var/lib/vz/snippets/mirror-hook-b.sh
 #!/bin/bash
-# Hookscript for VM 201 (Target B1) -> VM 200 (Defender B) Port Mirroring
+# Hookscript for VM 321 (Target B1) -> VM 320 (Defender B) Port Mirroring
 vmid=$1
 phase=$2
 
-if [ "$vmid" = "201" ] && [ "$phase" = "post-start" ]; then
-    SOURCE="tap201i0"
-    MIRROR="tap200i1"
+if [ "$vmid" = "321" ] && [ "$phase" = "post-start" ]; then
+    SOURCE="tap321i0"
+    MIRROR="tap320i1"
     
-    echo "Hook: VM 201 started. Applying traffic mirroring to $MIRROR..."
+    echo "Hook: VM 321 started. Applying traffic mirroring to $MIRROR..."
     sleep 3  # Wait for bridge initialization
     
     # Configure interfaces to promiscuous mode
@@ -278,7 +278,7 @@ if [ "$vmid" = "201" ] && [ "$phase" = "post-start" ]; then
 fi
 EOF
 chmod +x /var/lib/vz/snippets/mirror-hook-b.sh
-qm set 201 --hookscript local:snippets/mirror-hook-b.sh
+qm set 321 --hookscript local:snippets/mirror-hook-b.sh
 ```
 
 ---
@@ -555,7 +555,7 @@ mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db
 **1. Confirm VLAN Isolation (Strict Layer 2 Isolation):**
 Ensure client nodes cannot bypass routing controls to communicate directly:
 ```bash
-# From Target VM 101 (VLAN 110) to Target VM 201 (VLAN 120)
+# From Target VM 311 (VLAN 110) to Target VM 321 (VLAN 120)
 # This request must fail with 100% packet loss
 ping -c 3 10.10.120.201
 ```
@@ -563,9 +563,9 @@ ping -c 3 10.10.120.201
 **2. Verify Interface Mirroring (SPAN Verification):**
 Confirm target traffic is duplicated and visible to the Defender node:
 ```bash
-# From Target VM 101, generate background ping
+# From Target VM 311, generate background ping
 ping -c 10 10.10.140.1
-# Simultaneously run capture check inside Defender VM 100
+# Simultaneously run capture check inside Defender VM 310
 sudo tcpdump -i ens19 -n icmp
 ```
 
@@ -587,7 +587,7 @@ Follow this execution sequence to start the FCL framework:
 ```
 
 - [ ] **Phase 1**: Configure `vmbr1` VLAN-awareness on all physical nodes.
-- [ ] **Phase 2**: Boot the target VMs (`101` and `201`). Ensure the lifecycle hookscripts apply mirroring rules successfully (`journalctl -u pvedaemon | grep "mirror-hook"`).
+- [ ] **Phase 2**: Boot the target VMs (`311` and `321`). Ensure the lifecycle hookscripts apply mirroring rules successfully (`journalctl -u pvedaemon | grep "mirror-hook"`).
 - [ ] **Phase 3**: Start the Flower server on LXC 300 (`python3 server.py`).
 - [ ] **Phase 4**: Start the flow extractor daemon on Defender nodes (`python3 extractor.py --interface ens19`).
 - [ ] **Phase 5**: Initiate the attack patterns and background traffic from the Traffic Generator (`VM 400`).

@@ -53,13 +53,13 @@ The lab requires approximately **26 vCPUs, 46 GB RAM, and 320 GB Disk** to run 1
 graph TD
     subgraph allocation ["PVE Cluster Workload Allocation"]
         subgraph node_its ["Node 'its' (Used: 28.14 GB, Free: 34.63 GB)"]
-            clientA["Defender Node A (VM 100)<br/>8 vCPU · 16 GB · VLAN 110"]
-            targetA["Target Host A1 (VM 101)<br/>1 vCPU · 1 GB · VLAN 110"]
+            clientA["Defender Node A (VM 310)<br/>8 vCPU · 16 GB · VLAN 110"]
+            targetA["Target Host A1 (VM 311)<br/>1 vCPU · 1 GB · VLAN 110"]
         end
 
         subgraph node_node2 ["Node 'node2' (Used: 6.56 GB, Free: 56.21 GB)"]
-            clientB["Defender Node B (VM 200)<br/>8 vCPU · 16 GB · VLAN 120"]
-            targetB["Target Host B1 (VM 201)<br/>1 vCPU · 1 GB · VLAN 120"]
+            clientB["Defender Node B (VM 320)<br/>8 vCPU · 16 GB · VLAN 120"]
+            targetB["Target Host B1 (VM 321)<br/>1 vCPU · 1 GB · VLAN 120"]
             trafficGen["Traffic Generator (VM 400)<br/>4 vCPU · 4 GB · VLAN 140"]
         end
 
@@ -74,10 +74,10 @@ graph TD
 | Hypervisor | VM ID | Hostname | OS | vCPU | RAM | Disk | VLAN | Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **pve** | 300 | `fl-aggregator` | Ubuntu Server 24.04 | 4 | 8 GB | 50 GB | 130 | Flower server orchestration & global model checkpoints. |
-| **its** | 100 | `defender-a` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 110 | NFStream capture, PyTorch/Avalanche training, Flower client. |
-| **its** | 101 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 110 | Receives benign/malicious traffic from traffic generator. |
-| **node2** | 200 | `defender-b` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 120 | Parallel defender node simulating a separate organization. |
-| **node2** | 201 | `target-b1` | Alpine Linux | 1 | 1 GB | 10 GB | 120 | Receives benign/malicious traffic from traffic generator. |
+| **its** | 310 | `defender-a` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 110 | NFStream capture, PyTorch/Avalanche training, Flower client. |
+| **its** | 311 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 110 | Receives benign/malicious traffic from traffic generator. |
+| **node2** | 320 | `defender-b` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 120 | Parallel defender node simulating a separate organization. |
+| **node2** | 321 | `target-b1` | Alpine Linux | 1 | 1 GB | 10 GB | 120 | Receives benign/malicious traffic from traffic generator. |
 | **node2** | 400 | `traffic-gen` | Kali Linux | 4 | 4 GB | 50 GB | 140 | Metasploit C2, Hydra brute-force, Selenium benign browsing, tcpreplay dataset replay. |
 
 ---
@@ -156,9 +156,9 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
 #### Step 2.2: Deploy Defender Nodes (On Nodes `its` and `node2`)
 Each defender has **two** network interfaces: `net0` on `vmbr0` (management/internet) and `net1` on `vmbr1` (VLAN-tagged capture interface).
 
-**On Node `its` (Defender A – VM 100):**
+**On Node `its` (Defender A – VM 310):**
 ```bash
-qm create 100 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
+qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
   --net1 virtio,bridge=vmbr1,tag=110 \
@@ -166,9 +166,9 @@ qm create 100 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --boot order=scsi0 --onboot 1 --start 0
 ```
 
-**On Node `node2` (Defender B – VM 200):**
+**On Node `node2` (Defender B – VM 320):**
 ```bash
-qm create 200 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
+qm create 320 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
   --net1 virtio,bridge=vmbr1,tag=120 \
@@ -178,16 +178,16 @@ qm create 200 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
 
 #### Step 2.3: Deploy Target Hosts and Traffic Generator
 
-**On Node `its` (Target A1 – VM 101):**
+**On Node `its` (Target A1 – VM 311):**
 ```bash
-qm create 101 --name target-a1 --cores 1 --memory 1024 \
+qm create 311 --name target-a1 --cores 1 --memory 1024 \
   --net0 virtio,bridge=vmbr1,tag=110 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 ```
 
-**On Node `node2` (Target B1 – VM 201):**
+**On Node `node2` (Target B1 – VM 321):**
 ```bash
-qm create 201 --name target-b1 --cores 1 --memory 1024 \
+qm create 321 --name target-b1 --cores 1 --memory 1024 \
   --net0 virtio,bridge=vmbr1,tag=120 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 ```
@@ -213,10 +213,10 @@ cat << 'EOF' > /var/lib/vz/snippets/mirror-hook.sh
 #!/bin/bash
 vmid=$1; phase=$2
 
-# Target A1 (vmid 101) → Defender A (vmid 100)
-if [ "$vmid" = "101" ] && [ "$phase" = "post-start" ]; then
-    SOURCE="tap101i0"; MIRROR="tap100i1"
-    echo "Hook: VM 101 started. Configuring mirroring $SOURCE → $MIRROR..."
+# Target A1 (vmid 311) → Defender A (vmid 310)
+if [ "$vmid" = "311" ] && [ "$phase" = "post-start" ]; then
+    SOURCE="tap311i0"; MIRROR="tap310i1"
+    echo "Hook: VM 311 started. Configuring mirroring $SOURCE → $MIRROR..."
     sleep 3  # Allow TAP interfaces to register in the bridge
     ip link set dev $SOURCE promisc on
     ip link set dev $MIRROR promisc on
@@ -234,9 +234,9 @@ chmod +x /var/lib/vz/snippets/mirror-hook.sh
 
 #### Step 3.2: Bind the Hookscript to the Target VM
 ```bash
-qm set 101 --hookscript local:snippets/mirror-hook.sh
+qm set 311 --hookscript local:snippets/mirror-hook.sh
 ```
-> **Repeat on Node `node2`** for target VM 201 mapping to defender VM 200 (adjust `vmid`, `SOURCE=tap201i0`, `MIRROR=tap200i1`).
+> **Repeat on Node `node2`** for target VM 321 mapping to defender VM 320 (adjust `vmid`, `SOURCE=tap321i0`, `MIRROR=tap320i1`).
 
 ---
 
@@ -254,7 +254,7 @@ source /opt/flower-env/bin/activate
 pip install --upgrade pip && pip install flwr
 ```
 
-#### Step 4.2: Defender VMs (VM 100 & 200)
+#### Step 4.2: Defender VMs (VM 310 & 320)
 ```bash
 sudo apt update && sudo apt install -y python3-pip python3-venv libpcap-dev git
 
@@ -338,7 +338,7 @@ ip link delete vmbr1.110
 ### 3. VLAN Isolation Check
 Confirm VMs on different VLANs cannot communicate without explicit routing:
 ```bash
-# From VM 101 (VLAN 110) → should fail (100% packet loss)
+# From VM 311 (VLAN 110) → should fail (100% packet loss)
 ping -c 3 10.10.20.201
 ```
 

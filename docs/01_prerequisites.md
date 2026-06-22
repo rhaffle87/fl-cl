@@ -10,7 +10,7 @@ The testbed runs across a 3-node Proxmox VE cluster hosting 6 VMs/LXCs totaling 
 
 ### A. Compute & Acceleration (CPU/GPU)
 *   **GPU Passthrough (Recommended):** Deep learning models used for Encrypted Traffic Analysis—particularly 1D-CNNs or LSTMs applied to SPLT (Sequence of Packet Lengths and Times) features—train significantly faster on GPUs.
-    *   **Action:** Allocate a consumer GPU (e.g., NVIDIA RTX 3060/4060 or Tesla T4/P4) for PCIe passthrough to one of the defender VMs. Configure `vfio` drivers on the PVE host. The workload placement in [workaround_specs.md](workaround_specs.md) Section 2 allocates Defender A (VM 100) to node `its`, which is the recommended GPU passthrough host.
+    *   **Action:** Allocate a consumer GPU (e.g., NVIDIA RTX 3060/4060 or Tesla T4/P4) for PCIe passthrough to one of the defender VMs. Configure `vfio` drivers on the PVE host. The workload placement in [workaround_specs.md](workaround_specs.md) Section 2 allocates Defender A (VM 310) to node `its`, which is the recommended GPU passthrough host.
 *   **RAM Capacity:**
     *   **Minimum:** 32 GB per node (PVE overhead + VM allocations).
     *   **Recommended:** 64 GB+ per node. Each defender VM requires 16 GB to load large network flow datasets into PyTorch memory during training.
@@ -54,11 +54,11 @@ Each replayed dataset constitutes a CL task. By replaying CIC-IDS2017 (brute for
 
 ## 4. Traffic Generation & Simulation Engines
 
-For generating custom, real-time threat flows and benign background noise that complement the benchmark dataset replays. These tools run on the traffic generator VM (VM 400) and target VMs (VM 101, 201). *(Paper: Chapter 5, Section 5.1B)*
+For generating custom, real-time threat flows and benign background noise that complement the benchmark dataset replays. These tools run on the traffic generator VM (VM 400) and target VMs (VM 311, 321). *(Paper: Chapter 5, Section 5.1B)*
 
 ### Benign Background Traffic Generators
 *   **Locust / Wrk:** Generate high-throughput HTTP/HTTPS load against target VMs, producing realistic TLS flow metadata with varied request patterns.
-*   **Selenium / Puppeteer (Headless Browsers):** Scripts running inside target VMs (VM 101, VM 201) that mimic human browsing behavior—search queries, streaming, social media—generating realistic TLS flow metadata with natural timing jitter and varied JA3 fingerprints.
+*   **Selenium / Puppeteer (Headless Browsers):** Scripts running inside target VMs (VM 311, VM 321) that mimic human browsing behavior—search queries, streaming, social media—generating realistic TLS flow metadata with natural timing jitter and varied JA3 fingerprints.
 
 ### Attack Frameworks
 *   **Hydra:** SSH brute-force tool generating rapid, small-packet authentication flows with distinctive SPLT signatures.

@@ -8,7 +8,7 @@ The ewc_lambda parameter (default: 0.4) balances:
   - Plasticity: ability to learn new attack patterns
   - Stability: retention of previously learned attack signatures
 
-Deploy on: Defender VMs (VM 100, VM 200)
+Deploy on: Defender VMs (VM 310, VM 320)
 """
 
 from torch.optim import SGD

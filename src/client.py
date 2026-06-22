@@ -9,7 +9,7 @@ Per federated round:
   2. Trains locally on flows from /mnt/ramdisk/flows/ using EWC
   3. Returns updated weights to the aggregator via gRPC
 
-Deploy on: Defender VMs (VM 100, VM 200)
+Deploy on: Defender VMs (VM 310, VM 320)
 Usage:
     python3 client.py --server 10.10.10.130:8080 --client-id A
 """

@@ -6,7 +6,7 @@ flow-level metadata features (JA3 fingerprints, packet statistics, timing).
 Output is written to the tmpfs RAM disk at /mnt/ramdisk/flows/ to avoid
 I/O contention on the shared RAID controller.
 
-Deploy on: Defender VMs (VM 100, VM 200)
+Deploy on: Defender VMs (VM 310, VM 320)
 Usage:
     python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/
 """

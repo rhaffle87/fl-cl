@@ -4,7 +4,7 @@ model.py — CyberDefenseNet: Multi-Layer Perceptron for Encrypted Traffic Class
 Maps 32 scaled ETA features (JA3 fingerprints, SPLT statistics, flow entropy)
 to 5 threat classes: Normal, Botnet, Exfiltration, BruteForce, DoS.
 
-Deploy on: Defender VMs (VM 100, VM 200)
+Deploy on: Defender VMs (VM 310, VM 320)
 Input:     Feature vectors from extractor.py → /mnt/ramdisk/flows/
 Output:    Class predictions for network flow classification
 """

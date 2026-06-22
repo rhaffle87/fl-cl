@@ -1,8 +1,8 @@
 #!/bin/bash
 # =============================================================================
-# setup_defender.sh — Software provisioning for Defender Nodes (VM 100 / 200)
+# setup_defender.sh — Software provisioning for Defender Nodes (VM 310 / 320)
 # =============================================================================
-# Run INSIDE: VM 100 (defender-a) or VM 200 (defender-b) as root/sudo user
+# Run INSIDE: VM 310 (defender-a) or VM 320 (defender-b) as root/sudo user
 #
 # Installs:  Python 3, PyTorch (CPU), Avalanche (CL), Flower (FL client),
 #            NFStream (ETA), scikit-learn, pandas, TensorBoard

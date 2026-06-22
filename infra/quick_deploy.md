@@ -34,28 +34,28 @@ chmod +x create_aggregator.sh
 ./create_aggregator.sh
 ```
 
-### Create Defender Node A (VM 100)
+### Create Defender Node A (VM 310)
 ```bash
 curl -sSL https://raw.githubusercontent.com/rhaffle87/fl-cl/refs/heads/main/infra/02_vm_provision/create_defender_a.sh -o create_defender_a.sh
 chmod +x create_defender_a.sh
 ./create_defender_a.sh
 ```
 
-### Create Defender Node B (VM 200)
+### Create Defender Node B (VM 320)
 ```bash
 curl -sSL https://raw.githubusercontent.com/rhaffle87/fl-cl/refs/heads/main/infra/02_vm_provision/create_defender_b.sh -o create_defender_b.sh
 chmod +x create_defender_b.sh
 ./create_defender_b.sh
 ```
 
-### Create Target Host A1 (VM 101)
+### Create Target Host A1 (VM 311)
 ```bash
 curl -sSL https://raw.githubusercontent.com/rhaffle87/fl-cl/refs/heads/main/infra/02_vm_provision/create_target_a1.sh -o create_target_a1.sh
 chmod +x create_target_a1.sh
 ./create_target_a1.sh
 ```
 
-### Create Target Host B1 (VM 201)
+### Create Target Host B1 (VM 321)
 ```bash
 curl -sSL https://raw.githubusercontent.com/rhaffle87/fl-cl/refs/heads/main/infra/02_vm_provision/create_target_b1.sh -o create_target_b1.sh
 chmod +x create_target_b1.sh
@@ -98,7 +98,7 @@ chmod +x setup_aggregator.sh
 ./setup_aggregator.sh
 ```
 
-### Defender Guest Setup (VM 100 & VM 200)
+### Defender Guest Setup (VM 310 & VM 320)
 ```bash
 curl -sSL https://raw.githubusercontent.com/rhaffle87/fl-cl/refs/heads/main/infra/04_guest_setup/setup_defender.sh -o setup_defender.sh
 chmod +x setup_defender.sh
