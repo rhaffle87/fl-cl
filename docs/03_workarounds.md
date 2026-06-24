@@ -43,6 +43,28 @@ Before any VMs can be provisioned, three infrastructure inconsistencies must be 
   2. Navigate to **System → Network**, select `vmbr1`, and check the **VLAN Aware** box.
   3. Apply network configuration (requires `ifupdown2` installed on hosts) or reboot.
 
+### D. Physical Interface Promiscuous Transition Shock on LACP Bonds
+* **The Conflict:** When VM capture interfaces are dynamically set to promiscuous mode on startup (due to hookscripts/packet capture tools), it triggers a status transition down the virtual switch hierarchy (`tapXXXX` -> `vmbr1` -> `bond0` -> physical NICs). This sudden transition resets the LACP state on the physical interfaces (`eno1` and `eno3`), causing momentary link loss, STP/LACP renegotiation flapping, and severe cluster stalls.
+* **The Impact:** Proxmox hypervisor locks up for up to 90 seconds, leading to VM startup timeouts ("got timeout" errors) and Corosync heartbeats dropping, which breaks cluster quorum.
+* **The Workaround:** Pre-stage and enforce permanent promiscuous mode on physical NICs, the bond, and the bridge at the host boot level. This eliminates the transition shock during VM runtime.
+* **Action:** Deploy the `promisc-bond.service` systemd service on both `its` and `node2` hosts:
+  ```bash
+  /usr/bin/bash /root/fl-cl/infra/01_host_config/enable_promisc.sh
+  ```
+
+### E. VLAN Assignment Trade-offs for Defender VM Capture Interfaces
+* **The Conflict:** The research architecture requires Defender VMs to perform two tasks: passively capture raw network flows from target VMs and periodically upload trained model updates to the central `fl-aggregator` via gRPC. 
+  * If the Defender’s capture NIC (`net1`) is placed in the local Target network (VLAN 110/120), direct IP communication to the Aggregator (VLAN 130) is blocked without complex inter-VLAN routing or a third virtual interface.
+  * If placed directly in the Aggregator network (VLAN 130), the Defender VM can talk to the Aggregator directly, but its capture port VLAN tag changes.
+* **The Trade-offs Analyzed:**
+  
+  | Placement Strategy | Positive Sides | Negative Sides |
+  | :--- | :--- | :--- |
+  | **VLAN 110/120 (Target Networks)** | • Aligns with strict network zoning limits.<br>• Restricts a compromised Defender from directly accessing the aggregator network segment. | • Breaks FL gRPC updates to the Aggregator.<br>• Requires a complex inter-VLAN router/gateway setup or a 3-NIC configuration inside the VM. |
+  | **VLAN 130 (Aggregator Network)** | • **Direct gRPC Communication**: Flower client uploads model weights directly without routing overhead.<br>• **Seamless Mirroring**: `tc` mirroring operates at the device level, completely bypassing bridge VLAN filters (packets from VLAN 110/120 copy to VLAN 130 interfaces regardless).<br>• **2-NIC Template Stability**: Simplifies guest routing tables and VM setup. | • Direct Layer 2 path exists between Defender and Aggregator subnets (increased blast radius if Defender is compromised).<br>• Defender cannot ping target VMs directly (which is desired for a silent IDS/IPS). |
+
+* **The Decision:** Standardize all Defender VM capture/data interfaces on **VLAN 130**. Because hypervisor-level port mirroring (`tc mirred`) injects packets directly into the target device queues, bridge-level VLAN filtering is bypassed for mirrored traffic. This allows the Defender to capture packets from VLAN 110/120 while keeping its data interface on VLAN 130 for direct communication with the aggregator, achieving optimal performance and configuration simplicity.
+
 ---
 
 ## 2. Optimized Resource Placement Matrix
@@ -53,12 +75,12 @@ The lab requires approximately **26 vCPUs, 46 GB RAM, and 320 GB Disk** to run 1
 graph TD
     subgraph allocation ["PVE Cluster Workload Allocation"]
         subgraph node_its ["Node 'its' (Used: 28.14 GB, Free: 34.63 GB)"]
-            clientA["Defender Node A (VM 310)<br/>8 vCPU · 16 GB · VLAN 110"]
+            clientA["Defender Node A (VM 310)<br/>8 vCPU · 16 GB · VLAN 130"]
             targetA["Target Host A1 (VM 311)<br/>1 vCPU · 1 GB · VLAN 110"]
         end
 
         subgraph node_node2 ["Node 'node2' (Used: 6.56 GB, Free: 56.21 GB)"]
-            clientB["Defender Node B (VM 320)<br/>8 vCPU · 16 GB · VLAN 120"]
+            clientB["Defender Node B (VM 320)<br/>8 vCPU · 16 GB · VLAN 130"]
             targetB["Target Host B1 (VM 321)<br/>1 vCPU · 1 GB · VLAN 120"]
             trafficGen["Traffic Generator (VM 400)<br/>4 vCPU · 4 GB · VLAN 140"]
         end
@@ -74,9 +96,9 @@ graph TD
 | Hypervisor | VM ID | Hostname | OS | vCPU | RAM | Disk | VLAN | Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **pve** | 300 | `fl-aggregator` | Ubuntu Server 24.04 | 4 | 8 GB | 50 GB | 130 | Flower server orchestration & global model checkpoints. |
-| **its** | 310 | `defender-a` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 110 | NFStream capture, PyTorch/Avalanche training, Flower client. |
+| **its** | 310 | `defender-a` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 130 | NFStream capture, PyTorch/Avalanche training, Flower client. |
 | **its** | 311 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 110 | Receives benign/malicious traffic from traffic generator. |
-| **node2** | 320 | `defender-b` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 120 | Parallel defender node simulating a separate organization. |
+| **node2** | 320 | `defender-b` | Ubuntu Server 24.04 | 8 | 16 GB | 100 GB | 130 | Parallel defender node simulating a separate organization. |
 | **node2** | 321 | `target-b1` | Alpine Linux | 1 | 1 GB | 10 GB | 120 | Receives benign/malicious traffic from traffic generator. |
 | **node2** | 400 | `traffic-gen` | Kali Linux | 4 | 4 GB | 50 GB | 140 | Metasploit C2, Hydra brute-force, Selenium benign browsing, tcpreplay dataset replay. |
 
@@ -154,14 +176,14 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
 ```
 
 #### Step 2.2: Deploy Defender Nodes (On Nodes `its` and `node2`)
-Each defender has **two** network interfaces: `net0` on `vmbr0` (management/internet) and `net1` on `vmbr1` (VLAN-tagged capture interface).
+Each defender has **two** network interfaces: `net0` on `vmbr0` (management/internet) and `net1` on `vmbr1` (VLAN-tagged capture/aggregator interface, standardized to VLAN 130 to allow direct gRPC communication to the FL aggregator).
 
 **On Node `its` (Defender A – VM 310):**
 ```bash
 qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1,tag=110 \
+  --net1 virtio,bridge=vmbr1,tag=130 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 ```
@@ -171,7 +193,7 @@ qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
 qm create 320 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1,tag=120 \
+  --net1 virtio,bridge=vmbr1,tag=130 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 ```

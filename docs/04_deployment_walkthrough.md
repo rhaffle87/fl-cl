@@ -39,13 +39,15 @@ Where:
 
 ### VLAN Collision Mitigation
 
-To prevent Layer 2 collisions with the campus management and backup network proposal, we offset all internal testbed VLAN IDs by **+100**. This ensures strict isolation on the shared physical switch fabric:
+To prevent Layer 2 collisions with the campus management and backup network proposal, we offset all internal testbed VLAN IDs by **+100**. This ensures strict isolation on the shared physical switch fabric. 
+
+Crucially, we attach the capture interfaces (`net1`) of both **Defender A** and **Defender B** to the aggregator network (**VLAN 130**). This allows direct L2 gRPC client updates to the Flower aggregator without complex inter-VLAN routing, while their corresponding target VMs (`target-a1` on VLAN 110, `target-b1` on VLAN 120) remain isolated at the client access layer. The hypervisor-level `tc` rules copy and mirror packets across VLAN bounds at the virtual device layer, bypassing bridge-level filtering:
 
 | Zone / Organization | Proposed VLAN | Actual Shifted VLAN (Testbed) | Subnet | Assigned Nodes / VMs |
 | :--- | :--- | :--- | :--- | :--- |
-| **Management / Org A** | VLAN 10 | **VLAN 110** | `10.10.110.0/24` | `defender-a` (VM 310), `target-a1` (VM 311) |
-| **VM Network / Org B** | VLAN 20 | **VLAN 120** | `10.10.120.0/24` | `defender-b` (VM 320), `target-b1` (VM 321) |
-| **Backup / FL Aggregator**| VLAN 30 | **VLAN 130** | `10.10.130.0/24` | `fl-aggregator` (LXC 300) |
+| **Management / Org A** | VLAN 10 | **VLAN 110** | `10.10.110.0/24` | `target-a1` (VM 311) |
+| **VM Network / Org B** | VLAN 20 | **VLAN 120** | `10.10.120.0/24` | `target-b1` (VM 321) |
+| **Backup / FL Aggregator**| VLAN 30 | **VLAN 130** | `10.10.130.0/24` | `fl-aggregator` (LXC 300), `defender-a` (VM 310), `defender-b` (VM 320) |
 | **Migration / Traffic Gen**| VLAN 40 | **VLAN 140** | `10.10.140.0/24` | `traffic-gen` (VM 400) |
 
 ---
@@ -91,6 +93,21 @@ EOF
 > [!CAUTION]
 > Ensure all references mapping `its.ac.id` to the management network (`192.168.x.x`) are removed from all host files to prevent Corosync from falling out of quorum.
 
+#### Step 1.2: Enforce Persistent Promiscuous Mode on LACP Bonds (Node `its` & `node2`)
+To prevent physical switch LACP link renegotiation flaps and STP blocking state freezes when VM interfaces dynamically transition to promiscuous mode, execute the automated helper script to pre-enable promiscuous mode persistently:
+
+```bash
+/usr/bin/bash /root/fl-cl/infra/01_host_config/enable_promisc.sh
+```
+
+This creates a systemd service (`promisc-bond.service`) that automatically executes:
+```bash
+/sbin/ip link set dev <physical_nic_1> promisc on
+/sbin/ip link set dev <physical_nic_2> promisc on
+/sbin/ip link set dev bond0 promisc on
+/sbin/ip link set dev vmbr1 promisc on
+```
+
 ---
 
 ### Layer 2: Network Virtualization (SDN/L2)
@@ -100,9 +117,9 @@ Network isolation and routing boundaries are enforced using Proxmox native Linux
 ```mermaid
 graph TD
     subgraph node_its ["Node 'its'"]
-        bond0["Physical bond0"] <--> vmbr1["vmbr1 (VLAN Aware)"]
-        vmbr1 <-->|VLAN 110| tap100i1["tap100i1 (Defender A Capture)"]
-        vmbr1 <-->|VLAN 110| tap101i0["tap101i0 (Target A1 Access)"]
+        bond0["Physical bond0 (PROMISC ON)"] <--> vmbr1["vmbr1 (VLAN Aware, PROMISC ON)"]
+        vmbr1 <-->|VLAN 130| tap310i1["tap310i1 (Defender A Capture)"]
+        vmbr1 <-->|VLAN 110| tap311i0["tap311i0 (Target A1 Access)"]
     end
 ```
 
@@ -136,7 +153,7 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
 ```
 
 #### Step 2.3: Provision the Defender and Target VMs
-Deploy the VM instances. Ensure the Target VMs use the same VLAN tag as their corresponding Defender nodes.
+Deploy the VM instances. Standardize the Defender capture interfaces to VLAN 130 to allow direct L2 gRPC connection with the FL Aggregator. Ensure target VMs stay on their organization-isolated VLANs (VLAN 110 for Org A, VLAN 120 for Org B).
 
 **On Node `its` (Defender A & Target A1):**
 ```bash
@@ -144,7 +161,7 @@ Deploy the VM instances. Ensure the Target VMs use the same VLAN tag as their co
 qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1,tag=110 \
+  --net1 virtio,bridge=vmbr1,tag=130 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 
@@ -160,7 +177,7 @@ qm create 311 --name target-a1 --cores 1 --memory 1024 \
 qm create 320 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1,tag=120 \
+  --net1 virtio,bridge=vmbr1,tag=130 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 

@@ -20,6 +20,13 @@ chmod +x enable_snippets.sh
 ./enable_snippets.sh
 ```
 
+### Enable Persistent Promiscuous Mode (Run on Node 'its' and 'node2')
+```bash
+curl -L -O https://raw.githubusercontent.com/rhaffle87/fl-cl/refs/heads/main/infra/01_host_config/enable_promisc.sh
+chmod +x enable_promisc.sh
+./enable_promisc.sh
+```
+
 ---
 
 ## 2. VM Provisioning (Run on Proxmox Hosts)

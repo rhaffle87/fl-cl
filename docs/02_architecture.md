@@ -69,8 +69,8 @@ Each VM's resources, VLAN assignment, and role are designed to match the workloa
 | VM ID | Hostname | Type | OS | Resources | VLAN | Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **300** | `fl-aggregator` | LXC | Ubuntu Server 24.04 | 4 vCPU, 8 GB RAM, 50 GB Disk | 130 | Runs the Flower server, orchestrates FedAvg aggregation, and manages global model checkpoints. |
-| **310** | `defender-a` | VM (GPU-passthrough optional) | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 110 | Runs NFStream (ETA), PyTorch (model), Avalanche (CL), and Flower client (FL). |
-| **320** | `defender-b` | VM | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 120 | Parallel defender node simulating a separate organization. |
+| **310** | `defender-a` | VM (GPU-passthrough optional) | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 130 | Runs NFStream (ETA), PyTorch (model), Avalanche (CL), and Flower client (FL). |
+| **320** | `defender-b` | VM | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 130 | Parallel defender node simulating a separate organization. |
 | **311** | `target-a1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 110 | Receives benign browsing and malicious attack traffic from the traffic generator. |
 | **321** | `target-b1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 120 | Receives benign browsing and malicious attack traffic from the traffic generator. |
 | **400** | `traffic-gen` | VM | Kali Linux | 4 vCPU, 4 GB RAM, 50 GB Disk | 140 | Generates benign SSL/TLS traffic (Selenium/Locust) and malicious encrypted channels (Metasploit C2, Hydra SSH brute-force, Slowloris). |
@@ -330,8 +330,8 @@ This section provides the generic execution sequence. For cluster-specific provi
 
 ### Phase 2: VM & Container Provisioning
 1. Deploy LXC 300 (`fl-aggregator`) on node `pve` with dual NICs (`vmbr0` + `vmbr1` VLAN 130).
-2. Deploy VM 310 (`defender-a`) on node `its` with dual NICs (`vmbr0` + `vmbr1` VLAN 110).
-3. Deploy VM 320 (`defender-b`) on node `node2` with dual NICs (`vmbr0` + `vmbr1` VLAN 120).
+2. Deploy VM 310 (`defender-a`) on node `its` with dual NICs (`vmbr0` + `vmbr1` VLAN 130).
+3. Deploy VM 320 (`defender-b`) on node `node2` with dual NICs (`vmbr0` + `vmbr1` VLAN 130).
 4. Deploy target VMs 311 and 321, and traffic generator VM 400.
 5. Bind hookscripts to target VMs for automatic port mirroring. *(See [workaround_specs.md](workaround_specs.md) Section 4, Phase 3.)*
 
