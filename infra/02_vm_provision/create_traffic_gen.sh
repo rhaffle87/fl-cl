@@ -31,7 +31,7 @@ qm create $VMID \
     --net0 virtio,bridge=vmbr1,tag=$VLAN \
     --scsihw virtio-scsi-pci \
     --scsi0 local-lvm:50,discard=on \
-    --ide2 local:iso/kali-linux-2024.2-installer-amd64.iso,media=cdrom \
+    --ide2 local:iso/kali-linux-2024.4-installer-amd64.iso,media=cdrom \
     --boot order='ide2;scsi0'
 
 echo "✓ VM $VMID ($NAME) created. Start with: qm start $VMID"

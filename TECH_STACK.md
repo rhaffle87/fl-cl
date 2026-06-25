@@ -32,7 +32,7 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 | VM 320 (`defender-b`) | Ubuntu Server | 24.04 LTS | Full VM for parallel defender |
 | VM 311 (`target-a1`) | Alpine Linux | 3.20 | Minimal OS as attack/traffic target |
 | VM 321 (`target-b1`) | Alpine Linux | 3.20 | Minimal OS as attack/traffic target |
-| VM 400 (`traffic-gen`) | Kali Linux | 2024.2 | Pre-loaded with offensive security tools |
+| VM 400 (`traffic-gen`) | Kali Linux | 2024.4 | Pre-loaded with offensive security tools |
 
 ---
 
