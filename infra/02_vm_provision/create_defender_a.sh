@@ -3,24 +3,22 @@
 # create_defender_a.sh — Deploy Defender Node A VM
 # =============================================================================
 # Run on:  Node 'its' (hypervisor shell as root)
-# Creates: VM 310 (defender-a) on VLAN 130
+# Creates: VM 310 (defender-a) on Flat L2 Network (vmbr1)
 #
 # This VM runs: NFStream capture, PyTorch model, Avalanche EWC, Flower client
-# Dual NIC: net0=vmbr0 (mgmt/internet), net1=vmbr1 VLAN 130 (capture/aggregator network)
+# Dual NIC: net0=vmbr0 (mgmt/internet), net1=vmbr1 (Flat L2 capture/aggregator network)
 #
 # Prerequisites:
 #   - Ubuntu 24.04 ISO uploaded to local storage
-#   - VLAN awareness enabled on vmbr1
 # =============================================================================
 set -euo pipefail
 
 VMID=310
 NAME="defender-a"
-VLAN=130
 
 echo "============================================"
 echo " Deploying Defender Node A — VM $VMID"
-echo " Node: its | VLAN: $VLAN"
+echo " Node: its | Network: Flat L2"
 echo "============================================"
 
 if qm status $VMID &>/dev/null; then

@@ -3,7 +3,7 @@
 # create_target_a1.sh — Deploy Target Host A1
 # =============================================================================
 # Run on:  Node 'its' (MUST be same node as defender-a for port mirroring)
-# Creates: VM 311 (target-a1) on VLAN 110
+# Creates: VM 311 (target-a1) on Flat L2 Network (vmbr1)
 #
 # Lightweight Alpine VM that receives attack + benign traffic.
 # =============================================================================
@@ -11,11 +11,10 @@ set -euo pipefail
 
 VMID=311
 NAME="target-a1"
-VLAN=110
 
 echo "============================================"
 echo " Deploying Target Host A1 — VM $VMID"
-echo " Node: its | VLAN: $VLAN"
+echo " Node: its | Network: Flat L2"
 echo "============================================"
 
 if qm status $VMID &>/dev/null; then

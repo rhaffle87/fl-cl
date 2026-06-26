@@ -3,17 +3,16 @@
 # create_target_b1.sh — Deploy Target Host B1
 # =============================================================================
 # Run on:  Node 'node2' (MUST be same node as defender-b for port mirroring)
-# Creates: VM 321 (target-b1) on VLAN 120
+# Creates: VM 321 (target-b1) on Flat L2 Network (vmbr1)
 # =============================================================================
 set -euo pipefail
 
 VMID=321
 NAME="target-b1"
-VLAN=120
 
 echo "============================================"
 echo " Deploying Target Host B1 — VM $VMID"
-echo " Node: node2 | VLAN: $VLAN"
+echo " Node: node2 | Network: Flat L2"
 echo "============================================"
 
 if qm status $VMID &>/dev/null; then

@@ -49,28 +49,28 @@ def extract_features(interface: str, out_dir: str, batch_size: int = 500):
     for flow in streamer:
         features = {
             # --- TLS Handshake Features ---
-            "ja3_hash": flow.src_to_dst_ja3 or "",
-            "ja3s_hash": flow.dst_to_src_ja3 or "",
-            "sni": flow.requested_server_name or "",
-            "application": flow.application_name or "",
+            "ja3_hash": getattr(flow, "src_to_dst_ja3", "") or "",
+            "ja3s_hash": getattr(flow, "dst_to_src_ja3", "") or "",
+            "sni": getattr(flow, "requested_server_name", "") or "",
+            "application": getattr(flow, "application_name", "") or "",
             # --- Flow Statistics ---
-            "bidirectional_packets": flow.bidirectional_packets,
-            "bidirectional_bytes": flow.bidirectional_bytes,
-            "duration_ms": flow.bidirectional_duration_ms,
+            "bidirectional_packets": getattr(flow, "bidirectional_packets", 0),
+            "bidirectional_bytes": getattr(flow, "bidirectional_bytes", 0),
+            "duration_ms": getattr(flow, "bidirectional_duration_ms", 0),
             # --- Directional Metrics ---
-            "src2dst_packets": flow.src2dst_packets,
-            "src2dst_bytes": flow.src2dst_bytes,
-            "dst2src_packets": flow.dst2src_packets,
-            "dst2src_bytes": flow.dst2src_bytes,
+            "src2dst_packets": getattr(flow, "src2dst_packets", 0),
+            "src2dst_bytes": getattr(flow, "src2dst_bytes", 0),
+            "dst2src_packets": getattr(flow, "dst2src_packets", 0),
+            "dst2src_bytes": getattr(flow, "dst2src_bytes", 0),
             # --- Timing ---
             "src2dst_mean_piat_ms": getattr(flow, "src2dst_mean_piat_ms", 0),
             "dst2src_mean_piat_ms": getattr(flow, "dst2src_mean_piat_ms", 0),
             # --- Metadata ---
-            "src_ip": flow.src_ip,
-            "dst_ip": flow.dst_ip,
-            "src_port": flow.src_port,
-            "dst_port": flow.dst_port,
-            "protocol": flow.protocol,
+            "src_ip": getattr(flow, "src_ip", ""),
+            "dst_ip": getattr(flow, "dst_ip", ""),
+            "src_port": getattr(flow, "src_port", 0),
+            "dst_port": getattr(flow, "dst_port", 0),
+            "protocol": getattr(flow, "protocol", 0),
         }
         batch.append(features)
 

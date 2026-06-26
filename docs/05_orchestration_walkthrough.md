@@ -208,7 +208,7 @@ When clients report different dataset sizes, naive averaging would be misleading
 
 #### Server Startup
 ```bash
-python3 server.py --rounds 10 --min-clients 2 --mlflow-uri http://localhost:5000
+/opt/flower-env/bin/python3 server.py --rounds 10 --min-clients 2 --mlflow-uri http://localhost:5000
 ```
 - Waits for at least 2 clients (Defender A + Defender B) before starting each round
 - Opens an MLflow experiment called `FL-CL-CyberDefense`
@@ -224,19 +224,19 @@ A CLI utility that generates one of three traffic patterns against a target IP:
 
 #### Mode: `benign`
 ```bash
-python3 attack_flow.py --mode benign --target 10.10.110.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.110.15 --duration 30
 ```
 Sends HTTP GET requests to the target's port 80 every 0.5 seconds for the specified duration. Generates normal web browsing patterns that the model should classify as class `0`.
 
 #### Mode: `ssh`
 ```bash
-python3 attack_flow.py --mode ssh --target 10.10.110.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.110.15 --duration 30
 ```
 Launches `hydra` with the `fasttrack.txt` wordlist against the target's SSH service (port 22). Generates rapid, failed authentication attempts that the model should classify as class `3`.
 
 #### Mode: `slowloris`
 ```bash
-python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration 30 --port 80
+~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration 30 --port 80
 ```
 Runs `slowloris` with 100 concurrent sockets, sending partial HTTP headers to hold connections open. Generates DoS patterns that the model should classify as class `4`.
 
@@ -331,11 +331,11 @@ On **FL Aggregator** (`10.10.130.10`):
 
 First, the MLflow tracking server starts:
 ```bash
-mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db
+/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db
 ```
 The orchestrator waits 3 seconds for MLflow to initialize, then starts the Flower server:
 ```bash
-python3 server.py --rounds 10 --min-clients 2 --mlflow-uri http://localhost:5000
+/opt/flower-env/bin/python3 server.py --rounds 10 --min-clients 2 --mlflow-uri http://localhost:5000
 ```
 The server now waits for 2 clients to connect before beginning round 1.
 
@@ -345,22 +345,22 @@ On **Traffic Generator** (`10.10.140.10`), three attack stages are triggered in 
 
 **Stage 1 — Benign Traffic (first 15 seconds):**
 ```bash
-python3 attack_flow.py --mode benign --target 10.10.110.15 --duration 30
-python3 attack_flow.py --mode benign --target 10.10.120.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.110.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.120.15 --duration 30
 ```
 HTTP GET requests every 0.5s to both targets. This generates class `0` (Normal) training data.
 
 **Stage 2 — SSH Brute Force (starts at ~15 seconds):**
 ```bash
-python3 attack_flow.py --mode ssh --target 10.10.110.15 --duration 30
-python3 attack_flow.py --mode ssh --target 10.10.120.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.110.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.120.15 --duration 30
 ```
 Hydra dictionary attacks against SSH. This generates class `3` (BruteForce) training data.
 
 **Stage 3 — Slowloris DoS (starts at ~30 seconds):**
 ```bash
-python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration 30 --port 80
-python3 attack_flow.py --mode slowloris --target 10.10.120.15 --duration 30 --port 80
+~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration 30 --port 80
+~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.120.15 --duration 30 --port 80
 ```
 100-socket Slowloris flood. This generates class `4` (DoS) training data.
 

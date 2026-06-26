@@ -1,7 +1,7 @@
 # Implementation Workaround & Resource Allocation Plan
 ## Hybrid Federated-Continual Learning (FL-CL) Cyber Defense Lab
 
-> **Role in the documentation set**: This document defines the cluster-specific workarounds, network reconciliation steps, and hardware resource allocation required to deploy the conceptual architecture from [research_architecture.md](research_architecture.md) on the actual 3-node Proxmox VE cluster. For hardware prerequisites and dataset preparation, see [prerequisites_and_tooling.md](prerequisites_and_tooling.md). For the fully integrated research paper, see [fl_cl_research_paper.md](fl_cl_research_paper.md) (this document corresponds to Paper Chapters 3, 4, and 7).
+> **Role in the documentation set**: This document defines the cluster-specific workarounds, network reconciliation steps, and hardware resource allocation required to deploy the conceptual architecture from [02_architecture.md](02_architecture.md) on the actual 3-node Proxmox VE cluster. For hardware prerequisites and dataset preparation, see [01_prerequisites.md](01_prerequisites.md). For the fully integrated research paper, see [00_research_paper.md](00_research_paper.md) (this document corresponds to Paper Chapters 3, 4, and 7).
 
 ---
 
@@ -36,7 +36,7 @@ Before any VMs can be provisioned, three infrastructure inconsistencies must be 
 
 ### C. Bridge Properties & VLAN Awareness
 * **The Conflict:** Node `node2` has a **VLAN-aware** `vmbr1` bridge. Nodes `its` and `pve` have standard, non-VLAN-aware bridges. Additionally, `its` and `node2` use link aggregation (`bond0` with LACP), while `pve` runs a single physical NIC to `vmbr1`.
-* **The Impact:** Tagged VLAN traffic (VLAN 110 for Organization A, VLAN 120 for Organization B, VLAN 130 for aggregation, VLAN 140 for traffic generation) will be stripped or dropped on non-VLAN-aware bridges, breaking the network isolation design from [research_architecture.md](research_architecture.md) Section 2.
+* **The Impact:** Tagged VLAN traffic (VLAN 110 for Organization A, VLAN 120 for Organization B, VLAN 130 for aggregation, VLAN 140 for traffic generation) will be stripped or dropped on non-VLAN-aware bridges, breaking the network isolation design from [02_architecture.md](02_architecture.md) Section 2.
 * **The Workaround:** Enable **VLAN Awareness** on `vmbr1` across all three nodes.
 * **Action:** 
   1. Open the Proxmox Web GUI on `its` and `pve`.
@@ -108,7 +108,7 @@ Ensure that `/dev/sda3` is configured as an **LVM-Thin** pool (mapped by default
 * **Reasoning:** Traditional LVM pre-allocates block space completely upon VM creation. LVM-Thin allows thin-provisioning (only consuming physical blocks as data is written) and fast, space-efficient VM snapshots. This is critical for **rolling back defender nodes** after experimental training sessions (e.g., data poisoning tests or EWC hyperparameter sweeps)—a workflow that would be prohibitively expensive with thick provisioning.
 
 ### B. Mitigate Capture Disk I/O Bottlenecks
-Continual traffic capture via NFStream (see [research_architecture.md](research_architecture.md) Section 4) generates thousands of small writes per second, loading the RAID controller queue and degrading all VMs on the host. *(Paper: Chapter 5, Section 5.3)*
+Continual traffic capture via NFStream (see [02_architecture.md](02_architecture.md) Section 4) generates thousands of small writes per second, loading the RAID controller queue and degrading all VMs on the host. *(Paper: Chapter 5, Section 5.3)*
 * **Workaround:** Buffer flow records in a memory-mapped RAM disk (`tmpfs`) inside each defender VM. Batch writes to persistent storage at controlled intervals.
 * **Mounting a RAM disk (inside Defender VMs):**
   ```bash
@@ -166,19 +166,19 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
   -cores 4 -memory 8192 -swap 2048 \
   -hostname fl-aggregator -ostype ubuntu -rootfs local:50 \
   -net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  -net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.130.10/24 \
+  -net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
   -onboot 1 -start 1
 ```
 
 #### Step 2.2: Deploy Defender Nodes (On Nodes `its` and `node2`)
-Each defender has **two** network interfaces: `net0` on `vmbr0` (management/internet) and `net1` on `vmbr1` (VLAN-tagged capture/aggregator interface, standardized to VLAN 130 to allow direct gRPC communication to the FL aggregator).
+Each defender has **two** network interfaces: `net0` on `vmbr0` (management/internet) and `net1` on `vmbr1` (untagged capture/aggregator interface, utilizing the flat `10.10.0.0/16` network to allow direct gRPC communication to the FL aggregator).
 
 **On Node `its` (Defender A – VM 310):**
 ```bash
 qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1,tag=130 \
+  --net1 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 ```
@@ -188,7 +188,7 @@ qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
 qm create 320 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1,tag=130 \
+  --net1 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 ```
@@ -198,30 +198,31 @@ qm create 320 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
 **On Node `its` (Target A1 – VM 311):**
 ```bash
 qm create 311 --name target-a1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1,tag=110 \
+  --net0 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 ```
 
 **On Node `node2` (Target B1 – VM 321):**
 ```bash
 qm create 321 --name target-b1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1,tag=120 \
+  --net0 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 ```
 
 **On Node `node2` (Traffic Generator – VM 400):**
 ```bash
 qm create 400 --name traffic-gen --cores 4 --memory 4096 \
-  --net0 virtio,bridge=vmbr1,tag=140 \
+  --net0 virtio,bridge=vmbr0 \
+  --net1 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:50,discard=on --start 0
 ```
-> **Inter-VLAN routing note:** The traffic generator on VLAN 140 must reach target hosts on VLANs 110 and 120. Configure static routes on your gateway router, or assign target interfaces additional VLAN tags to span the test ranges.
+> **Flat L2 Network note:** Because we are on a Flat L2 network with a `/16` subnet mask, the traffic generator on `10.10.140.10/16` can communicate directly with target hosts on `10.10.110.15/16` and `10.10.120.15/16` without any inter-VLAN routing configuration.
 
 ---
 
 ### Phase 3: Proxmox Automatic Port Mirroring Workaround
 
-Proxmox destroys virtual TAP interfaces when a VM shuts down, erasing all `tc` mirroring rules. This hookscript workaround re-applies port mirroring automatically on every target VM boot, ensuring the capture pipeline from [research_architecture.md](research_architecture.md) Section 3 always has input. *(Paper: Chapter 4, Section 4.3)*
+Proxmox destroys virtual TAP interfaces when a VM shuts down, erasing all `tc` mirroring rules. This hookscript workaround re-applies port mirroring automatically on every target VM boot, ensuring the capture pipeline from [02_architecture.md](02_architecture.md) Section 3 always has input. *(Paper: Chapter 4, Section 4.3)*
 
 #### Step 3.1: Create the Hookscript (Run on Node `its`)
 ```bash
@@ -259,7 +260,7 @@ qm set 311 --hookscript local:snippets/mirror-hook.sh
 
 ### Phase 4: Software Stack Provisioning (Inside VMs)
 
-Install the Python environments that run the code from [research_architecture.md](research_architecture.md) Section 5. *(Paper: Chapter 7, Phase 4)*
+Install the Python environments that run the code from [02_architecture.md](02_architecture.md) Section 5. *(Paper: Chapter 7, Phase 4)*
 
 #### Step 4.1: Aggregator Node (LXC 300)
 ```bash
@@ -298,7 +299,7 @@ The startup order mirrors the data flow: aggregator → flow extraction → traf
 ```bash
 source /opt/flower-env/bin/activate && python3 server.py
 ```
-*Binds to port 8080 on the VLAN 130 interface (`10.10.130.10`).*
+*Binds to port 8080 on the flat L2 network interface (`10.10.130.10`).*
 
 #### Step 5.2: Start Flow Extraction (Defender VMs)
 ```bash
@@ -313,7 +314,7 @@ sudo tcpdump -i ens19 -c 10
 ```
 
 #### Step 5.4: Start Traffic Generation (VM 400)
-Launch attack campaigns and benign browsing scripts per [prerequisites_and_tooling.md](prerequisites_and_tooling.md) Sections 3–4.
+Launch attack campaigns and benign browsing scripts per [01_prerequisites.md](01_prerequisites.md) Sections 3–4.
 
 #### Step 5.5: Start FL-CL Clients (Defender VMs)
 ```bash
@@ -334,28 +335,18 @@ pvecm status
 corosync-cfgtool -s
 ```
 
-### 2. VLAN Awareness Check
-Verify bridge forwarding and tagged VLAN propagation across hypervisors:
+### 2. Flat L2 Bridge Forwarding Verification
+Verify that the `vmbr1` bridge successfully forwards flat untagged traffic across the physical nodes:
 ```bash
-bridge vlan show vmbr1
-```
-Run a temporary tagged test interface on each node to verify L2 crossing:
-```bash
-ip link add link vmbr1 name vmbr1.110 type vlan id 110
-ip addr add 10.10.100.11/24 dev vmbr1.110
-ip link set dev vmbr1.110 up
-# Repeat on node2 with IP 10.10.100.12, then ping to verify
-ping -c 3 10.10.100.12
-```
-*Clean up:*
-```bash
-ip link delete vmbr1.110
+# From node 'its' (10.10.10.11), verify we can ping node 'node2' (10.10.10.12) over the LACP bond
+ping -c 3 10.10.10.12
 ```
 
-### 3. VLAN Isolation Check
-Confirm VMs on different VLANs cannot communicate without explicit routing:
+### 3. Flat L2 Guest VM Connectivity Check
+Confirm that guest VMs located on different hypervisors can communicate directly on the flat `10.10.0.0/16` subnet:
 ```bash
-# From VM 311 (VLAN 110) → should fail (100% packet loss)
+# From Target VM 311 (10.10.110.15 on node 'its') → Target VM 321 (10.10.120.15 on node 'node2')
+# Ping should succeed with 0% packet loss, validating flat bridge transit
 ping -c 3 10.10.120.15
 ```
 

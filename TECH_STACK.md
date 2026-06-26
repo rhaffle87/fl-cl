@@ -12,7 +12,7 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 |:---|:---|:---|:---|
 | **Proxmox VE** | 8.x | Type-1 hypervisor for VM/CT management | Pre-installed on bare metal |
 | **Linux Bridge (`vmbr0`, `vmbr1`)** | Kernel built-in | Virtual network switching between VMs | Configured in `/etc/network/interfaces` |
-| **802.1Q VLAN Tagging** | Kernel module | Isolate organizational networks (VLAN 110/120/130/140) | `bridge-vlan-aware yes` in `/etc/network/interfaces` |
+| **Flat L2 Subnetting** | Kernel module / IP Routing | Logical subnets on flat L2 vmbr1 to bypass switch VLAN constraints | Subnet mask /16 (`10.10.0.0/16`) on vmbr1 |
 | **LACP Bond (`bond0`)** | Kernel module | Link aggregation on nodes `its` and `node2` | Configured in `/etc/network/interfaces` |
 | **tc (Traffic Control)** | iproute2 | Port mirroring — copies target VM traffic to defender capture interface | `apt install iproute2` (pre-installed) |
 | **Proxmox Hookscripts** | PVE built-in | Auto-execute scripts on VM lifecycle events (post-start) | `pvesm set local --content ...,snippets` |
@@ -40,10 +40,10 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 
 | Technology | Purpose | Where |
 |:---|:---|:---|
-| **VLAN 110** (10.10.110.0/24) | Organization A network | VM 310, VM 311 |
-| **VLAN 120** (10.10.120.0/24) | Organization B network | VM 320, VM 321 |
-| **VLAN 130** (10.10.130.0/24) | FL Aggregation zone | LXC 300 |
-| **VLAN 140** (10.10.140.0/24) | Traffic generation zone | VM 400 |
+| **Subnet Zone A** (10.10.110.0/16) | Organization A logical subnet | VM 310, VM 311 |
+| **Subnet Zone B** (10.10.120.0/16) | Organization B logical subnet | VM 320, VM 321 |
+| **Subnet Zone FL** (10.10.130.0/16) | FL Aggregation logical subnet | LXC 300 |
+| **Subnet Zone Traffic** (10.10.140.0/16) | Traffic generation logical subnet | VM 400 |
 | **gRPC over TLS** | FL weight sync (Flower protocol) | Defenders ↔ Aggregator |
 | **TCP/8080** | Flower server port | LXC 300 |
 | **TCP/5000** | MLflow tracking UI | LXC 300 |

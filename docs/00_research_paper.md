@@ -10,7 +10,7 @@
 
 The convergence of pervasive end-to-end encryption (TLS 1.3, HTTPS, DoH) and strict data-privacy regulation (GDPR, HIPAA) creates a dual constraint for network security: deep packet inspection is no longer viable, and raw traffic logs cannot be shared across organizational boundaries. Simultaneously, the threat landscape is non-stationary—novel attack vectors emerge continuously, causing static machine-learning classifiers to degrade through catastrophic forgetting. This paper addresses these converging challenges through a unified **Hybrid Federated-Continual Learning (FL-CL)** framework. Federated Learning enables multiple organizations to collaboratively train a shared threat-detection model without exchanging raw data; Continual Learning ensures each local model adapts to new attack streams without losing knowledge of previously encountered threats.
 
-We present the complete system from first principles through deployment. Chapter 1 establishes the research problem and the gap that a hybrid FL-CL approach fills. Chapter 2 surveys the theoretical foundations—Encrypted Traffic Analysis (ETA), Federated Learning, and Continual Learning—and motivates their integration. Chapter 3 translates these concepts into a concrete testbed architecture on a heterogeneous 3-node Proxmox VE cluster, detailing the hardware prerequisites, the network audit required to reconcile inconsistent bridge and DNS configurations, and the resource allocation strategy across nodes of unequal capacity. Chapter 4 addresses the critical infrastructure layer: VLAN-segmented virtual networks and a hookscript-based port-mirroring workaround that survives VM reboots. Chapter 5 defines the end-to-end data pipeline—from raw encrypted packets, through NFStream feature extraction, to labeled training-ready tensors—including the traffic generation and dataset replay strategy that feeds it. Chapter 6 details the software engine integrating PyTorch, Avalanche (EWC), and Flower. Chapter 7 provides the sequential deployment workflow. Chapter 8 defines the evaluation methodology and MLOps observability stack. Chapter 9 concludes with future directions.
+We present the complete system from first principles through deployment. Chapter 1 establishes the research problem and the gap that a hybrid FL-CL approach fills. Chapter 2 surveys the theoretical foundations—Encrypted Traffic Analysis (ETA), Federated Learning, and Continual Learning—and motivates their integration. Chapter 3 translates these concepts into a concrete testbed architecture on a heterogeneous 3-node Proxmox VE cluster, detailing the hardware prerequisites, the network audit required to reconcile inconsistent bridge and DNS configurations, and the resource allocation strategy across nodes of unequal capacity. Chapter 4 addresses the critical infrastructure layer: Flat L2 network configuration and a hookscript-based port-mirroring workaround that survives VM reboots. Chapter 5 defines the end-to-end data pipeline—from raw encrypted packets, through NFStream feature extraction, to labeled training-ready tensors—including the traffic generation and dataset replay strategy that feeds it. Chapter 6 details the software engine integrating PyTorch, Avalanche (EWC), and Flower. Chapter 7 provides the sequential deployment workflow. Chapter 8 defines the evaluation methodology and MLOps observability stack. Chapter 9 concludes with future directions.
 
 ---
 
@@ -153,10 +153,10 @@ Node `its` maps `its.ac.id` to `10.3.132.7`; node `node2` maps it to `192.168.18
 
 **Resolution**: Remove all static `its.ac.id` entries from host files. Deploy a centralized DNS forwarder (e.g., `dnsmasq` on the aggregator LXC) to resolve this domain uniformly across all VMs.
 
-#### C. VLAN Awareness Mismatch
-Node `node2` runs a VLAN-aware `vmbr1`; nodes `its` and `pve` do not. Additionally, `its` and `node2` use LACP link aggregation (`bond0`), while `pve` connects via a single NIC. Tagged VLAN frames (110, 120, 130, 140) will be silently dropped on non-VLAN-aware bridges.
+#### C. VLAN Mismatch & Switch Restrictions
+Initially, the research architecture isolated nodes using tagged VLANs (110, 120, 130, 140) on `vmbr1`. However, Node `node2` was configured with a VLAN-aware `vmbr1` bridge, whereas `its` and `pve` were not. Crucially, the physical unmanaged switch connecting the three Proxmox hosts does not support 802.1Q VLAN trunking, causing tagged VLAN frames to be silently dropped during cross-host communication.
 
-**Resolution**: Enable `bridge-vlan-aware yes` on `vmbr1` across all three hosts (detailed in Chapter 7, Phase 1).
+**Resolution**: Keep VLAN awareness enabled on `vmbr1` on all nodes to allow for host-level tagging experiments if needed, but migrate the primary network to a flat, untagged Layer 2 topology using a `/16` subnet mask (`10.10.0.0/16`). This bypasses physical switch limitations while preserving logical subnet groupings.
 
 ### 3.3 Workload Placement Strategy
 
@@ -166,16 +166,16 @@ With the network harmonized, VMs are distributed across nodes based on available
 graph TD
     subgraph cluster ["PVE Cluster – Workload Allocation"]
         subgraph its ["Node 'its' (Free: 34.63 GB)"]
-            DA["Defender A (VM 310)<br/>8 vCPU · 16 GB · VLAN 110"]
-            TA["Target A1 (VM 311)<br/>1 vCPU · 1 GB · VLAN 110"]
+            DA["Defender A (VM 310)<br/>8 vCPU · 16 GB · 10.10.130.11/16"]
+            TA["Target A1 (VM 311)<br/>1 vCPU · 1 GB · 10.10.110.15/16"]
         end
         subgraph node2 ["Node 'node2' (Free: 56.21 GB)"]
-            DB["Defender B (VM 320)<br/>8 vCPU · 16 GB · VLAN 120"]
-            TB["Target B1 (VM 321)<br/>1 vCPU · 1 GB · VLAN 120"]
-            TG["Traffic Gen (VM 400)<br/>4 vCPU · 4 GB · VLAN 140"]
+            DB["Defender B (VM 320)<br/>8 vCPU · 16 GB · 10.10.130.12/16"]
+            TB["Target B1 (VM 321)<br/>1 vCPU · 1 GB · 10.10.120.15/16"]
+            TG["Traffic Gen (VM 400)<br/>4 vCPU · 4 GB · 10.10.140.10/16"]
         end
         subgraph pve ["Node 'pve' (Free: 25.46 GB)"]
-            AG["FL Aggregator (LXC 300)<br/>4 vCPU · 8 GB · VLAN 130"]
+            AG["FL Aggregator (LXC 300)<br/>4 vCPU · 8 GB · 10.10.130.10/16"]
         end
     end
     TG -.->|Attacks + Benign Traffic| TA
@@ -184,14 +184,14 @@ graph TD
     DB <====>|gRPC FL Updates| AG
 ```
 
-| Hypervisor | ID | Hostname | OS | vCPU | RAM | Disk | VLAN | Role |
+| Hypervisor | ID | Hostname | OS | vCPU | RAM | Disk | Flat L2 IP Address | Role |
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|
-| **pve** | 300 | `fl-aggregator` | Ubuntu 24.04 | 4 | 8 GB | 50 GB | 130 | Flower server, global model checkpoints |
-| **its** | 310 | `defender-a` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 110 | NFStream capture, PyTorch/Avalanche training, Flower client |
-| **its** | 311 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 110 | Receives benign/malicious traffic from traffic generator |
-| **node2** | 320 | `defender-b` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 120 | Parallel defender simulating a separate organization |
-| **node2** | 321 | `target-b1` | Alpine Linux | 1 | 1 GB | 10 GB | 120 | Receives benign/malicious traffic from traffic generator |
-| **node2** | 400 | `traffic-gen` | Kali Linux | 4 | 4 GB | 50 GB | 140 | Metasploit C2, Hydra brute-force, Selenium benign browsing |
+| **pve** | 300 | `fl-aggregator` | Ubuntu 24.04 | 4 | 8 GB | 50 GB | 10.10.130.10/16 | Flower server, global model checkpoints |
+| **its** | 310 | `defender-a` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 10.10.130.11/16 | NFStream capture, PyTorch/Avalanche training, Flower client |
+| **its** | 311 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 10.10.110.15/16 | Receives benign/malicious traffic from traffic generator |
+| **node2** | 320 | `defender-b` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 10.10.130.12/16 | Parallel defender simulating a separate organization |
+| **node2** | 321 | `target-b1` | Alpine Linux | 1 | 1 GB | 10 GB | 10.10.120.15/16 | Receives benign/malicious traffic from traffic generator |
+| **node2** | 400 | `traffic-gen` | Kali Linux | 4 | 4 GB | 50 GB | 10.10.140.10/16 | Metasploit C2, Hydra brute-force, Selenium benign browsing |
 
 The placement ensures that each defender VM resides on the same hypervisor as its corresponding target VM. This co-location is critical because port mirroring (Chapter 4) operates on hypervisor-local TAP interfaces—traffic cannot be mirrored across physical hosts without SDN overlay encapsulation.
 
@@ -207,20 +207,22 @@ All three nodes use a **Dell PERC H755 Adp** RAID controller presenting a 1.20 T
 
 ## Chapter 4: Network Infrastructure and Traffic Capture
 
-The network infrastructure serves a single purpose in this architecture: delivering a copy of every packet traversing the target VMs' network interfaces to the defender VMs' capture interfaces, without disrupting normal traffic flow. This chapter details the VLAN segmentation that isolates organizational networks and the port-mirroring mechanism that feeds the ETA pipeline described in Chapter 5.
+The network infrastructure serves a single purpose in this architecture: delivering a copy of every packet traversing the target VMs' network interfaces to the defender VMs' capture interfaces, without disrupting normal traffic flow. This chapter details the flat L2 network design that provides logical separation of organizational zones and the port-mirroring mechanism that feeds the ETA pipeline described in Chapter 5.
 
-### 4.1 VLAN Segmentation Design
+### 4.1 Flat L2 Network and Logical Subnetting
 
-Each simulated organization occupies an isolated VLAN on the shared `vmbr1` bridge:
+To bypass the physical unmanaged switch constraints (lack of 802.1Q trunking support) while maintaining the logical separation of the testbed, the network utilizes a flat, untagged Layer 2 topology on the `vmbr1` bridge with a `/16` subnet mask (`10.10.0.0/16`).
 
-| VLAN ID | Subnet | Purpose | Members |
-|:---|:---|:---|:---|
-| 110 | 10.10.110.0/24 | Organization A | `defender-a`, `target-a1` |
-| 120 | 10.10.120.0/24 | Organization B | `defender-b`, `target-b1` |
-| 130 | 10.10.130.0/24 | Aggregation Zone | `fl-aggregator` |
-| 140 | 10.10.140.0/24 | Traffic Generation | `traffic-gen` |
+Logical segmentation is enforced via IP range assignments:
 
-Inter-VLAN routing is deliberately restricted. The traffic generator (VLAN 140) requires routed access to target hosts on VLANs 110 and 120 to deliver attack and benign traffic, but defender nodes communicate only with the aggregator (VLAN 130) for FL weight synchronization. This segmentation mirrors real-world organizational boundaries: each "organization" sees only its own local network, and FL updates traverse a controlled channel to the central server.
+| Subnet Prefix | Assigned Group | Members |
+|:---|:---|:---|
+| 10.10.110.0/24 | Organization A | `target-a1` (10.10.110.15) |
+| 10.10.120.0/24 | Organization B | `target-b1` (10.10.120.15) |
+| 10.10.130.0/24 | Aggregator & Defenders | `fl-aggregator` (10.10.130.10), `defender-a` (10.10.130.11), `defender-b` (10.10.130.12) |
+| 10.10.140.0/24 | Traffic Generation | `traffic-gen` (10.10.140.10) |
+
+This setup ensures that all nodes communicate directly over the flat L2 bridge. The traffic generator on `10.10.140.10` can directly access target hosts on `10.10.110.15` and `10.10.120.15` for replay/attacks, while the defender nodes communicate with the aggregator on `10.10.130.10` for Federated Learning weight updates. This layout retains the organizational separation design conceptually, while solving the physical networking constraints.
 
 ### 4.2 Port Mirroring via Linux Traffic Control (`tc`)
 
@@ -500,7 +502,7 @@ if __name__ == "__main__":
     )
 ```
 
-Note that `server_address` points to the aggregator's VLAN 130 IP (`10.10.130.10`), matching the network layout from Chapter 3's allocation matrix.
+Note that `server_address` points to the aggregator's flat L2 IP (`10.10.130.10`), matching the network layout from Chapter 3's allocation matrix.
 
 ### 6.4 Flower Aggregator (`server.py`)
 
@@ -561,7 +563,7 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
   -cores 4 -memory 8192 -swap 2048 -hostname fl-aggregator \
   -rootfs local:50 \
   -net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  -net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.130.10/24 \
+  -net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
   -onboot 1 -start 1
 ```
 
@@ -569,7 +571,7 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
 ```bash
 qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
-  --net0 virtio,bridge=vmbr0 --net1 virtio,bridge=vmbr1,tag=110 \
+  --net0 virtio,bridge=vmbr0 --net1 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1
 ```
@@ -577,7 +579,7 @@ qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
 **Target A1 (Node `its`):**
 ```bash
 qm create 311 --name target-a1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1,tag=110 \
+  --net0 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on
 ```
 
@@ -657,19 +659,17 @@ pvecm status
 corosync-cfgtool -s
 ```
 
-**VLAN Bridge Verification**: Confirm tagged frames traverse the bridge:
+**Flat L2 Bridge Verification**: Confirm direct communication over the secondary network bond:
 ```bash
-bridge vlan show vmbr1
-# Temporary cross-node test:
-ip link add link vmbr1 name vmbr1.110 type vlan id 110
-ip addr add 10.10.100.11/24 dev vmbr1.110 && ip link set dev vmbr1.110 up
-ping -c 3 10.10.100.12  # From node2
-ip link delete vmbr1.110  # Cleanup
+# From node 'its' (10.10.10.11) to 'node2' (10.10.10.12)
+ping -c 3 10.10.10.12
 ```
 
-**VLAN Isolation**: Confirm VMs on different VLANs cannot communicate without explicit routing:
+**Flat L2 VM Connectivity**: Confirm that guest VMs on different nodes can communicate directly on the flat `10.10.0.0/16` subnet:
 ```bash
-ping -c 3 10.10.120.15  # From VM 311 (VLAN 110) → should fail
+# From Target VM 311 (10.10.110.15 on node 'its') → Target VM 321 (10.10.120.15 on node 'node2')
+# Ping should succeed with 0% packet loss
+ping -c 3 10.10.120.15
 ```
 
 **Hookscript Execution**: Verify mirroring activates on VM boot:
@@ -720,7 +720,7 @@ This paper has presented a complete, end-to-end architecture for Hybrid Federate
 
 1.  **Theoretical foundations** (Chapter 2) identified the three converging challenges—encrypted visibility, organizational isolation, and temporal non-stationarity—and showed how ETA, FL, and CL respectively address them.
 2.  **Testbed architecture** (Chapter 3) translated these requirements into a concrete 3-node Proxmox cluster, reconciling real-world infrastructure inconsistencies that would otherwise prevent distributed training.
-3.  **Network infrastructure** (Chapter 4) established the VLAN segmentation and hookscript-based port mirroring that reliably delivers traffic to defender nodes despite Proxmox's ephemeral TAP interface limitation.
+3.  **Network infrastructure** (Chapter 4) established the Flat L2 network and hookscript-based port mirroring that reliably delivers traffic to defender nodes despite Proxmox's ephemeral TAP interface limitation.
 4.  **Data pipeline** (Chapter 5) defined the traffic generation strategy—combining benchmark dataset replay with live synthetic attacks—and the NFStream extraction process that converts raw encrypted packets into training-ready feature vectors, buffered through RAM disks to avoid I/O contention.
 5.  **Software engine** (Chapter 6) integrated PyTorch, Avalanche EWC, and Flower into a unified training loop where local continual learning prevents forgetting and federated aggregation distributes knowledge.
 6.  **Deployment workflow** (Chapter 7) sequenced these components into an executable provisioning and startup procedure.

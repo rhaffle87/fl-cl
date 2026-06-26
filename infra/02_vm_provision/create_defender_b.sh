@@ -3,7 +3,7 @@
 # create_defender_b.sh — Deploy Defender Node B VM
 # =============================================================================
 # Run on:  Node 'node2' (hypervisor shell as root)
-# Creates: VM 320 (defender-b) on VLAN 130
+# Creates: VM 320 (defender-b) on Flat L2 Network (vmbr1)
 #
 # Identical role to Defender A but simulates a separate organization.
 # =============================================================================
@@ -11,11 +11,10 @@ set -euo pipefail
 
 VMID=320
 NAME="defender-b"
-VLAN=130
 
 echo "============================================"
 echo " Deploying Defender Node B — VM $VMID"
-echo " Node: node2 | VLAN: $VLAN"
+echo " Node: node2 | Network: Flat L2"
 echo "============================================"
 
 if qm status $VMID &>/dev/null; then

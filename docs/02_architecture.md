@@ -1,6 +1,6 @@
 # Proxmox Testbed Architecture: Hybrid FL-CL Collaborative Cyber Defense
 
-> **Role in the documentation set**: This document provides the *conceptual blueprint* for the virtualized testbed. It defines what each component does and why it exists. For the cluster-specific workarounds required to deploy this blueprint on a heterogeneous 3-node cluster, see [workaround_specs.md](workaround_specs.md). For the hardware, dataset, and tooling prerequisites, see [prerequisites_and_tooling.md](prerequisites_and_tooling.md). For the fully integrated research paper, see [fl_cl_research_paper.md](fl_cl_research_paper.md).
+> **Role in the documentation set**: This document provides the *conceptual blueprint* for the virtualized testbed. It defines what each component does and why it exists. For the cluster-specific workarounds required to deploy this blueprint on a heterogeneous 3-node cluster, see [03_workarounds.md](03_workarounds.md). For the hardware, dataset, and tooling prerequisites, see [01_prerequisites.md](01_prerequisites.md). For the fully integrated research paper, see [00_research_paper.md](00_research_paper.md).
 
 ---
 
@@ -64,7 +64,7 @@ graph TD
 
 ### VM / Container Breakdown
 
-Each VM's resources, IP assignment, and role are designed to match the workload placement strategy defined in [workaround_specs.md](workaround_specs.md) Section 2.
+Each VM's resources, IP assignment, and role are designed to match the workload placement strategy defined in [03_workarounds.md](03_workarounds.md) Section 2.
 
 | VM ID | Hostname | Type | OS | Resources | IP Address (vmbr1) | Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -85,7 +85,7 @@ To capture traffic on the private cluster without interfering with production ne
 
 Each defender VM has two network interfaces: `net0` on `vmbr0` (management/internet) and `net1` on `vmbr1` (dedicated capture interface). The target VM's `net0` on `vmbr1` is the mirror source. On the hypervisor host, these map to TAP interfaces named `tap<VMID>i<NET_INDEX>`.
 
-1. Ensure `vmbr1` is configured as a VLAN-aware bridge on all hypervisors. *(See [workaround_specs.md](workaround_specs.md) Section 1.C for reconciliation details.)*
+1. Ensure `vmbr1` is configured as a VLAN-aware bridge on all hypervisors. *(See [03_workarounds.md](03_workarounds.md) Section 1.C for reconciliation details.)*
 2. Attach the target VM's NIC (`tap311i0`) and the defender VM's capture NIC (`tap310i1`) to `vmbr1`.
 3. Apply the following `tc` rules on the hypervisor host to mirror all traffic from the target to the defender:
 
@@ -105,11 +105,11 @@ tc filter add dev tap311i0 parent 1: protocol all u32 match u32 0 0 \
   action mirred egress mirror dev tap310i1
 ```
 
-> **Critical limitation:** Proxmox destroys TAP interfaces when a VM shuts down, erasing all `tc` rules. The hookscript workaround that solves this is documented in [workaround_specs.md](workaround_specs.md) Section 4, Phase 3.
+> **Critical limitation:** Proxmox destroys TAP interfaces when a VM shuts down, erasing all `tc` rules. The hookscript workaround that solves this is documented in [03_workarounds.md](03_workarounds.md) Section 4, Phase 3.
 
 ### 3.2 Multi-Node Considerations (SDN/VXLAN)
 
-If the cluster spans multiple physical Proxmox nodes (as ours does), mirrored traffic cannot cross physical hosts natively. Each target VM must reside on the **same hypervisor** as its corresponding defender VM. The workload placement in [workaround_specs.md](workaround_specs.md) Section 2 enforces this co-location: `target-a1` (VM 311) and `defender-a` (VM 310) are both placed on node `its`; `target-b1` (VM 321) and `defender-b` (VM 320) are both on node `node2`.
+If the cluster spans multiple physical Proxmox nodes (as ours does), mirrored traffic cannot cross physical hosts natively. Each target VM must reside on the **same hypervisor** as its corresponding defender VM. The workload placement in [03_workarounds.md](03_workarounds.md) Section 2 enforces this co-location: `target-a1` (VM 311) and `defender-a` (VM 310) are both placed on node `its`; `target-b1` (VM 321) and `defender-b` (VM 320) are both on node `node2`.
 
 For future deployments requiring cross-host mirroring, the PVE SDN feature with EVPN/VXLAN can route encapsulated span traffic across hosts.
 
@@ -134,7 +134,7 @@ pip install nfstream pandas scikit-learn
 
 **Feature Extraction Script (`extractor.py`):**
 
-This script captures traffic on the mirrored capture interface in real-time, generating tabular feature vectors for the neural network. Output is directed to the RAM disk buffer (see [workaround_specs.md](workaround_specs.md) Section 3.B for I/O optimization rationale).
+This script captures traffic on the mirrored capture interface in real-time, generating tabular feature vectors for the neural network. Output is directed to the RAM disk buffer (see [03_workarounds.md](03_workarounds.md) Section 3.B for I/O optimization rationale).
 
 ```python
 from nfstream import NFStreamer
@@ -207,7 +207,7 @@ The core innovation is combining **Flower** (a lightweight FL framework) with **
 
 ### 5.1 PyTorch Neural Network (`model.py`)
 
-A multi-layer perceptron mapping 32 scaled ETA features to 5 network threat categories. The 32-dimensional input corresponds to the feature vector from Section 4; the 5 output classes align with the attack categories generated by the traffic strategy in [prerequisites_and_tooling.md](prerequisites_and_tooling.md) Section 4.
+A multi-layer perceptron mapping 32 scaled ETA features to 5 network threat categories. The 32-dimensional input corresponds to the feature vector from Section 4; the 5 output classes align with the attack categories generated by the traffic strategy in [01_prerequisites.md](01_prerequisites.md) Section 4.
 
 ```python
 import torch.nn as nn
@@ -286,7 +286,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
 
 if __name__ == "__main__":
     fl.client.start_numpy_client(
-        server_address="10.10.130.10:8080",  # Aggregator on VLAN 130
+        server_address="10.10.130.10:8080",  # Aggregator Flat L2 IP
         client=CyberDefenseClient()
     )
 ```
@@ -321,23 +321,23 @@ if __name__ == "__main__":
 
 ## 6. Setup Workflow (Step-by-Step)
 
-This section provides the generic execution sequence. For cluster-specific provisioning commands (including exact `qm create` / `pct create` flags, hookscript deployment, and software installation), see [workaround_specs.md](workaround_specs.md) Section 4.
+This section provides the generic execution sequence. For cluster-specific provisioning commands (including exact `qm create` / `pct create` flags, hookscript deployment, and software installation), see [03_workarounds.md](03_workarounds.md) Section 4.
 
 ### Phase 1: Proxmox Virtual Networks Setup
 1. Log into your Proxmox server console.
-2. Ensure `vmbr1` is configured as a VLAN-aware bridge on all nodes. *(See [workaround_specs.md](workaround_specs.md) Section 1.C.)*
-3. Apply the standardized `/etc/hosts` template. *(See [workaround_specs.md](workaround_specs.md) Section 1.A.)*
+2. Ensure `vmbr1` is configured as a VLAN-aware bridge on all nodes. *(See [03_workarounds.md](03_workarounds.md) Section 1.C.)*
+3. Apply the standardized `/etc/hosts` template. *(See [03_workarounds.md](03_workarounds.md) Section 1.A.)*
 
 ### Phase 2: VM & Container Provisioning
-1. Deploy LXC 300 (`fl-aggregator`) on node `pve` with dual NICs (`vmbr0` + `vmbr1` VLAN 130).
-2. Deploy VM 310 (`defender-a`) on node `its` with dual NICs (`vmbr0` + `vmbr1` VLAN 130).
-3. Deploy VM 320 (`defender-b`) on node `node2` with dual NICs (`vmbr0` + `vmbr1` VLAN 130).
+1. Deploy LXC 300 (`fl-aggregator`) on node `pve` with dual NICs (`vmbr0` + `vmbr1` Flat L2 Network).
+2. Deploy VM 310 (`defender-a`) on node `its` with dual NICs (`vmbr0` + `vmbr1` Flat L2 Network).
+3. Deploy VM 320 (`defender-b`) on node `node2` with dual NICs (`vmbr0` + `vmbr1` Flat L2 Network).
 4. Deploy target VMs 311 and 321, and traffic generator VM 400.
-5. Bind hookscripts to target VMs for automatic port mirroring. *(See [workaround_specs.md](workaround_specs.md) Section 4, Phase 3.)*
+5. Bind hookscripts to target VMs for automatic port mirroring. *(See [03_workarounds.md](03_workarounds.md) Section 4, Phase 3.)*
 
 ### Phase 3: Traffic Generation & Data Collection
-1. **Benign Background**: On target VMs, run headless browser scripts (Selenium) simulating human HTTPS browsing. *(See [prerequisites_and_tooling.md](prerequisites_and_tooling.md) Section 4.)*
-2. **Benchmark Replay**: On the traffic generator VM, replay labeled PCAPs (CIC-IDS2017, USTC-TFC2016) using `tcpreplay`. *(See [prerequisites_and_tooling.md](prerequisites_and_tooling.md) Section 3.)*
+1. **Benign Background**: On target VMs, run headless browser scripts (Selenium) simulating human HTTPS browsing. *(See [01_prerequisites.md](01_prerequisites.md) Section 4.)*
+2. **Benchmark Replay**: On the traffic generator VM, replay labeled PCAPs (CIC-IDS2017, USTC-TFC2016) using `tcpreplay`. *(See [01_prerequisites.md](01_prerequisites.md) Section 3.)*
 3. **Live Attacks**: On the traffic generator VM, execute coordinated attack campaigns:
    * SSH brute force via `hydra` against target hosts.
    * HTTPS flood / Slowloris attacks.
@@ -358,7 +358,7 @@ This section provides the generic execution sequence. For cluster-specific provi
    ```bash
    python3 client.py --server 10.10.130.10:8080 --client-id A
    ```
-4. Monitor training rounds via MLflow/TensorBoard. *(See [prerequisites_and_tooling.md](prerequisites_and_tooling.md) Section 5.B.)*
+4. Monitor training rounds via MLflow/TensorBoard. *(See [01_prerequisites.md](01_prerequisites.md) Section 5.B.)*
 
 ---
 

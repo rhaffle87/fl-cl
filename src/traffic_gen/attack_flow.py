@@ -6,7 +6,7 @@ Runs on: Traffic Generator VM (VM 400)
 import argparse
 import subprocess
 import time
-import requests
+import urllib.request
 
 
 def run_ssh_brute(target, duration):
@@ -33,8 +33,9 @@ def run_benign(target, duration):
     start_time = time.time()
     while time.time() - start_time < duration:
         try:
-            # Send HTTP requests to target's busybox httpd
-            requests.get(f"http://{target}:80/", timeout=1)
+            # Send HTTP requests to target's busybox httpd using standard library
+            with urllib.request.urlopen(f"http://{target}:80/", timeout=1) as response:
+                response.read()
         except Exception:
             pass
         time.sleep(0.5)

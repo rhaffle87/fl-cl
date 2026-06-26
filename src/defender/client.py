@@ -34,8 +34,7 @@ except ImportError:
             x, y = dataset_tensors
             return AvalancheDataset(TensorDataset(x, y), targets=y.tolist(), task_labels=task_labels)
     except ImportError:
-        # Final fallback in case of structural differences
-        pass
+        make_tensor_classification_dataset = None
 
 try:
     from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
@@ -43,7 +42,12 @@ except ImportError:
     try:
         from avalanche.benchmarks.generators import benchmark_from_datasets
     except ImportError:
-        pass
+        benchmark_from_datasets = None
+
+try:
+    from avalanche.benchmarks.generators import tensor_benchmark
+except ImportError:
+    tensor_benchmark = None
 
 
 def assign_label(row):
@@ -57,8 +61,16 @@ def assign_label(row):
     """
     src_ip = str(row.get("src_ip", ""))
     dst_ip = str(row.get("dst_ip", ""))
-    src_port = int(row.get("src_port", 0))
-    dst_port = int(row.get("dst_port", 0))
+    
+    try:
+        src_port = int(float(row.get("src_port", 0)))
+    except (ValueError, TypeError):
+        src_port = 0
+        
+    try:
+        dst_port = int(float(row.get("dst_port", 0)))
+    except (ValueError, TypeError):
+        dst_port = 0
 
     traffic_gen_ip = "10.10.140.10"
     is_from_traffic_gen = (src_ip == traffic_gen_ip)
@@ -86,8 +98,21 @@ def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows"):
     if not csv_files:
         raise FileNotFoundError(f"No flow CSVs found in {flows_dir}")
 
-    dfs = [pd.read_csv(f) for f in csv_files]
+    dfs = []
+    for f in csv_files:
+        try:
+            df_item = pd.read_csv(f)
+            if not df_item.empty:
+                dfs.append(df_item)
+        except Exception:
+            pass  # Ignore empty or locked files
+
+    if not dfs:
+        raise FileNotFoundError(f"No valid flow records found in {flows_dir}")
+
     df = pd.concat(dfs, ignore_index=True)
+    if df.empty:
+        raise FileNotFoundError(f"Combined flow dataframe is empty in {flows_dir}")
 
     # Select numeric feature columns (exclude metadata like IPs, ports, SNI)
     feature_cols = [
@@ -117,16 +142,26 @@ def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows"):
 
 def get_experience(x_tensor, y_tensor):
     """Wraps PyTorch tensors into an Avalanche experience object."""
-    av_dataset = make_tensor_classification_dataset(
-        dataset_tensors=(x_tensor, y_tensor)
-    )
-    bm = benchmark_from_datasets(
-        dataset_streams={
-            "train": [av_dataset],
-            "test": [av_dataset]
-        }
-    )
-    return bm.train_stream[0]
+    if tensor_benchmark is not None:
+        bm = tensor_benchmark(
+            train_tensors=[(x_tensor, y_tensor)],
+            test_tensors=[(x_tensor, y_tensor)]
+        )
+        return bm.train_stream[0]
+
+    if make_tensor_classification_dataset is not None and benchmark_from_datasets is not None:
+        av_dataset = make_tensor_classification_dataset(
+            dataset_tensors=(x_tensor, y_tensor)
+        )
+        bm = benchmark_from_datasets(
+            dataset_streams={
+                "train": [av_dataset],
+                "test": [av_dataset]
+            }
+        )
+        return bm.train_stream[0]
+
+    raise ImportError("No valid Avalanche dataset generators or benchmarks found.")
 
 
 class CyberDefenseClient(fl.client.NumPyClient):

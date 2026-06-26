@@ -122,28 +122,28 @@ def main():
 
     print("\n=== Phase 5: Launching MLflow & Flower Server ===")
     # Start MLflow tracker inside flower env
-    aggregator.run_cmd("mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db", background=True)
+    aggregator.run_cmd("/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db", background=True)
     time.sleep(3) # Wait for MLflow to initialize
     # Start FL server
     server_proc = aggregator.run_cmd(
-        f"python3 server.py --rounds {args.rounds} --min-clients 2 --mlflow-uri http://localhost:5000",
+        f"/opt/flower-env/bin/python3 server.py --rounds {args.rounds} --min-clients 2 --mlflow-uri http://localhost:5000",
         background=True
     )
 
     print("\n=== Phase 6: Starting Threat Simulation Stages ===")
     # 1. Benign background traffic to Target A and B
-    traffic_gen.run_cmd(f"python3 attack_flow.py --mode benign --target 10.10.110.15 --duration {args.duration}", background=True)
-    traffic_gen.run_cmd(f"python3 attack_flow.py --mode benign --target 10.10.120.15 --duration {args.duration}", background=True)
+    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.110.15 --duration {args.duration}", background=True)
+    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.120.15 --duration {args.duration}", background=True)
     time.sleep(args.duration // 2)
 
     # 2. SSH Brute Force attacks targeting Target A and B
-    traffic_gen.run_cmd(f"python3 attack_flow.py --mode ssh --target 10.10.110.15 --duration {args.duration}", background=True)
-    traffic_gen.run_cmd(f"python3 attack_flow.py --mode ssh --target 10.10.120.15 --duration {args.duration}", background=True)
+    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.110.15 --duration {args.duration}", background=True)
+    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.120.15 --duration {args.duration}", background=True)
     time.sleep(args.duration // 2)
 
     # 3. Slowloris HTTPS Flooding targeting Target A and B
-    traffic_gen.run_cmd(f"python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration {args.duration} --port 80", background=True)
-    traffic_gen.run_cmd(f"python3 attack_flow.py --mode slowloris --target 10.10.120.15 --duration {args.duration} --port 80", background=True)
+    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration {args.duration} --port 80", background=True)
+    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.120.15 --duration {args.duration} --port 80", background=True)
     time.sleep(args.duration)
 
     print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
@@ -159,7 +159,7 @@ def main():
         # We can poll every 5 seconds. If the training takes too long, we will timeout after 10 minutes.
         while time.time() - start_wait < 600:
             # Check if server process has exited (if running locally or remotely, we check via pgrep on aggregator)
-            status = aggregator.run_cmd("pgrep -f 'server.py'")
+            status = aggregator.run_cmd("pgrep -f '[s]erver.py'")
             if not status.stdout.strip():
                 print("[✓] Flower server has completed its rounds.")
                 break

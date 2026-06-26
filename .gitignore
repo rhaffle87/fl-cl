@@ -1,0 +1,39 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+
+# Virtual environments
+.venv/
+venv/
+env/
+*-env/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local databases and logs
+*.db
+*.log
+mlruns/
+mlflow.db
+
+# Data files & PCAPs
+*.pcap
+*.parquet
+*.csv
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# SSH Keys (if stored locally)
+*.key
+*.pem
+id_rsa
+id_rsa.pub

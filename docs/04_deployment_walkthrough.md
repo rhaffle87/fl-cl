@@ -119,9 +119,9 @@ Network isolation and routing boundaries are enforced using Proxmox native Linux
 ```mermaid
 graph TD
     subgraph node_its ["Node 'its'"]
-        bond0["Physical bond0 (PROMISC ON)"] <--> vmbr1["vmbr1 (VLAN Aware, PROMISC ON)"]
-        vmbr1 <-->|VLAN 130| tap310i1["tap310i1 (Defender A Capture)"]
-        vmbr1 <-->|VLAN 110| tap311i0["tap311i0 (Target A1 Access)"]
+        bond0["Physical bond0 (PROMISC ON)"] <--> vmbr1["vmbr1 (PROMISC ON)"]
+        vmbr1 <-->|Flat L2| tap310i1["tap310i1 (Defender A Capture)"]
+        vmbr1 <-->|Flat L2| tap311i0["tap311i0 (Target A1 Access)"]
     end
 ```
 
@@ -138,7 +138,7 @@ fi
 ```
 
 #### Step 2.2: Provision the FL Aggregator LXC (Node `pve`)
-Create the aggregator LXC container. `net1` is bound to `vmbr1` with tag `130`:
+Create the aggregator LXC container. `net1` is bound to `vmbr1` on the flat L2 network:
 
 ```bash
 pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
@@ -149,13 +149,13 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
   --ostype ubuntu \
   --rootfs local:50 \
   --net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  --net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.130.10/24 \
+  --net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
   --onboot 1 \
   --start 1
 ```
 
 #### Step 2.3: Provision the Defender and Target VMs
-Deploy the VM instances. Standardize the Defender capture interfaces to VLAN 130 to allow direct L2 gRPC connection with the FL Aggregator. Ensure target VMs stay on their organization-isolated VLANs (VLAN 110 for Org A, VLAN 120 for Org B).
+Deploy the VM instances without VLAN tags to ensure untagged flat L2 operations on `vmbr1` across physical hosts.
 
 **On Node `its` (Defender A & Target A1):**
 ```bash
@@ -163,13 +163,13 @@ Deploy the VM instances. Standardize the Defender capture interfaces to VLAN 130
 qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1,tag=130 \
+  --net1 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 
 # Create Target VM (ID 311)
 qm create 311 --name target-a1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1,tag=110 \
+  --net0 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 ```
 
@@ -179,18 +179,19 @@ qm create 311 --name target-a1 --cores 1 --memory 1024 \
 qm create 320 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
   --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1,tag=130 \
+  --net1 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
   --boot order=scsi0 --onboot 1 --start 0
 
 # Create Target VM (ID 321)
 qm create 321 --name target-b1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1,tag=120 \
+  --net0 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 
 # Create Traffic Generator (ID 400)
 qm create 400 --name traffic-gen --cores 4 --memory 4096 \
-  --net0 virtio,bridge=vmbr1,tag=140 \
+  --net0 virtio,bridge=vmbr0 \
+  --net1 virtio,bridge=vmbr1 \
   --scsihw virtio-scsi-pci --scsi0 local:50,discard=on --start 0
 ```
 
@@ -525,17 +526,17 @@ To evaluate the learning stability and detection performance of the system, the 
                    │
     ┌──────────────┴──────────────┐
     ▼                             ▼
-[Target A1 (VLAN 110)]       [Target B1 (VLAN 120)]
+[Target A1 (10.10.110.15/16)]   [Target B1 (10.10.120.15/16)]
 ```
 
-#### Step 7.1: Configure Routing on Traffic Generator VM
-Add static routing on the traffic generator to ensure it can reach targets on separate VLANs via the gateway:
+#### Step 7.1: Network Reachability on the Flat L2 Subnet
+Because the testbed operates on a flat `10.10.0.0/16` L2 network bridge, no gateways or static routes are needed for communication between the traffic generator (`10.10.140.10`) and target VMs (`10.10.110.15` and `10.10.120.15`). Verify direct L3 reachability by running pings directly:
 
 ```bash
-# Add route to Org A range (VLAN 110)
-ip route add 10.10.110.0/24 via 10.10.140.1
-# Add route to Org B range (VLAN 120)
-ip route add 10.10.120.0/24 via 10.10.140.1
+# Verify direct access to Org A Target
+ping -c 3 10.10.110.15
+# Verify direct access to Org B Target
+ping -c 3 10.10.120.15
 ```
 
 #### Step 7.2: Run Offense Scripts
@@ -553,7 +554,7 @@ slowloris 10.10.110.15 -p 443 -s 150
 tcprewrite --pcap=input.pcap --out=output.pcap \
   --srcipmap=0.0.0.0/0:10.10.140.10 \
   --dstipmap=0.0.0.0/0:10.10.110.15
-tcpreplay --intf=eth0 --pps=500 output.pcap
+tcpreplay --intf=eth1 --pps=500 output.pcap
 ```
 
 ---
@@ -577,16 +578,16 @@ Instead of manual start sequences, the master controller script `src/orchestrate
 python src/orchestrate.py --rounds 10 --lambda-ewc 0.4 --duration 30
 
 # To specify a custom SSH key:
-python src/orchestrate.py --key ~/.ssh/id_rsa --rounds 10 --lambda-ewc 0.4
+python src/orchestrate.py --key C:\Users\user\.ssh\id_rsa --rounds 10 --lambda-ewc 0.4
 ```
 
 #### Step 8.3: Manual Verification & Health Check Commands
 
-**1. Confirm VLAN Isolation (Strict Layer 2 Isolation):**
-Ensure client nodes cannot bypass routing controls to communicate directly:
+**1. Confirm Direct L3 Reachability on the Flat Network:**
+Verify that the flat L2 bridge is correctly forwarding packets between sub-zones across physical hypervisors:
 ```bash
-# From Target VM 311 (VLAN 110) to Target VM 321 (VLAN 120)
-# This request must fail with 100% packet loss
+# From Target VM 311 (10.10.110.15) to Target VM 321 (10.10.120.15)
+# Pings should succeed with 0% packet loss, validating flat inter-host bridge transit
 ping -c 3 10.10.120.15
 ```
 
@@ -616,13 +617,13 @@ Follow this execution sequence to start the FCL framework:
 [1. PVE Network Config] -> [2. Boot target VMs] -> [3. Launch Automated Orchestrator] -> [4. Monitor via MLflow UI]
 ```
 
-- [x] **Phase 1**: Configure `vmbr1` VLAN-awareness on all physical nodes.
+- [x] **Phase 1**: Set up `vmbr1` on all physical nodes with `10.10.0.0/16` logical ranges.
 - [x] **Phase 2**: Boot the target VMs (`311` and `321`). Ensure the lifecycle hookscripts apply mirroring rules successfully (`journalctl -u pvedaemon | grep "mirror-hook"`).
 - [x] **Phase 3**: Run the master orchestrator (`python src/orchestrate.py`) to launch:
   - Benign target servers (`busybox httpd`)
-  - NFStream extractors (`extractor.py`)
-  - Aggregator and MLflow servers (`server.py`)
-  - Offensive traffic generator (`attack_flow.py`: Benign -> SSH Brute Force -> Slowloris)
-  - Flower continual learning clients (`client.py` using Avalanche EWC)
+  - NFStream extractors (`src/defender/extractor.py`)
+  - Aggregator and MLflow servers (`src/aggregator/server.py`)
+  - Offensive traffic generator (`src/traffic_gen/attack_flow.py`: Benign -> SSH Brute Force -> Slowloris)
+  - Flower continual learning clients (`src/defender/client.py` using Avalanche EWC)
 - [x] **Phase 4**: Open `http://10.10.130.10:5000` to monitor training metrics and catastrophic forgetting mitigation in real time.
 

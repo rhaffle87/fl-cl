@@ -3,12 +3,12 @@
 # create_aggregator.sh — Deploy FL Aggregator LXC Container
 # =============================================================================
 # Run on:  Node 'pve' (hypervisor shell as root)
-# Creates: LXC 300 (fl-aggregator) on VLAN 130
+# Creates: LXC 300 (fl-aggregator) on Flat L2 Network (vmbr1)
 #
 # Prerequisites:
 #   - Ubuntu 24.04 template downloaded:
 #     pveam update && pveam download local ubuntu-24.04-standard_24.04-1_amd64.tar.zst
-#   - VLAN awareness enabled on vmbr1 (run 01_host_config/enable_vlan.sh)
+#   - Flat L2 Network configured on vmbr1
 #   - Snippet storage enabled (run 01_host_config/enable_snippets.sh)
 # =============================================================================
 set -euo pipefail
@@ -19,7 +19,7 @@ TEMPLATE="local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst"
 
 echo "============================================"
 echo " Deploying FL Aggregator — LXC $CTID"
-echo " Node: pve | VLAN: 130 | IP: 10.10.130.10"
+echo " Node: pve | Flat L2 Network | IP: 10.10.130.10"
 echo "============================================"
 
 # Check if template exists
