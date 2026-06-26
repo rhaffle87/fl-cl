@@ -45,7 +45,7 @@ pct create $CTID $TEMPLATE \
     --ostype ubuntu \
     --rootfs local-lvm:50 \
     --net0 name=eth0,bridge=vmbr0,ip=192.168.30.50/24 \
-    --net1 name=eth1,bridge=vmbr1,tag=130,ip=10.10.130.10/24 \
+    --net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
     --onboot 1 \
     --unprivileged 1
 

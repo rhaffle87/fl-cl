@@ -33,7 +33,7 @@ qm create $VMID \
     --sockets 1 \
     --ostype l26 \
     --net0 virtio,bridge=vmbr0 \
-    --net1 virtio,bridge=vmbr1,tag=$VLAN \
+    --net1 virtio,bridge=vmbr1 \
     --scsihw virtio-scsi-pci \
     --scsi0 local-lvm:100,discard=on \
     --ide2 local:iso/ubuntu-24.04.2-live-server-amd64.iso,media=cdrom \

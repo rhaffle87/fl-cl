@@ -29,7 +29,7 @@ qm create $VMID \
     --memory 4096 \
     --ostype l26 \
     --net0 virtio,bridge=vmbr0 \
-    --net1 virtio,bridge=vmbr1,tag=$VLAN \
+    --net1 virtio,bridge=vmbr1 \
     --scsihw virtio-scsi-pci \
     --scsi0 local-lvm:50,discard=on \
     --ide2 local:iso/kali-linux-2024.4-installer-amd64.iso,media=cdrom \

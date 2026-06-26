@@ -28,7 +28,7 @@ qm create $VMID \
     --cores 1 \
     --memory 1024 \
     --ostype l26 \
-    --net0 virtio,bridge=vmbr1,tag=$VLAN \
+    --net0 virtio,bridge=vmbr1 \
     --scsihw virtio-scsi-pci \
     --scsi0 local-lvm:10,discard=on \
     --ide2 local:iso/alpine-virt-3.24.0-x86_64.iso,media=cdrom \

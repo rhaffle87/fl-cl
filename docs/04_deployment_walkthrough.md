@@ -37,18 +37,20 @@ Where:
 * $F_i$ is the diagonal entry of the Fisher Information Matrix for parameter $i$, representing its importance.
 * $\lambda$ is the regularization constraint (hyperparameter `ewc_lambda`).
 
-### VLAN Collision Mitigation
+### Flat L2 Network Transition (Mitigating Switch Trunking Constraints)
 
-To prevent Layer 2 collisions with the campus management and backup network proposal, we offset all internal testbed VLAN IDs by **+100**. This ensures strict isolation on the shared physical switch fabric. 
+Initially, the testbed used tagged VLANs (110, 120, 130, 140) on `vmbr1` to isolate organizational zones. However, due to physical switch limitations where the inter-host links do not support 802.1Q VLAN trunking, tagged packets were silently dropped between hypervisors, breaking cross-host communication.
 
-Crucially, we attach the capture interfaces (`net1`) of both **Defender A** and **Defender B** to the aggregator network (**VLAN 130**). This allows direct L2 gRPC client updates to the Flower aggregator without complex inter-VLAN routing, while their corresponding target VMs (`target-a1` on VLAN 110, `target-b1` on VLAN 120) remain isolated at the client access layer. The hypervisor-level `tc` rules copy and mirror packets across VLAN bounds at the virtual device layer, bypassing bridge-level filtering:
+To resolve this while preserving logical network structure, the network on `vmbr1` has been transitioned to a **Flat, Untagged L2 Network** using a `/16` subnet mask (`10.10.0.0/16`). Logical segregation is maintained using IP prefixes, and all nodes are configured with `/16` masks to ensure cross-prefix reachability:
 
-| Zone / Organization | Proposed VLAN | Actual Shifted VLAN (Testbed) | Subnet | Assigned Nodes / VMs |
-| :--- | :--- | :--- | :--- | :--- |
-| **Management / Org A** | VLAN 10 | **VLAN 110** | `10.10.110.0/24` | `target-a1` (VM 311) |
-| **VM Network / Org B** | VLAN 20 | **VLAN 120** | `10.10.120.0/24` | `target-b1` (VM 321) |
-| **Backup / FL Aggregator**| VLAN 30 | **VLAN 130** | `10.10.130.0/24` | `fl-aggregator` (LXC 300), `defender-a` (VM 310), `defender-b` (VM 320) |
-| **Migration / Traffic Gen**| VLAN 40 | **VLAN 140** | `10.10.140.0/24` | `traffic-gen` (VM 400) |
+| Zone / Organization | IP Subnet (Internal) | Subnet Mask | Assigned Nodes / VMs |
+| :--- | :--- | :--- | :--- |
+| **Org A (Target A1)** | `10.10.110.15` | `/16` | `target-a1` (VM 311) |
+| **Org B (Target B1)** | `10.10.120.15` | `/16` | `target-b1` (VM 321) |
+| **FL Aggregator & Defenders**| `10.10.130.10` - `10.10.130.12` | `/16` | `fl-aggregator` (LXC 300), `defender-a` (VM 310), `defender-b` (VM 320) |
+| **Traffic Generator** | `10.10.140.10` | `/16` | `traffic-gen` (VM 400) |
+
+Under this flat L2 topology, port mirroring via `tc` remains fully functional because it mirrors traffic at the virtual TAP interface queue level, completely bypassing L2/L3 boundary filters.
 
 ---
 
@@ -567,7 +569,18 @@ source /opt/flower-env/bin/activate
 mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db
 ```
 
-#### Step 8.2: Validation & Health Check Commands
+#### Step 8.2: Automated Orchestration (Workstation)
+Instead of manual start sequences, the master controller script `src/orchestrate.py` automates code deployment, server startup, traffic injection, and client execution:
+
+```powershell
+# From local workstation, run the orchestrator (uses workstation's default SSH key)
+python src/orchestrate.py --rounds 10 --lambda-ewc 0.4 --duration 30
+
+# To specify a custom SSH key:
+python src/orchestrate.py --key ~/.ssh/id_rsa --rounds 10 --lambda-ewc 0.4
+```
+
+#### Step 8.3: Manual Verification & Health Check Commands
 
 **1. Confirm VLAN Isolation (Strict Layer 2 Isolation):**
 Ensure client nodes cannot bypass routing controls to communicate directly:
@@ -600,12 +613,16 @@ netstat -antp | grep 8080
 Follow this execution sequence to start the FCL framework:
 
 ```
-[1. PVE Network Config] -> [2. Boot target VMs (hooks run)] -> [3. Launch Aggregator] -> [4. Start Extractors] -> [5. Start Attack Scenarios] -> [6. Launch FL Clients]
+[1. PVE Network Config] -> [2. Boot target VMs] -> [3. Launch Automated Orchestrator] -> [4. Monitor via MLflow UI]
 ```
 
-- [ ] **Phase 1**: Configure `vmbr1` VLAN-awareness on all physical nodes.
-- [ ] **Phase 2**: Boot the target VMs (`311` and `321`). Ensure the lifecycle hookscripts apply mirroring rules successfully (`journalctl -u pvedaemon | grep "mirror-hook"`).
-- [ ] **Phase 3**: Start the Flower server on LXC 300 (`python3 server.py`).
-- [ ] **Phase 4**: Start the flow extractor daemon on Defender nodes (`python3 extractor.py --interface ens19`).
-- [ ] **Phase 5**: Initiate the attack patterns and background traffic from the Traffic Generator (`VM 400`).
-- [ ] **Phase 6**: Launch the client nodes (`python3 client.py --client-id A`). Monitor accuracy metrics on the MLflow UI (`http://10.10.130.10:5000`).
+- [x] **Phase 1**: Configure `vmbr1` VLAN-awareness on all physical nodes.
+- [x] **Phase 2**: Boot the target VMs (`311` and `321`). Ensure the lifecycle hookscripts apply mirroring rules successfully (`journalctl -u pvedaemon | grep "mirror-hook"`).
+- [x] **Phase 3**: Run the master orchestrator (`python src/orchestrate.py`) to launch:
+  - Benign target servers (`busybox httpd`)
+  - NFStream extractors (`extractor.py`)
+  - Aggregator and MLflow servers (`server.py`)
+  - Offensive traffic generator (`attack_flow.py`: Benign -> SSH Brute Force -> Slowloris)
+  - Flower continual learning clients (`client.py` using Avalanche EWC)
+- [x] **Phase 4**: Open `http://10.10.130.10:5000` to monitor training metrics and catastrophic forgetting mitigation in real time.
+

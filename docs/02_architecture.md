@@ -17,7 +17,7 @@ The testbed is designed to investigate **Hybrid Federated-Continual Learning (FL
 
 ## 2. Proxmox VE Lab Architecture
 
-To simulate a multi-tenant collaborative defense environment, we virtualize separate organizational networks, a central aggregator zone, and a traffic generation system across the PVE cluster. Each zone is isolated by VLAN tagging on a shared internal bridge (`vmbr1`), while management and internet access flow through a separate bridge (`vmbr0`).
+To simulate a multi-tenant collaborative defense environment while bypassing physical switch VLAN constraints, the testbed utilizes a flat, untagged Layer 2 network on `vmbr1` using a `/16` subnet (`10.10.0.0/16`). Logical separation between organizational zones is maintained using dedicated IP prefixes within the `/16` range (Organization A: `10.10.110.x`, Organization B: `10.10.120.x`, Aggregator: `10.10.130.x`, Traffic Gen: `10.10.140.x`). Management and internet access flow through a separate bridge (`vmbr0`).
 
 ```mermaid
 graph TD
@@ -26,24 +26,24 @@ graph TD
             Router[PVE Gateway / Internet]
         end
 
-        subgraph SDN["Internal Bridge (vmbr1) – VLAN-Aware"]
-            subgraph CentralZone["Central Zone (VLAN 130)"]
+        subgraph SDN["Internal Bridge (vmbr1) – Flat L2 (10.10.0.0/16)"]
+            subgraph CentralZone["Central Zone (10.10.130.x)"]
                 Aggregator["FL Aggregator<br/>LXC 300 – Ubuntu 24.04"]
             end
             
-            subgraph OrgA["Organization A (VLAN 110)"]
+            subgraph OrgA["Organization A (10.10.110.x)"]
                 DefenderA["Defender Node A<br/>VM 310 – Ubuntu 24.04"]
                 TargetA["Target Host A1<br/>VM 311 – Alpine Linux"]
                 MirrorA["TAP/Bridge Mirror"]
             end
 
-            subgraph OrgB["Organization B (VLAN 120)"]
+            subgraph OrgB["Organization B (10.10.120.x)"]
                 DefenderB["Defender Node B<br/>VM 320 – Ubuntu 24.04"]
                 TargetB["Target Host B1<br/>VM 321 – Alpine Linux"]
                 MirrorB["TAP/Bridge Mirror"]
             end
             
-            subgraph TrafficZone["Traffic Generator Zone (VLAN 140)"]
+            subgraph TrafficZone["Traffic Generator Zone (10.10.140.x)"]
                 Attacker["Traffic Generator<br/>VM 400 – Kali Linux"]
             end
         end
@@ -64,16 +64,16 @@ graph TD
 
 ### VM / Container Breakdown
 
-Each VM's resources, VLAN assignment, and role are designed to match the workload placement strategy defined in [workaround_specs.md](workaround_specs.md) Section 2.
+Each VM's resources, IP assignment, and role are designed to match the workload placement strategy defined in [workaround_specs.md](workaround_specs.md) Section 2.
 
-| VM ID | Hostname | Type | OS | Resources | VLAN | Role |
+| VM ID | Hostname | Type | OS | Resources | IP Address (vmbr1) | Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **300** | `fl-aggregator` | LXC | Ubuntu Server 24.04 | 4 vCPU, 8 GB RAM, 50 GB Disk | 130 | Runs the Flower server, orchestrates FedAvg aggregation, and manages global model checkpoints. |
-| **310** | `defender-a` | VM (GPU-passthrough optional) | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 130 | Runs NFStream (ETA), PyTorch (model), Avalanche (CL), and Flower client (FL). |
-| **320** | `defender-b` | VM | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | 130 | Parallel defender node simulating a separate organization. |
-| **311** | `target-a1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 110 | Receives benign browsing and malicious attack traffic from the traffic generator. |
-| **321** | `target-b1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | 120 | Receives benign browsing and malicious attack traffic from the traffic generator. |
-| **400** | `traffic-gen` | VM | Kali Linux | 4 vCPU, 4 GB RAM, 50 GB Disk | 140 | Generates benign SSL/TLS traffic (Selenium/Locust) and malicious encrypted channels (Metasploit C2, Hydra SSH brute-force, Slowloris). |
+| **300** | `fl-aggregator` | LXC | Ubuntu Server 24.04 | 4 vCPU, 8 GB RAM, 50 GB Disk | `10.10.130.10/16` | Runs the Flower server, orchestrates FedAvg aggregation, and manages global model checkpoints. |
+| **310** | `defender-a` | VM (GPU-passthrough optional) | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | `10.10.130.11/16` | Runs NFStream (ETA), PyTorch (model), Avalanche (CL), and Flower client (FL). |
+| **320** | `defender-b` | VM | Ubuntu Server 24.04 | 8 vCPU, 16 GB RAM, 100 GB Disk | `10.10.130.12/16` | Parallel defender node simulating a separate organization. |
+| **311** | `target-a1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | `10.10.110.15/16` | Receives benign browsing and malicious attack traffic from the traffic generator. |
+| **321** | `target-b1` | VM | Alpine Linux | 1 vCPU, 1 GB RAM, 10 GB Disk | `10.10.120.15/16` | Receives benign browsing and malicious attack traffic from the traffic generator. |
+| **400** | `traffic-gen` | VM | Kali Linux | 4 vCPU, 4 GB RAM, 50 GB Disk | `10.10.140.10/16` | Generates benign SSL/TLS traffic (Selenium/Locust) and malicious encrypted channels (Metasploit C2, Hydra SSH brute-force, Slowloris). |
 
 ---
 
