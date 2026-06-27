@@ -66,6 +66,9 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
         self.export_torchscript = export_torchscript
         self.best_loss = float("inf")
         self.best_round = 0
+        self.latest_loss = 0.0
+        self.latest_accuracy = 0.0
+        self.latest_metrics = {}
         Path(self.checkpoint_dir).mkdir(parents=True, exist_ok=True)
 
     def aggregate_evaluate(self, server_round, results, failures):
@@ -73,6 +76,9 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
         if aggregated_result:
             loss, metrics = aggregated_result
             accuracy = metrics.get("accuracy", 0.0)
+            self.latest_loss = loss
+            self.latest_accuracy = accuracy
+            self.latest_metrics = metrics
 
             print(f"[server] Round {server_round} Aggregated Loss: {loss:.4f} | Accuracy: {accuracy:.4f}")
             mlflow.log_metric("loss", loss, step=server_round)
@@ -197,6 +203,25 @@ def main():
 
         mlflow.log_metric("final_best_loss", strategy.best_loss)
         mlflow.log_metric("final_best_round", strategy.best_round)
+
+        # Write training summary JSON
+        import json
+        summary = {
+            "run_id": run.info.run_id,
+            "loss": strategy.latest_loss,
+            "accuracy": strategy.latest_accuracy,
+            "best_loss": strategy.best_loss,
+            "best_round": strategy.best_round,
+            "class_accuracies": {
+                int(k.split("_")[-1]): float(v)
+                for k, v in strategy.latest_metrics.items()
+                if k.startswith("accuracy_class_")
+            }
+        }
+        summary_path = "/tmp/flower-server-metrics.json"
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=2)
+        print(f"[server] Wrote summary to {summary_path}")
 
 
 if __name__ == "__main__":

@@ -70,12 +70,25 @@ class RemoteNode:
             opts += f" -i \"{self.key_path}\""
         return opts
 
-    def run_cmd(self, command, background=False):
+    def run_cmd(self, command, background=False, log_name=None):
         opts = self._get_ssh_opts()
         if background:
-            full_command = f"nohup {command} > /tmp/{self.name}.log 2>&1 &"
+            if not log_name:
+                if "mlflow" in command:
+                    log_name = "mlflow.log"
+                elif "server.py" in command:
+                    log_name = "flower-server.log"
+                elif "client.py" in command:
+                    log_name = "flower-client.log"
+                elif "extractor.py" in command:
+                    log_name = "extractor.log"
+                elif "attack_flow.py" in command:
+                    log_name = "attack_flow.log"
+                else:
+                    log_name = f"{self.name}.log"
+            full_command = f"nohup {command} > /tmp/{log_name} 2>&1 &"
             ssh_cmd = f"ssh -n {opts} {self.username}@{self.ip} \"{full_command}\""
-            print(f"[{self.name}] Spawning background: {command}")
+            print(f"[{self.name}] Spawning background (logs -> /tmp/{log_name}): {command}")
             proc = subprocess.Popen(ssh_cmd, shell=True)
             self.procs.append(proc)
             return proc
@@ -100,27 +113,24 @@ class RemoteNode:
         subprocess.run(f"ssh {opts} {self.username}@{self.ip} \"{kill_cmd}\"", shell=True, capture_output=True)
 
 
-# ─── Data Quality Gate ───────────────────────────────────────────────────────
-
 def run_data_quality_check(defender_node: RemoteNode) -> dict:
     """Check label distribution on a defender's ramdisk. Returns {label: count}."""
-    result = defender_node.run_cmd(
-        "~/fl-cl-env/bin/python3 -c \""
-        "import pandas as pd; from pathlib import Path; import sys; "
-        "sys.path.append('/root'); import client; "
-        "files = sorted(Path('/mnt/ramdisk/flows').glob('*.csv')); "
-        "dfs = [pd.read_csv(f) for f in files if not pd.read_csv(f).empty] if files else []; "
-        "df = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame(); "
-        "df['label'] = df.apply(client.assign_label, axis=1) if not df.empty else []; "
-        "counts = df['label'].value_counts().to_dict() if not df.empty else {}; "
-        "print(counts)"
-        "\""
-    )
+    result = defender_node.run_cmd("~/fl-cl-env/bin/python3 ~/check_dataset.py --json")
     try:
-        # Parse the output dict string
-        import ast
-        return ast.literal_eval(result.stdout.strip())
-    except Exception:
+        import json
+        output = result.stdout.strip()
+        if not output:
+            if result.stderr:
+                print(f"[{defender_node.name}] Command stderr:\n{result.stderr}")
+            return {}
+        # Parse the JSON string
+        raw_counts = json.loads(output)
+        # Convert keys to integers
+        return {int(k): int(v) for k, v in raw_counts.items()}
+    except Exception as e:
+        print(f"[{defender_node.name}] Failed to parse output: {e}")
+        print(f"[{defender_node.name}] stdout: {result.stdout}")
+        print(f"[{defender_node.name}] stderr: {result.stderr}")
         return {}
 
 
@@ -183,15 +193,15 @@ def main():
     nodes = [aggregator, def_a, def_b, target_a, target_b, traffic_gen]
 
     print(f"\n{'='*60}")
-    print(f"  FL-CL Orchestrator — {experiment_name}")
-    print(f"  Rounds: {rounds} | EWC λ: {lambda_ewc} | Duration: {duration}s")
+    print(f"  FL-CL Orchestrator - {experiment_name}")
+    print(f"  Rounds: {rounds} | EWC lambda: {lambda_ewc} | Duration: {duration}s")
     print(f"{'='*60}\n")
 
     start_time = time.time()
 
     # Notify start
     notifier.notify_start(experiment_name, rounds,
-                          f"EWC λ={lambda_ewc}, Duration={duration}s")
+                          f"EWC lambda={lambda_ewc}, Duration={duration}s")
 
     print("=== Phase 1: Cleaning up any old testbed processes ===")
     for node in nodes:
@@ -212,12 +222,14 @@ def main():
         def_a.scp_file("src/defender/cl_strategy.py", "~/cl_strategy.py")
         def_a.scp_file("src/defender/model.py", "~/model.py")
         def_a.scp_file("src/defender/extractor.py", "~/extractor.py")
+        def_a.scp_file("tools/check_dataset.py", "~/check_dataset.py")
 
         # Defender B files
         def_b.scp_file("src/defender/client.py", "~/client.py")
         def_b.scp_file("src/defender/cl_strategy.py", "~/cl_strategy.py")
         def_b.scp_file("src/defender/model.py", "~/model.py")
         def_b.scp_file("src/defender/extractor.py", "~/extractor.py")
+        def_b.scp_file("tools/check_dataset.py", "~/check_dataset.py")
 
         # Traffic Generator files
         traffic_gen.scp_file("src/traffic_gen/attack_flow.py", "~/attack_flow.py")
@@ -324,11 +336,34 @@ def main():
 
         elapsed_min = (time.time() - start_time) / 60.0
 
+        # Fetch metrics summary from aggregator
+        accuracy = 0.0
+        loss = 0.0
+        class_accuracies = {}
+        
+        # Wait a moment for server.py to write the metrics file
+        time.sleep(2)
+        metrics_res = aggregator.run_cmd("cat /tmp/flower-server-metrics.json 2>/dev/null")
+        if metrics_res.stdout.strip():
+            try:
+                import json
+                metrics_data = json.loads(metrics_res.stdout.strip())
+                accuracy = float(metrics_data.get("accuracy", 0.0))
+                loss = float(metrics_data.get("loss", 0.0))
+                raw_classes = metrics_data.get("class_accuracies", {})
+                class_accuracies = {int(k): float(v) for k, v in raw_classes.items()}
+                print(f"\n[aggregator] Training summary fetched successfully:")
+                print(f"  Final Accuracy: {accuracy*100:.2f}% | Final Loss: {loss:.4f}")
+                print(f"  Best Loss: {metrics_data.get('best_loss', 0.0):.4f} at round {metrics_data.get('best_round', 0)}")
+            except Exception as e:
+                print(f"\n[!] Failed to parse training metrics JSON: {e}")
+
         # Notify completion
         notifier.notify_complete(
             experiment_name=experiment_name,
-            accuracy=0.0,  # Will be visible in MLflow
-            loss=0.0,
+            accuracy=accuracy,
+            loss=loss,
+            class_accuracies=class_accuracies,
             duration_min=elapsed_min,
         )
 

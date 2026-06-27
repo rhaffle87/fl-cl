@@ -449,7 +449,14 @@ ssh root@10.10.130.10 "netstat -antp | grep 8080"
 
 **Check remote process logs:**
 ```bash
-ssh root@10.10.130.10 "cat /tmp/fl-aggregator.log"
-ssh root@10.10.130.11 "cat /tmp/defender-a.log"
-ssh root@10.10.140.10 "cat /tmp/traffic-gen.log"
+# On Aggregator:
+ssh root@10.10.130.10 "cat /tmp/mlflow.log"
+ssh root@10.10.130.10 "cat /tmp/flower-server.log"
+
+# On Defenders:
+ssh root@10.10.130.11 "cat /tmp/extractor.log"
+ssh root@10.10.130.11 "cat /tmp/flower-client.log"
+
+# On Traffic Generator:
+ssh root@10.10.140.10 "cat /tmp/attack_flow.log"
 ```

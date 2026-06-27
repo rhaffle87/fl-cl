@@ -21,6 +21,7 @@ import client
 def main():
     parser = argparse.ArgumentParser(description="Inspect ramdisk flow label distribution")
     parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory")
+    parser.add_argument("--json", action="store_true", help="Output JSON dict of counts only")
     args = parser.parse_args()
 
     csv_files = sorted(Path(args.flows_dir).glob("*.csv"))
@@ -43,6 +44,14 @@ def main():
 
     df = pd.concat(dfs, ignore_index=True)
     df["label"] = df.apply(client.assign_label, axis=1)
+
+    if args.json:
+        counts = df["label"].value_counts().to_dict()
+        # Ensure all classes 0-4 are keys in the returned dict
+        counts_full = {i: int(counts.get(i, 0)) for i in range(5)}
+        import json
+        print(json.dumps(counts_full))
+        sys.exit(0)
 
     label_names = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: "DoS"}
 
