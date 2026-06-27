@@ -183,6 +183,9 @@ def get_experience(x_tensor, y_tensor):
     raise ImportError("No valid Avalanche dataset generators or benchmarks found.")
 
 
+import mlflow
+
+
 class CyberDefenseClient(fl.client.NumPyClient):
     """Flower client wrapping the Avalanche CL training loop."""
 
@@ -200,6 +203,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
         )
         self.net.load_state_dict(state, strict=True)
 
+    @mlflow.trace(name="client_fit")
     def fit(self, parameters, config):
         self.set_parameters(parameters)
         num_samples = 0
@@ -215,6 +219,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
         # when all clients have an empty ramdisk (e.g. extractor not ready yet).
         return self.get_parameters(config={}), max(num_samples, 1), {}
 
+    @mlflow.trace(name="client_evaluate")
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
         try:
@@ -272,7 +277,12 @@ def main():
     parser.add_argument("--client-id", default="A", help="Client identifier (A or B)")
     parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory")
     parser.add_argument("--ewc-lambda", type=float, default=0.4, help="EWC regularization strength")
+    parser.add_argument("--class-weights", default="12.0,3.0,3.0,15.0,1.0", help="Comma-separated class weights")
     args = parser.parse_args()
+
+    # Set up MLflow
+    mlflow.set_tracking_uri("http://10.10.130.10:5000")
+    mlflow.set_experiment("FL-CL-CyberDefense")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[client-{args.client_id}] Device: {device}")
@@ -280,7 +290,9 @@ def main():
     print(f"[client-{args.client_id}] Flows:  {args.flows_dir}")
 
     net = CyberDefenseNet().to(device)
-    cl = get_continual_learner(net, device, ewc_lambda=args.ewc_lambda)
+    
+    weights = [float(w) for w in args.class_weights.split(",")]
+    cl = get_continual_learner(net, device, ewc_lambda=args.ewc_lambda, class_weights=weights)
 
     fl.client.start_numpy_client(
         server_address=args.server,

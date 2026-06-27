@@ -17,31 +17,29 @@ from torch.nn import CrossEntropyLoss
 from avalanche.training.supervised import EWC
 
 
-def get_continual_learner(model, device, ewc_lambda: float = 0.4):
+def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=None):
     """
     Create an EWC-equipped continual learner.
 
     Args:
-        model:      CyberDefenseNet instance
-        device:     torch.device (cpu or cuda)
-        ewc_lambda: Regularization strength. Higher = more stability (less forgetting),
-                    lower = more plasticity (faster adaptation). Tune via MLflow.
+        model:         CyberDefenseNet instance
+        device:        torch.device (cpu or cuda)
+        ewc_lambda:    Regularization strength. Higher = more stability (less forgetting),
+                       lower = more plasticity (faster adaptation). Tune via MLflow.
+        class_weights: List of 5 floats for class weights.
 
     Returns:
         Avalanche EWC strategy object with train() and eval() methods.
     """
-    # Class weights (inverse-frequency inspired) to handle severe imbalance:
-    #   0: Normal (~10 samples)   → highest weight
-    #   1: Botnet (~589 samples)  → moderate
-    #   2: Exfil  (~595 samples)  → moderate
-    #   3: SSH BF (~28 samples)   → high weight
-    #   4: DoS    (~1394 samples) → lowest weight
-    class_weights = torch.tensor([10.0, 3.0, 3.0, 8.0, 1.0], dtype=torch.float32).to(device)
+    if class_weights is None:
+        class_weights = [12.0, 3.0, 3.0, 15.0, 1.0]
+    
+    weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
 
     return EWC(
         model=model,
         optimizer=SGD(model.parameters(), lr=0.01, momentum=0.9),
-        criterion=CrossEntropyLoss(weight=class_weights),
+        criterion=CrossEntropyLoss(weight=weights_tensor),
         ewc_lambda=ewc_lambda,
         train_mb_size=32,
         train_epochs=1,

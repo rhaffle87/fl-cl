@@ -134,6 +134,74 @@ def run_data_quality_check(defender_node: RemoteNode) -> dict:
         return {}
 
 
+def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name, rounds, lambda_ewc):
+    """Dynamically imports and executes the metrics plotter, generating a run summary report."""
+    print("\n=== Phase 8b: Generating Post-Training Plots and Reports ===")
+    try:
+        import sys
+        import os
+        import time
+
+        # Add tools/ directory to system path
+        tools_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tools"))
+        if tools_dir not in sys.path:
+            sys.path.insert(0, tools_dir)
+
+        from plot_metrics import run_plotting
+
+        # We want plots to go to exports/plots/
+        exports_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "exports"))
+        plots_dir = os.path.join(exports_dir, "plots")
+        os.makedirs(plots_dir, exist_ok=True)
+
+        print("[*] Retrieving metrics and plotting convergence graphs...")
+        results = run_plotting(
+            key_path=key_path,
+            aggregator_ip=aggregator_ip,
+            local_db="mlflow_temp.db",
+            output_dir=plots_dir
+        )
+
+        run_id = results.get("run_id")
+        final_metrics = results.get("final_metrics", {})
+        exported_plots = results.get("exported_plots", {})
+
+        # Generate Markdown Summary Report
+        summary_path = os.path.join(exports_dir, "run_summary.md")
+        print(f"[*] Writing training run summary report to {summary_path}...")
+
+        with open(summary_path, "w") as f:
+            f.write(f"# FL-CL Experiment Run Summary: {experiment_name}\n\n")
+            f.write(f"- **MLflow Run ID**: `{run_id}`\n")
+            f.write(f"- **Total FL Rounds**: `{rounds}`\n")
+            f.write(f"- **Continual Learning (EWC) Lambda**: `{lambda_ewc}`\n")
+            f.write(f"- **Generated At**: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+            f.write("## Final Metrics Summary\n")
+            f.write("| Metric | Value |\n")
+            f.write("|:---|:---|\n")
+            for key, val in sorted(final_metrics.items()):
+                if key != "Round":
+                    try:
+                        f.write(f"| {key} | {float(val):.6f} |\n")
+                    except (ValueError, TypeError):
+                        f.write(f"| {key} | {val} |\n")
+            f.write("\n")
+
+            f.write("## Convergence Plots per Traffic Class\n")
+            f.write("Click on each class below to view its convergence plot (incorporating Loss, Global Accuracy, and Class Accuracy):\n\n")
+            for display_name, plot_file in sorted(exported_plots.items()):
+                f.write(f"### {display_name} Convergence Plot\n")
+                f.write(f"![{display_name} Accuracy Plot](plots/{plot_file})\n\n")
+
+        print(f"[OK] Visual report generated successfully at {summary_path}")
+
+    except ImportError as ie:
+        print(f"[!] Warning: Could not run automated plotting because dependencies are missing: {ie}")
+    except Exception as e:
+        print(f"[!] Warning: Automated plotting failed: {e}")
+
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -162,6 +230,8 @@ def main():
     rounds = args.rounds or get_config_value(config, "fl", "rounds", default=10)
     lambda_ewc = args.lambda_ewc or get_config_value(config, "cl", "ewc_lambda", default=0.4)
     duration = args.duration or get_config_value(config, "simulation", "attack_duration_seconds", default=30)
+    class_weights = get_config_value(config, "training", "class_weights", default=[12.0, 3.0, 3.0, 15.0, 1.0])
+    weights_str = ",".join(map(str, class_weights))
     experiment_name = get_config_value(config, "experiment", "name", default="FL-CL-Run")
 
     # Set up Telegram notifications
@@ -205,7 +275,15 @@ def main():
 
     print("=== Phase 1: Cleaning up any old testbed processes ===")
     for node in nodes:
-        node.cleanup(kill_mlflow=True)
+        if node.name == "fl-aggregator":
+            res = node.run_cmd("systemctl is-active --quiet mlflow")
+            if res.returncode == 0:
+                print("[fl-aggregator] MLflow systemd service is active. Skipping MLflow process cleanup.")
+                node.cleanup(kill_mlflow=False)
+            else:
+                node.cleanup(kill_mlflow=True)
+        else:
+            node.cleanup(kill_mlflow=True)
 
     try:
         print("\n=== Phase 2: Synchronizing source code to remote nodes ===")
@@ -245,8 +323,14 @@ def main():
         def_b.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 50", background=True)
 
         print("\n=== Phase 5: Launching MLflow & Flower Server ===")
-        aggregator.run_cmd("/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --allowed-hosts '*' --cors-allowed-origins '*' --x-frame-options NONE --disable-security-middleware", background=True)
-        time.sleep(3)
+        # Check if mlflow systemd service is active
+        res = aggregator.run_cmd("systemctl is-active --quiet mlflow")
+        if res.returncode == 0:
+            print("[fl-aggregator] MLflow is already running persistently as a systemd service.")
+        else:
+            print("[fl-aggregator] MLflow systemd service not active. Launching ad-hoc background process...")
+            aggregator.run_cmd("/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --allowed-hosts '*' --cors-allowed-origins '*' --x-frame-options NONE --disable-security-middleware", background=True)
+            time.sleep(3)
 
         # Start FL server with config artifact logging
         config_arg = "--config-file ~/experiment.yaml" if config_path else ""
@@ -317,8 +401,8 @@ def main():
                 print(f"[{node_name}] ⚠ Could not read label distribution")
 
         print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
-        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc}", background=True)
-        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc}", background=True)
+        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str}", background=True)
+        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc} --class-weights {weights_str}", background=True)
 
         print("\n=== Phase 8: Monitoring Training Loop Convergence ===")
         print("[*] Waiting for Flower server rounds to complete. Press Ctrl+C to terminate early and clean up.")
@@ -365,6 +449,18 @@ def main():
             loss=loss,
             class_accuracies=class_accuracies,
             duration_min=elapsed_min,
+        )
+
+        # Determine the key path to use for local plotting
+        plotting_key = args.key or r"~/.ssh/id_ed25519"
+
+        # Trigger automated plots and report generation
+        run_post_training_plots_and_report(
+            key_path=plotting_key,
+            aggregator_ip=aggregator.ip,
+            experiment_name=experiment_name,
+            rounds=rounds,
+            lambda_ewc=lambda_ewc
         )
 
     except KeyboardInterrupt:

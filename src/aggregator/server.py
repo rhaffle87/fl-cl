@@ -28,6 +28,7 @@ import torch
 from model import CyberDefenseNet
 
 
+@mlflow.trace(name="weighted_avg")
 def weighted_avg(metrics):
     """Aggregate overall and class-wise accuracy metrics weighted by dataset size."""
     total_samples = sum([n for n, _ in metrics])
@@ -71,6 +72,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
         self.latest_metrics = {}
         Path(self.checkpoint_dir).mkdir(parents=True, exist_ok=True)
 
+    @mlflow.trace(name="aggregate_evaluate")
     def aggregate_evaluate(self, server_round, results, failures):
         aggregated_result = super().aggregate_evaluate(server_round, results, failures)
         if aggregated_result:
@@ -95,6 +97,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
 
         return aggregated_result
 
+    @mlflow.trace(name="aggregate_fit")
     def aggregate_fit(self, server_round, results, failures):
         aggregated = super().aggregate_fit(server_round, results, failures)
 
@@ -190,19 +193,58 @@ def main():
             strategy=strategy,
         )
 
-        # Log final best checkpoint as MLflow artifact
+        # Log final best checkpoint as MLflow artifact using MLflow 3.x LoggedModel entities
         best_ckpt = os.path.join(args.checkpoint_dir, "model_latest.pt")
         if os.path.exists(best_ckpt):
-            mlflow.log_artifact(best_ckpt, artifact_path="model")
-            print(f"[server] Logged best model artifact (round {strategy.best_round})")
+            import pandas as pd
+            import numpy as np
+
+            # Instantiate and load model
+            model = CyberDefenseNet()
+            model.load_state_dict(torch.load(best_ckpt))
+            model.eval()
+
+            # Create dummy input example to define signature
+            input_example = np.random.randn(1, 32).astype(np.float32)
+
+            # Log PyTorch model with parameters
+            model_info = mlflow.pytorch.log_model(
+                pytorch_model=model,
+                artifact_path="cyber_defense_model",
+                registered_model_name="CyberDefenseNet",
+                input_example=input_example,
+                serialization_format="pickle"
+            )
+            print(f"[server] Logged model to artifact path. ID: {model_info.model_id}")
+
+            # Inspect and retrieve LoggedModel
+            logged_model = mlflow.get_logged_model(model_info.model_id)
+
+            # Define dataset representation using MLflow 3.x Dataset entity
+            dataset_summary = pd.DataFrame([
+                {"class": "Normal", "defender_a": 22, "defender_b": 10},
+                {"class": "Botnet", "defender_a": 10, "defender_b": 12},
+                {"class": "Exfiltration", "defender_a": 581, "defender_b": 636},
+                {"class": "BruteForce", "defender_a": 4, "defender_b": 30},
+                {"class": "DoS", "defender_a": 2464, "defender_b": 1409}
+            ])
+            train_dataset = mlflow.data.from_pandas(dataset_summary, name="aggregated_training_flows")
+
+            # Log final metrics linked to LoggedModel and training dataset
+            mlflow.log_metrics(
+                metrics={
+                    "final_best_loss": strategy.best_loss,
+                    "final_best_round": float(strategy.best_round),
+                },
+                model_id=logged_model.model_id,
+                dataset=train_dataset
+            )
+            print(f"[server] Successfully linked model metrics to model_id: {logged_model.model_id}")
 
         ts_path = os.path.join(args.checkpoint_dir, "model_latest_scripted.pt")
         if os.path.exists(ts_path):
             mlflow.log_artifact(ts_path, artifact_path="model")
             print(f"[server] Logged TorchScript model artifact")
-
-        mlflow.log_metric("final_best_loss", strategy.best_loss)
-        mlflow.log_metric("final_best_round", strategy.best_round)
 
         # Write training summary JSON
         import json

