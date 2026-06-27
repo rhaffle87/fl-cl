@@ -116,7 +116,7 @@ Continual traffic capture via NFStream (see [02_architecture.md](02_architecture
   sudo mount -t tmpfs -o size=4G tmpfs /mnt/ramdisk
   echo "tmpfs /mnt/ramdisk tmpfs size=4G 0 0" | sudo tee -a /etc/fstab
   ```
-  Configure the `extractor.py` capture script to dump temporary `.csv` or `.parquet` flows to `/mnt/ramdisk/flows/` to spare the Dell PERC controller.
+  Configure the `extractor.py` capture script to dump temporary `.csv` flows to `/mnt/ramdisk/flows/` to spare the Dell PERC controller.
 
 ---
 

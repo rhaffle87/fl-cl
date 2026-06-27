@@ -120,7 +120,7 @@ For future deployments requiring cross-host mirroring, the PVE SDN feature with 
 With port mirroring delivering packets to the defender nodes (Section 3), this section defines the feature extraction pipeline that converts raw encrypted traffic into training-ready vectors for the ML model (Section 5).
 
 ```
-Raw Packets (ens19) ──► [ NFStream ] ──► Flow Records (CSV/Parquet) ──► [ Scaling & Encoding ] ──► PyTorch Tensor
+Raw Packets (ens19) ──► [ NFStream ] ──► Flow Records (CSV) ──► [ Scaling & Encoding ] ──► PyTorch Tensor
 ```
 
 ### 4.1 Feature Extraction with NFStream
@@ -143,27 +143,28 @@ import pandas as pd
 # Listen on the mirrored capture interface (net1 inside the defender VM)
 streamer = NFStreamer(
     source="ens19",          # Mirrored capture interface
-    promisc=True,
-    snapshot_len=1536,
-    idle_timeout=120,
-    active_timeout=1800,
-    accounting_mode=3        # Enable SSL/TLS metadata extraction
+    promiscuous_mode=True,
+    snapshot_length=1536,
+    idle_timeout=10,         # Quick flow emission (optimized for live detection)
+    active_timeout=60,       # Force-flush long-lived connections
+    n_dissections=20         # Enable deep packet inspection for TLS metadata
 )
 
 for flow in streamer:
-    if flow.requested_server_name:  # TLS SNI present
-        features = {
-            "ja3_hash": flow.src_to_dst_ja3,
-            "ja3s_hash": flow.dst_to_src_ja3,
-            "sni": flow.requested_server_name,
-            "protocol": flow.application_name,
-            "bidirectional_packets": flow.bidirectional_packets,
-            "bidirectional_bytes": flow.bidirectional_bytes,
-            "duration_ms": flow.bidirectional_duration_ms,
-            "src2dst_packets": flow.src2dst_packets,
-            "dst2src_packets": flow.dst2src_packets,
-        }
-        # Write to /mnt/ramdisk/flows/ for downstream training
+    features = {
+        "ja3_hash": flow.src_to_dst_ja3,
+        "ja3s_hash": flow.dst_to_src_ja3,
+        "sni": flow.requested_server_name,
+        "application": flow.application_name,
+        "bidirectional_packets": flow.bidirectional_packets,
+        "bidirectional_bytes": flow.bidirectional_bytes,
+        "duration_ms": flow.bidirectional_duration_ms,
+        "src2dst_packets": flow.src2dst_packets,
+        "dst2src_packets": flow.dst2src_packets,
+        "src_ip": flow.src_ip, "dst_ip": flow.dst_ip,
+        "src_port": flow.src_port, "dst_port": flow.dst_port,
+    }
+    # Batch and write to /mnt/ramdisk/flows/ as CSV for downstream training
 ```
 
 ### 4.2 Critical ETA Feature Set
@@ -235,13 +236,17 @@ $$L(\theta) = L_B(\theta) + \sum_{i} \frac{\lambda}{2} F_i (\theta_i - \theta_{A
 from torch.optim import SGD
 from torch.nn import CrossEntropyLoss
 from avalanche.training.supervised import EWC
+import torch
 
-def get_continual_learner(model, device):
+def get_continual_learner(model, device, ewc_lambda=0.25, class_weights=None):
+    if class_weights is None:
+        class_weights = [8.0, 20.0, 3.0, 15.0, 10.0]
+    weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
     return EWC(
         model=model,
         optimizer=SGD(model.parameters(), lr=0.01, momentum=0.9),
-        criterion=CrossEntropyLoss(),
-        ewc_lambda=0.4,  # Balance plasticity vs. stability
+        criterion=CrossEntropyLoss(weight=weights_tensor),
+        ewc_lambda=ewc_lambda,  # Balance plasticity vs. stability
         train_mb_size=32, train_epochs=1, eval_mb_size=32,
         device=device
     )
@@ -312,7 +317,7 @@ strategy = fl.server.strategy.FedAvg(
 if __name__ == "__main__":
     fl.server.start_server(
         server_address="0.0.0.0:8080",
-        config=fl.server.ServerConfig(num_rounds=10),
+        config=fl.server.ServerConfig(num_rounds=100),  # Configurable via experiment.yaml
         strategy=strategy
     )
 ```

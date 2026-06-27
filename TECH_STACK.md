@@ -77,7 +77,7 @@ These packages run inside VM 310 and VM 320.
 |:---|:---|:---|:---|
 | **Python** | 3.11+ | Runtime | `apt install python3 python3-venv` |
 | **Flower (flwr)** | 1.x | Federated Learning server (FedAvg) | `pip install flwr` |
-| **MLflow** | 2.x | Experiment tracking, metric logging | `pip install mlflow` |
+| **MLflow** | 3.x | Experiment tracking, metric logging, LoggedModel entities | `pip install mlflow` |
 
 ---
 
@@ -115,7 +115,7 @@ These packages run inside VM 310 and VM 320.
 |:---|:---|:---|
 | **tmpfs RAM Disk** (4 GB) | Buffer NFStream flow writes to avoid RAID I/O contention | Inside VM 310, VM 320 at `/mnt/ramdisk` |
 | **LVM-Thin Snapshots** | Fast VM checkpoint/rollback for experiment reproducibility | PVE host storage pool (`local-lvm`) |
-| **Parquet** | Columnar storage format for batched flow records | `/mnt/ramdisk/flows/` → persistent storage |
+| **CSV** | Tabular storage format for batched flow records | `/mnt/ramdisk/flows/` → per-batch CSV files |
 
 ---
 

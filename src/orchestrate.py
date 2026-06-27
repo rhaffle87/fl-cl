@@ -319,8 +319,8 @@ def main():
         target_b.run_cmd("busybox httpd -p 80 -h /tmp/www")
 
         print("\n=== Phase 4: Launching NFStream Traffic Extractors ===")
-        def_a.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 50", background=True)
-        def_b.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 50", background=True)
+        def_a.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 500", background=True)
+        def_b.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 500", background=True)
 
         print("\n=== Phase 5: Launching MLflow & Flower Server ===")
         # Check if mlflow systemd service is active
@@ -353,7 +353,7 @@ def main():
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target {target_b_ip} --duration {duration}", background=True)
         time.sleep(duration // 2)
 
-        # 3. Slowloris HTTPS Flooding
+        # 3. Slowloris HTTP Flooding
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_a_ip} --duration {duration} --port 80", background=True)
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_b_ip} --duration {duration} --port 80", background=True)
         time.sleep(duration // 2)

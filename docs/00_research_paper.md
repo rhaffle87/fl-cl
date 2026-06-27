@@ -315,7 +315,7 @@ For dynamic training that exercises the full CL adaptation loop, the traffic gen
 *   **Benign Background**: Headless browser scripts (Selenium/Puppeteer) running on target VMs simulate human browsing patterns—search queries, streaming, social media—generating realistic TLS flow metadata with natural timing jitter.
 *   **Automated Attacks**: The Kali-based traffic generator executes coordinated attack campaigns:
     *   **SSH Brute Force**: `hydra -l root -P wordlist.txt ssh://target-a1` generates rapid, small-packet authentication flows.
-    *   **HTTPS Flood / Slowloris**: `slowloris target-a1 -p 443` creates distinctive long-held connection patterns.
+    *   **HTTP Flood / Slowloris**: `slowloris target-a1 -p 80 -s 100` creates distinctive long-held connection patterns.
     *   **C2 Beaconing**: Metasploit reverse HTTPS shells produce periodic, regular-interval encrypted callbacks that generate characteristic SPLT signatures.
 *   **High-Volume Load**: Cisco T-Rex or Locust for stateful L4–L7 encrypted stream generation at scale.
 
@@ -331,11 +331,11 @@ import pandas as pd
 
 streamer = NFStreamer(
     source="ens19",          # Mirrored capture interface
-    promisc=True,
-    snapshot_len=1536,
-    idle_timeout=120,
-    active_timeout=1800,
-    accounting_mode=3        # Enable SSL/TLS metadata extraction
+    promiscuous_mode=True,
+    snapshot_length=1536,
+    idle_timeout=10,         # Quick flow emission for live detection
+    active_timeout=60,       # Force-flush long-lived connections
+    n_dissections=20         # Deep packet inspection for TLS metadata
 )
 
 for flow in streamer:
@@ -355,7 +355,7 @@ for flow in streamer:
 
 The complete feature pipeline:
 ```
-Raw Packets (ens19) ──► NFStreamer ──► Flow Records (CSV/Parquet)
+Raw Packets (ens19) ──► NFStreamer ──► Flow Records (CSV)
                                             │
                          ┌──────────────────┴──────────────────┐
                          ▼                                     ▼
@@ -381,7 +381,7 @@ sudo mount -t tmpfs -o size=4G tmpfs /mnt/ramdisk
 echo "tmpfs /mnt/ramdisk tmpfs size=4G 0 0" | sudo tee -a /etc/fstab
 ```
 
-Flow records are written to `/mnt/ramdisk/flows/` at capture speed, then periodically flushed to persistent storage as batched Parquet files or directly loaded into PyTorch tensors in-memory. This decouples capture throughput from disk I/O constraints and preserves the RAID controller's queue for VM operations.
+Flow records are written to `/mnt/ramdisk/flows/` at capture speed, then directly loaded into PyTorch tensors in-memory for training. Batched CSV files decouple capture throughput from disk I/O constraints and preserve the RAID controller's queue for VM operations.
 
 This completes the data pipeline. The output—scaled, encoded feature vectors stored on the RAM disk—is the direct input to the Flower/Avalanche software engine described in Chapter 6.
 
@@ -445,18 +445,21 @@ from torch.optim import SGD
 from torch.nn import CrossEntropyLoss
 from avalanche.training.supervised import EWC
 
-def get_continual_learner(model, device):
+def get_continual_learner(model, device, ewc_lambda=0.4, class_weights=None):
+    if class_weights is None:
+        class_weights = [12.0, 3.0, 3.0, 15.0, 1.0]  # Overridden by experiment.yaml
+    weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
     return EWC(
         model=model,
         optimizer=SGD(model.parameters(), lr=0.01, momentum=0.9),
-        criterion=CrossEntropyLoss(),
-        ewc_lambda=0.4,
+        criterion=CrossEntropyLoss(weight=weights_tensor),
+        ewc_lambda=ewc_lambda,
         train_mb_size=32, train_epochs=1, eval_mb_size=32,
         device=device
     )
 ```
 
-The `ewc_lambda=0.4` coefficient balances plasticity (ability to learn new attacks) against stability (retention of old attack knowledge). This value should be tuned during evaluation (Chapter 8).
+The `ewc_lambda` default of `0.4` in code is overridden at runtime by `configs/experiment.yaml` (currently set to `0.25`). This coefficient balances plasticity (ability to learn new attacks) against stability (retention of old attack knowledge) and should be tuned during evaluation (Chapter 8).
 
 ### 6.3 Flower Client (`client.py`)
 
@@ -525,7 +528,7 @@ strategy = fl.server.strategy.FedAvg(
 if __name__ == "__main__":
     fl.server.start_server(
         server_address="0.0.0.0:8080",
-        config=fl.server.ServerConfig(num_rounds=10),
+        config=fl.server.ServerConfig(num_rounds=100),  # Configurable via experiment.yaml
         strategy=strategy
     )
 ```

@@ -19,8 +19,9 @@ fl-cl/
 │   ├── 01_prerequisites.md       ← Hardware, datasets, traffic tools
 │   ├── 02_architecture.md        ← Conceptual blueprint & diagrams
 │   ├── 03_workarounds.md         ← Cluster-specific fixes & deployment
-│   ├── 04_deployment_walkthrough.md  ← Step-by-step cluster setup
-│   └── 05_orchestration_walkthrough.md ← Training and attack execution
+│   ├── 04_deployment.md             ← Step-by-step cluster setup
+│   ├── 05_orchestration.md          ← Training and attack execution
+│   └── 06_federated_continual_learning.md ← End-to-end FCL technical explanation
 │
 ├── infra/                        ← Infrastructure-as-Code (shell scripts)
 │   ├── 01_host_config/           ← PVE hypervisor-level configuration
@@ -44,7 +45,9 @@ fl-cl/
 └── tools/                        ← Diagnostic & validation utilities
     ├── check_dataset.py          ← Inspect ramdisk flow label distribution
     ├── check_features.py         ← Per-class feature statistics
+    ├── enable_wal.py             ← Enable WAL mode on MLflow SQLite DB
     ├── local_train.py            ← Standalone training + confusion matrix
+    ├── plot_metrics.py           ← Post-training convergence plot generator
     └── validate_model.py         ← Pre-deployment model validation gate
 ```
 
@@ -67,8 +70,8 @@ python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment.yam
 python src/orchestrate.py \
   --key /path/to/ssh_key \
   --rounds 100 \
-  --lambda-ewc 0.4 \
-  --duration 30
+  --lambda-ewc 0.25 \
+  --duration 60
 ```
 
 The orchestrator will:
@@ -92,7 +95,7 @@ The orchestrator will:
 | **TorchScript Export** | Production model exported for deployment validation |
 | **Data Quality Gate** | Pre-training label distribution check on both defenders |
 | **Model Validation** | `tools/validate_model.py` — per-class accuracy thresholds |
-| **Class-Weighted Loss** | Inverse-frequency weights `[10, 3, 3, 8, 1]` for imbalanced data |
+| **Class-Weighted Loss** | Per-class weights `[8.0, 20.0, 3.0, 15.0, 10.0]` for imbalanced data |
 | **Experiment Tracking** | MLflow at `http://10.10.130.10:5000` with git hash tagging |
 | **Notifications** | Telegram bot for start/complete/fail alerts |
 
@@ -143,6 +146,7 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/validate_model.py --checkpoint 
 | [Prerequisites](docs/01_prerequisites.md) | Hardware, datasets, traffic generation tools |
 | [Architecture](docs/02_architecture.md) | Conceptual blueprint, diagrams, code components |
 | [Workarounds](docs/03_workarounds.md) | Cluster-specific fixes and step-by-step configurations |
-| [Deployment Walkthrough](docs/04_deployment_walkthrough.md) | Step-by-step cluster setup, provisioning, and installations |
-| [Orchestration Walkthrough](docs/05_orchestration_walkthrough.md) | Detailed walkthrough of training and attack execution |
+| [Deployment](docs/04_deployment.md) | Step-by-step cluster setup, provisioning, and installations |
+| [Orchestration](docs/05_orchestration.md) | Detailed guide to training and attack execution |
+| [FCL Explained](docs/06_federated_continual_learning.md) | End-to-end technical explanation of how FCL works |
 | [Tech Stack](TECH_STACK.md) | Full technology inventory per layer |

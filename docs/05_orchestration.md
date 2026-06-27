@@ -1,6 +1,6 @@
 # FL-CL Orchestration & Threat Simulation Walkthrough
 
-> **Role in the documentation set**: This document provides a thorough, step-by-step guide to executing the automated Federated Continual Learning pipeline. It explains every node, every script, and every phase of the orchestration process. For the underlying architecture, see [02_architecture.md](02_architecture.md). For infrastructure deployment, see [04_deployment_walkthrough.md](04_deployment_walkthrough.md).
+> **Role in the documentation set**: This document provides a thorough, step-by-step guide to executing the automated Federated Continual Learning pipeline. It explains every node, every script, and every phase of the orchestration process. For the underlying architecture, see [02_architecture.md](02_architecture.md). For infrastructure deployment, see [04_deployment.md](04_deployment.md).
 
 ---
 
@@ -80,7 +80,9 @@ fl-cl/
 └── tools/                 # → Diagnostics & Pre-deployment Validation
     ├── check_dataset.py   # Inspect label distributions on ramdisk
     ├── check_features.py  # Compute feature statistics per class to check overlap
+    ├── enable_wal.py      # Enable WAL mode on MLflow SQLite database
     ├── local_train.py     # Local training diagnostic tool with confusion matrix
+    ├── plot_metrics.py    # Post-training convergence plot generator (per-class)
     └── validate_model.py  # Model validation gate (asserts minimum per-class accuracy)
 ```
 
@@ -130,7 +132,7 @@ This script is a **long-running daemon** that:
    - Directional metrics (`src2dst_packets`, `dst2src_bytes`)
    - Timing (`src2dst_mean_piat_ms`, `dst2src_mean_piat_ms`)
    - Connection metadata (`src_ip`, `dst_ip`, `src_port`, `dst_port`, `protocol`)
-4. **Batches flows into CSV files** (default: 100 flows per file) and writes them to `/mnt/ramdisk/flows/`.
+4. **Batches flows into CSV files** (default: 500 flows per file) and writes them to `/mnt/ramdisk/flows/`.
 
 **Why RAM disk?** The `/mnt/ramdisk/` is a 4 GB tmpfs mount. Writing to RAM avoids disk I/O contention on the shared RAID controller, which is critical when the extractor is processing hundreds of flows per second during attack scenarios.
 
@@ -152,7 +154,8 @@ This module creates an Avalanche EWC strategy object that wraps the `CyberDefens
 |:----------|:------|:--------|
 | `optimizer` | SGD (lr=0.01, momentum=0.9) | Stochastic gradient descent for local weight updates |
 | `criterion` | CrossEntropyLoss | Standard multi-class classification loss |
-| `ewc_lambda` | 0.4 (default, tunable) | Regularization strength balancing plasticity vs. stability |
+| `ewc_lambda` | 0.25 (configurable via YAML) | Regularization strength balancing plasticity vs. stability |
+| `class_weights` | `[8.0, 20.0, 3.0, 15.0, 10.0]` | Per-class loss weights to boost underperforming threat classes |
 | `train_mb_size` | 32 | Mini-batch size during local training |
 | `train_epochs` | 1 | Single epoch per federated round to limit drift |
 
@@ -218,7 +221,7 @@ When clients report different dataset sizes, naive averaging would be misleading
 
 #### Server Startup
 ```bash
-/opt/flower-env/bin/python3 server.py --rounds 10 --min-clients 2 --mlflow-uri http://localhost:5000
+/opt/flower-env/bin/python3 server.py --rounds 100 --min-clients 2 --mlflow-uri http://localhost:5000
 ```
 - Waits for at least 2 clients (Defender A + Defender B) before starting each round
 - Opens an MLflow experiment called `FL-CL-CyberDefense`
@@ -230,13 +233,13 @@ When clients report different dataset sizes, naive averaging would be misleading
 
 **Deployed to:** Traffic Generator (VM 400, Kali Linux)
 
-A CLI utility that generates one of three traffic patterns against a target IP:
+A CLI utility that generates one of five traffic patterns against a target IP:
 
 #### Mode: `benign`
 ```bash
 ~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.110.15 --duration 30
 ```
-Sends HTTP GET requests to the target's port 80 every 0.5 seconds for the specified duration. Generates normal web browsing patterns that the model should classify as class `0`.
+Sends HTTP GET requests to the target's port 80 every 0.3 seconds for the specified duration. Generates normal web browsing patterns that the model should classify as class `0`.
 
 #### Mode: `ssh`
 ```bash
@@ -249,6 +252,18 @@ Launches `hydra` with the `fasttrack.txt` wordlist against the target's SSH serv
 ~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration 30 --port 80
 ```
 Runs `slowloris` with 100 concurrent sockets, sending partial HTTP headers to hold connections open. Generates DoS patterns that the model should classify as class `4`.
+
+#### Mode: `dns_exfil`
+```bash
+~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target 10.10.110.15 --duration 30
+```
+Sends crafted DNS-like UDP packets to port 53, simulating data exfiltration via DNS tunneling. Generates patterns that the model should classify as class `2`.
+
+#### Mode: `botnet`
+```bash
+~/traffic-env/bin/python3 attack_flow.py --mode botnet --target 10.10.110.15 --duration 30
+```
+Opens persistent TCP sessions on C2 ports (8080/8888/9000) with multi-round HTTP-based heartbeats. Generates beaconing patterns that the model should classify as class `1`.
 
 ---
 
@@ -289,15 +304,16 @@ Before running the orchestrator, ensure:
 From your Windows workstation, open a terminal in the `fl-cl` project directory:
 
 ```powershell
-python src/orchestrate.py --rounds 10 --lambda-ewc 0.4 --duration 30
+python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.yaml
 ```
 
 | Argument | Default | Description |
 |:---------|:--------|:------------|
 | `--key` | System default | Path to your SSH private key |
-| `--rounds` | 10 | Number of federated averaging rounds |
-| `--lambda-ewc` | 0.4 | EWC regularization strength |
-| `--duration` | 30 | Duration (seconds) of each attack stage |
+| `--config` | `configs/experiment.yaml` | Path to YAML experiment configuration |
+| `--rounds` | 100 | Number of federated averaging rounds |
+| `--lambda-ewc` | 0.25 | EWC regularization strength |
+| `--duration` | 60 | Duration (seconds) of each attack stage |
 
 ### Step 2: Phase 1 — Process Cleanup
 
@@ -331,9 +347,9 @@ This starts a lightweight HTTP server so benign traffic generation has something
 
 On **Defender A** (`10.10.130.11`) and **Defender B** (`10.10.130.12`):
 ```bash
-~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 100
+~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 500
 ```
-This starts the NFStream capture daemon in the background. It immediately begins listening on the SPAN mirror interface `ens19` and writing flow CSVs to the RAM disk. The `--batch-size 100` means a new CSV file is created every 100 flows.
+This starts the NFStream capture daemon in the background. It immediately begins listening on the SPAN mirror interface `ens19` and writing flow CSVs to the RAM disk. The `--batch-size 500` means a new CSV file is created every 500 flows (or every 5 seconds, whichever comes first).
 
 ### Step 6: Phase 5 — MLflow & Flower Server Boot
 
@@ -345,41 +361,55 @@ First, the MLflow tracking server starts:
 ```
 The orchestrator waits 3 seconds for MLflow to initialize, then starts the Flower server:
 ```bash
-/opt/flower-env/bin/python3 server.py --rounds 10 --min-clients 2 --mlflow-uri http://localhost:5000
+/opt/flower-env/bin/python3 server.py --rounds 100 --min-clients 2 --mlflow-uri http://localhost:5000
 ```
 The server now waits for 2 clients to connect before beginning round 1.
 
 ### Step 7: Phase 6 — Sequential Threat Simulation
 
-On **Traffic Generator** (`10.10.140.10`), three attack stages are triggered in sequence:
+On **Traffic Generator** (`10.10.140.10`), five attack stages are triggered in sequence:
 
-**Stage 1 — Benign Traffic (first 15 seconds):**
+**Stage 1 — Benign Traffic:**
 ```bash
-~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.110.15 --duration 30
-~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.120.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.110.15 --duration 60
+~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.120.15 --duration 60
 ```
-HTTP GET requests every 0.5s to both targets. This generates class `0` (Normal) training data.
+HTTP GET requests every 0.3s to both targets. This generates class `0` (Normal) training data.
 
-**Stage 2 — SSH Brute Force (starts at ~15 seconds):**
+**Stage 2 — SSH Brute Force:**
 ```bash
-~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.110.15 --duration 30
-~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.120.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.110.15 --duration 60
+~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.120.15 --duration 60
 ```
 Hydra dictionary attacks against SSH. This generates class `3` (BruteForce) training data.
 
-**Stage 3 — Slowloris DoS (starts at ~30 seconds):**
+**Stage 3 — Slowloris DoS:**
 ```bash
-~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration 30 --port 80
-~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.120.15 --duration 30 --port 80
+~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration 60 --port 80
+~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.120.15 --duration 60 --port 80
 ```
 100-socket Slowloris flood. This generates class `4` (DoS) training data.
+
+**Stage 4 — DNS Exfiltration:**
+```bash
+~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target 10.10.110.15 --duration 60
+~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target 10.10.120.15 --duration 60
+```
+Rapid DNS-like UDP queries to port 53, simulating data exfiltration over DNS. This generates class `2` (Exfiltration) training data.
+
+**Stage 5 — Botnet C2 Beaconing:**
+```bash
+~/traffic-env/bin/python3 attack_flow.py --mode botnet --target 10.10.110.15 --duration 60
+~/traffic-env/bin/python3 attack_flow.py --mode botnet --target 10.10.120.15 --duration 60
+```
+Multi-round HTTP-like C2 heartbeat sessions on ports 8080/8888/9000. This generates class `1` (Botnet) training data.
 
 ### Step 8: Phase 7 — Flower Client Launch
 
 On **Defender A** and **Defender B**:
 ```bash
-~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda 0.4
-~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda 0.4
+~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda 0.25
+~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda 0.25
 ```
 
 Each client:
@@ -392,7 +422,7 @@ Each client:
 7. Evaluates per-class accuracy
 8. Returns updated weights and metrics to the aggregator
 
-This repeats for all 10 configured rounds.
+This repeats for all configured rounds (default: 100).
 
 ### Step 9: Phase 8 — Convergence Monitoring
 
@@ -429,7 +459,7 @@ Key metrics to monitor across rounds:
 
 When evaluating results inside the MLflow dashboard or CSV exports:
 1. **Skipped/Missing Class Columns (`accuracy_class_1`, `accuracy_class_2`)**:
-   - Because the Botnet (class 1) and DNS Exfiltration (class 2) traffic generator modes are not triggered during the standard orchestration flow, no flows matching these threat scenarios are generated.
+   - Because Botnet (class 1) and DNS Exfiltration (class 2) traffic generator modes were previously not triggered during the standard orchestration flow. With the updated 5-stage pipeline, all classes should now be represented.
    - To avoid division-by-zero errors when calculating class accuracy for zero samples, the clients report a sentinel value of `-1.0`. The server filters this sentinel, resulting in omitted logs/columns for these classes.
 2. **Extremely High Overall Accuracy (~99.9%) alongside Low/Zero Benign Accuracy (`accuracy_class_0`)**:
    - **Severe Class Imbalance**: The traffic generator produces thousands of malicious flows during active attack phases, whereas the benign flow generation runs yield a very small handful. As a result, the global validation accuracy is heavily dominated by the attack detection rates.

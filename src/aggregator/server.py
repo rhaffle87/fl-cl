@@ -12,7 +12,7 @@ MLOps features:
 
 Deploy on: FL Aggregator (LXC 300)
 Usage:
-    python3 server.py --rounds 10 --min-clients 2 --mlflow-uri http://localhost:5000
+    python3 server.py --rounds 100 --min-clients 2 --mlflow-uri http://localhost:5000
 """
 
 import argparse

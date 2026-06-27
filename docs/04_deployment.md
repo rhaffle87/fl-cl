@@ -335,52 +335,52 @@ echo "tmpfs /mnt/ramdisk tmpfs size=4G 0 0" | sudo tee -a /etc/fstab
 Deploy this script to Defender nodes. It monitors `ens19`, extracts flow characteristics (statistics, protocol information, JA3 handshakes), and outputs them to the RAM disk:
 
 ```python
-# extractor.py
+# extractor.py (simplified — see src/defender/extractor.py for full implementation)
 import argparse
 import os
+import pandas as pd
 from nfstream import NFStreamer
 
-def run_extractor(interface, out_dir):
+def extract_features(interface, out_dir, batch_size=500):
     os.makedirs(out_dir, exist_ok=True)
     print(f"[*] Starting NFStream extraction on {interface}...")
     
-    # Capture and convert traffic flows to feature vectors
     streamer = NFStreamer(
         source=interface,
-        promiscuous=True,
+        promiscuous_mode=True,
         snapshot_length=1536,
-        active_timeout=120,
-        idle_timeout=30
+        idle_timeout=10,       # Quick flow emission for live detection
+        active_timeout=60,     # Force-flush long-lived connections
+        n_dissections=20       # Deep packet inspection for TLS metadata
     )
     
-    flow_count = 0
+    batch = []
+    batch_num = 0
     for flow in streamer:
-        # Convert flow features to dictionary record
-        flow_data = {
-            "duration": flow.bidirectional_duration_ms,
-            "packets": flow.bidirectional_packets,
-            "bytes": flow.bidirectional_bytes,
-            "src_port": flow.src_port,
-            "dst_port": flow.dst_port,
-            "protocol": flow.protocol,
-            "application_name": flow.application_name,
-            "requested_server_name": flow.requested_server_name,
-            # JA3 is essential for classifying encrypted threats
-            "client_ja3": flow.client_info.get("ja3", "") if hasattr(flow, "client_info") else "",
-            "server_ja3": flow.server_info.get("ja3", "") if hasattr(flow, "server_info") else ""
+        features = {
+            "ja3_hash": getattr(flow, "src_to_dst_ja3", ""),
+            "ja3s_hash": getattr(flow, "dst_to_src_ja3", ""),
+            "bidirectional_packets": flow.bidirectional_packets,
+            "bidirectional_bytes": flow.bidirectional_bytes,
+            "duration_ms": flow.bidirectional_duration_ms,
+            "src_ip": flow.src_ip, "dst_ip": flow.dst_ip,
+            "src_port": flow.src_port, "dst_port": flow.dst_port,
         }
-        
-        # Save flow records as Parquet files for training ingestion
-        output_file = os.path.join(out_dir, f"flow_{flow_count // 1000}.parquet")
-        # Logic to append/write data...
-        flow_count += 1
+        batch.append(features)
+        if len(batch) >= batch_size:
+            batch_num += 1
+            pd.DataFrame(batch).to_csv(
+                os.path.join(out_dir, f"flows_{batch_num:06d}.csv"), index=False
+            )
+            batch = []
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--interface", default="ens19")
     parser.add_argument("--out-dir", default="/mnt/ramdisk/flows/")
+    parser.add_argument("--batch-size", type=int, default=500)
     args = parser.parse_args()
-    run_extractor(args.interface, args.out_dir)
+    extract_features(args.interface, args.out_dir, args.batch_size)
 ```
 
 ---
@@ -388,11 +388,11 @@ if __name__ == "__main__":
 ### Layer 5: Local Continual Learning Engine
 
 Inside the Defender VMs, model training uses the Avalanche library. The network model (`CyberDefenseNet`) is a 3-layer Multi-Layer Perceptron (MLP) that maps a 32-feature vector (representing network traffic properties) to 5 threat classes:
-1. `0`: Benign Web Browsing
-2. `1`: SSH Brute Force
-3. `2`: HTTPS Flooding (Slowloris)
-4. `3`: Encrypted C2 Beaconing
-5. `4`: PCAP Dataset Replay Traffic
+1. `0`: Normal (benign traffic)
+2. `1`: Botnet (C2 beaconing on ports 8080/8888/9000)
+3. `2`: Exfiltration (DNS tunneling on port 53)
+4. `3`: BruteForce (SSH brute force on port 22)
+5. `4`: DoS (HTTP floods / Slowloris on port 80/443)
 
 #### Step 5.1: The Avalanche CL Strategy with EWC (`cl_strategy.py`)
 To prevent catastrophic forgetting during training, we configure the Elastic Weight Consolidation (EWC) strategy:
@@ -402,27 +402,22 @@ To prevent catastrophic forgetting during training, we configure the Elastic Wei
 import torch
 from torch.nn import CrossEntropyLoss
 from torch.optim import SGD
-from avalanche.training.plugins import EWCPlugin
-from avalanche.training.supervised import Naive
-from model import CyberDefenseNet
+from avalanche.training.supervised import EWC
 
-def get_cl_strategy(model, ewc_lambda=100.0):
-    optimizer = SGD(model.parameters(), lr=0.01, momentum=0.9)
-    criterion = CrossEntropyLoss()
-    
-    # EWCPlugin regularizes parameter updates based on Fisher Information Matrix
-    ewc_plugin = EWCPlugin(ewc_lambda=ewc_lambda)
-    
-    strategy = Naive(
+def get_continual_learner(model, device, ewc_lambda=0.25, class_weights=None):
+    if class_weights is None:
+        class_weights = [8.0, 20.0, 3.0, 15.0, 10.0]
+    weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
+    return EWC(
         model=model,
-        optimizer=optimizer,
-        criterion=criterion,
-        train_mb_size=64,
-        train_epochs=5,
-        eval_mb_size=64,
-        plugins=[ewc_plugin]
+        optimizer=SGD(model.parameters(), lr=0.01, momentum=0.9),
+        criterion=CrossEntropyLoss(weight=weights_tensor),
+        ewc_lambda=ewc_lambda,
+        train_mb_size=32,
+        train_epochs=1,
+        eval_mb_size=32,
+        device=device,
     )
-    return strategy
 ```
 
 ---
@@ -466,7 +461,7 @@ if __name__ == "__main__":
     print("[*] Starting Flower Server on port 8080...")
     fl.server.start_server(
         server_address="0.0.0.0:8080",
-        config=fl.server.ServerConfig(num_rounds=10),
+        config=fl.server.ServerConfig(num_rounds=100),  # Configurable via experiment.yaml
         strategy=strategy
     )
 ```
@@ -544,10 +539,10 @@ Simulate threats targeting the client VMs:
 
 ```bash
 # 1. SSH Brute Force via Hydra
-hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://10.10.110.15 -t 4
+hydra -l root -P /usr/share/wordlists/fasttrack.txt ssh://10.10.110.15 -t 16
 
 # 2. HTTP Denial-of-Service via Slowloris
-slowloris 10.10.110.15 -p 443 -s 150
+slowloris 10.10.110.15 -p 80 -s 100
 
 # 3. Replay Historical Attacks using tcpreplay
 # Rewrite IPs to match target subnets
@@ -574,11 +569,11 @@ mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db
 Instead of manual start sequences, the master controller script `src/orchestrate.py` automates code deployment, server startup, traffic injection, and client execution:
 
 ```powershell
-# From local workstation, run the orchestrator (uses workstation's default SSH key)
-python src/orchestrate.py --rounds 10 --lambda-ewc 0.4 --duration 30
+# From local workstation, use config-driven orchestration (recommended):
+python src/orchestrate.py --key C:\Users\user\.ssh\id_ed25519 --config configs/experiment.yaml
 
-# To specify a custom SSH key:
-python src/orchestrate.py --key C:\Users\user\.ssh\id_rsa --rounds 10 --lambda-ewc 0.4
+# Or with CLI overrides:
+python src/orchestrate.py --key C:\Users\user\.ssh\id_ed25519 --rounds 100 --lambda-ewc 0.25 --duration 60
 ```
 
 #### Step 8.3: Manual Verification & Health Check Commands
@@ -623,7 +618,7 @@ Follow this execution sequence to start the FCL framework:
   - Benign target servers (`busybox httpd`)
   - NFStream extractors (`src/defender/extractor.py`)
   - Aggregator and MLflow servers (`src/aggregator/server.py`)
-  - Offensive traffic generator (`src/traffic_gen/attack_flow.py`: Benign -> SSH Brute Force -> Slowloris)
+  - Offensive traffic generator (`src/traffic_gen/attack_flow.py`: Benign → SSH → Slowloris → DNS Exfil → Botnet)
   - Flower continual learning clients (`src/defender/client.py` using Avalanche EWC)
 - [x] **Phase 4**: Open `http://10.10.130.10:5000` to monitor training metrics and catastrophic forgetting mitigation in real time.
 
