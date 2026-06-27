@@ -30,7 +30,7 @@ class RemoteNode:
     def _get_ssh_opts(self):
         opts = "-o StrictHostKeyChecking=no"
         if self.key_path:
-            opts += f" -i {self.key_path}"
+            opts += f" -i \"{self.key_path}\""
         return opts
 
     def run_cmd(self, command, background=False):
@@ -122,7 +122,7 @@ def main():
 
     print("\n=== Phase 5: Launching MLflow & Flower Server ===")
     # Start MLflow tracker inside flower env
-    aggregator.run_cmd("/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db", background=True)
+    aggregator.run_cmd("/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --allowed-hosts \"*\" --cors-allowed-origins \"*\"", background=True)
     time.sleep(3) # Wait for MLflow to initialize
     # Start FL server
     server_proc = aggregator.run_cmd(
