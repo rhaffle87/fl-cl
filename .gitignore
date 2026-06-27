@@ -37,3 +37,10 @@ Thumbs.db
 *.pem
 id_rsa
 id_rsa.pub
+
+# Model checkpoints (saved on remote aggregator)
+checkpoints/
+*.pt
+
+# Local configuration overrides (containing Telegram keys/tokens)
+configs/experiment.yaml

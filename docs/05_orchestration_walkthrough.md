@@ -52,35 +52,45 @@ All nodes sit on a flat Layer 2 network over the Proxmox bridge `vmbr1` using th
 
 ---
 
-## 2. Source Code Layout
+## 2. Source Code & Tools Layout
 
-Scripts are grouped into folders by their deployment target VM:
+Scripts are grouped into logical folders based on their role and deployment targets:
 
 ```
-src/
-├── aggregator/          # → FL Aggregator (LXC 300)  10.10.130.10
-│   ├── server.py        #   Flower server + MLflow logging
-│   └── model.py         #   CyberDefenseNet model definition
+fl-cl/
+├── configs/
+│   └── experiment.yaml    # Central configuration file for hyperparameters & topology
 │
-├── defender/             # → Defender A (VM 310) + Defender B (VM 320)
-│   ├── client.py         #   Flower client with Avalanche EWC
-│   ├── cl_strategy.py    #   EWC continual learning strategy
-│   ├── model.py          #   CyberDefenseNet model definition
-│   └── extractor.py      #   NFStream traffic feature extractor
+├── src/
+│   ├── aggregator/        # → FL Aggregator (LXC 300)  10.10.130.10
+│   │   └── server.py      #   Flower server + MLflow logging + checkpointing
+│   │
+│   ├── defender/          # → Defender A (VM 310) + Defender B (VM 320)
+│   │   ├── client.py      #   Flower client with Avalanche EWC
+│   │   ├── cl_strategy.py #   EWC continual learning strategy (class-weighted)
+│   │   ├── model.py       #   CyberDefenseNet model definition (single source of truth)
+│   │   └── extractor.py   #   NFStream traffic feature extractor
+│   │
+│   ├── traffic_gen/       # → Traffic Generator (VM 400)  10.10.140.10
+│   │   └── attack_flow.py #   Offensive scenario simulator (multi-round botnet beaconing)
+│   │
+│   ├── notifications.py   # Telegram webhook notifications helper
+│   └── orchestrate.py     # Master orchestrator running on local workstation
 │
-├── traffic_gen/          # → Traffic Generator (VM 400)  10.10.140.10
-│   └── attack_flow.py    #   Offensive scenario simulator
-│
-└── orchestrate.py        # → Local workstation (Windows host)
+└── tools/                 # → Diagnostics & Pre-deployment Validation
+    ├── check_dataset.py   # Inspect label distributions on ramdisk
+    ├── check_features.py  # Compute feature statistics per class to check overlap
+    ├── local_train.py     # Local training diagnostic tool with confusion matrix
+    └── validate_model.py  # Model validation gate (asserts minimum per-class accuracy)
 ```
 
-> `model.py` exists in both `aggregator/` and `defender/` because both the server and clients need the identical `CyberDefenseNet` architecture definition.
+> The model definition is centralized in `src/defender/model.py`. The orchestrator copies this single source of truth to the aggregator container and all defender VMs during initialization.
 
 ---
 
 ## 3. Script-by-Script Deep Dive
 
-### 3.1 `src/aggregator/model.py` & `src/defender/model.py` — The Shared Neural Network
+### 3.1 `src/defender/model.py` — The Shared Neural Network
 
 **Deployed to:** Aggregator (LXC 300), Defender A (VM 310), Defender B (VM 320)
 
@@ -414,6 +424,16 @@ Key metrics to monitor across rounds:
 | `accuracy_class_4` | DoS detection rate | Increasing after Slowloris stage |
 
 **Detecting catastrophic forgetting:** If `accuracy_class_3` drops significantly after the Slowloris phase (Phase 6 Stage 3), it indicates the model is forgetting BruteForce patterns. Increase `--lambda-ewc` (e.g., to 0.6 or 0.8) and re-run.
+
+### Expected Metrics Behavior & Anomalies
+
+When evaluating results inside the MLflow dashboard or CSV exports:
+1. **Skipped/Missing Class Columns (`accuracy_class_1`, `accuracy_class_2`)**:
+   - Because the Botnet (class 1) and DNS Exfiltration (class 2) traffic generator modes are not triggered during the standard orchestration flow, no flows matching these threat scenarios are generated.
+   - To avoid division-by-zero errors when calculating class accuracy for zero samples, the clients report a sentinel value of `-1.0`. The server filters this sentinel, resulting in omitted logs/columns for these classes.
+2. **Extremely High Overall Accuracy (~99.9%) alongside Low/Zero Benign Accuracy (`accuracy_class_0`)**:
+   - **Severe Class Imbalance**: The traffic generator produces thousands of malicious flows during active attack phases, whereas the benign flow generation runs yield a very small handful. As a result, the global validation accuracy is heavily dominated by the attack detection rates.
+   - **Administrative Port 22 Overlap**: The heuristic labeling logic in `client.py` assigns Class 0 (Normal) to all non-attacker flows. However, the orchestrator script continuously issues administrative SSH connections on port 22 to check process statuses. Since these administrative flows share structural characteristics (port 22) with the SSH Brute Force attacks (Class 3), the model correctly notices the feature overlap and biases toward classifying all port 22 flows as malicious, lowering the benign class accuracy.
 
 ### Manual SSH Checks
 

@@ -24,17 +24,27 @@ from torch.utils.data import DataLoader, TensorDataset
 from cl_strategy import get_continual_learner
 from model import CyberDefenseNet
 
+class MyTensorDataset(TensorDataset):
+    """Custom TensorDataset that exposes a targets field for Avalanche 0.6.0+ compatibility."""
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        self.targets = y
+
 # Robust Avalanche Imports
+make_tensor_classification_dataset = None
+benchmark_from_datasets = None
+tensor_benchmark = None
+as_classification_dataset = None
+
 try:
     from avalanche.benchmarks.utils import make_tensor_classification_dataset
 except ImportError:
-    try:
-        from avalanche.benchmarks.utils.avalanche_dataset import AvalancheDataset
-        def make_tensor_classification_dataset(dataset_tensors, task_labels=None):
-            x, y = dataset_tensors
-            return AvalancheDataset(TensorDataset(x, y), targets=y.tolist(), task_labels=task_labels)
-    except ImportError:
-        make_tensor_classification_dataset = None
+    pass
+
+try:
+    from avalanche.benchmarks.utils import as_classification_dataset
+except ImportError:
+    pass
 
 try:
     from avalanche.benchmarks.scenarios.dataset_scenario import benchmark_from_datasets
@@ -42,12 +52,12 @@ except ImportError:
     try:
         from avalanche.benchmarks.generators import benchmark_from_datasets
     except ImportError:
-        benchmark_from_datasets = None
+        pass
 
 try:
     from avalanche.benchmarks.generators import tensor_benchmark
 except ImportError:
-    tensor_benchmark = None
+    pass
 
 
 def assign_label(row):
@@ -114,11 +124,12 @@ def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows"):
     if df.empty:
         raise FileNotFoundError(f"Combined flow dataframe is empty in {flows_dir}")
 
-    # Select numeric feature columns (exclude metadata like IPs, ports, SNI)
+    # Select feature columns: flow statistics + dst_port (critical for class separation)
     feature_cols = [
         "bidirectional_packets", "bidirectional_bytes", "duration_ms",
         "src2dst_packets", "src2dst_bytes", "dst2src_packets", "dst2src_bytes",
         "src2dst_mean_piat_ms", "dst2src_mean_piat_ms",
+        "dst_port",
     ]
     available_cols = [c for c in feature_cols if c in df.columns]
 
@@ -149,15 +160,23 @@ def get_experience(x_tensor, y_tensor):
         )
         return bm.train_stream[0]
 
+    # For Avalanche 0.6.0+
+    if as_classification_dataset is not None and benchmark_from_datasets is not None:
+        td = MyTensorDataset(x_tensor, y_tensor)
+        ds = as_classification_dataset(td)
+        bm = benchmark_from_datasets(
+            train=[ds],
+            test=[ds]
+        )
+        return bm.train_stream[0]
+
     if make_tensor_classification_dataset is not None and benchmark_from_datasets is not None:
         av_dataset = make_tensor_classification_dataset(
             dataset_tensors=(x_tensor, y_tensor)
         )
         bm = benchmark_from_datasets(
-            dataset_streams={
-                "train": [av_dataset],
-                "test": [av_dataset]
-            }
+            train=[av_dataset],
+            test=[av_dataset]
         )
         return bm.train_stream[0]
 
@@ -191,8 +210,10 @@ class CyberDefenseClient(fl.client.NumPyClient):
             self.cl.train(experience)
             print(f"[client] Trained on {num_samples} flows")
         except FileNotFoundError as e:
-            print(f"[client] WARNING: {e}. Skipping training this round.")
-        return self.get_parameters(config={}), num_samples, {}
+            print(f"[client] WARNING: {e}. Skipping training this round (no flows yet).")
+        # Return at least 1 so FedAvg aggregate_inplace never divides by zero
+        # when all clients have an empty ramdisk (e.g. extractor not ready yet).
+        return self.get_parameters(config={}), max(num_samples, 1), {}
 
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)

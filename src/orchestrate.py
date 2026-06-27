@@ -1,14 +1,18 @@
 """
 orchestrate.py — Master Orchestration Script for FL-CL Testbed
 
-Cocoordinates the end-to-end Federated Continual Learning pipeline:
-  1. Synchronizes updated python scripts to remote VMs via SCP.
-  2. Sets up target HTTP services.
-  3. Launches feature extraction on defender nodes.
-  4. Starts Flower server with MLflow logging on the aggregator container.
-  5. Launches attack scenarios sequentially from the traffic generator.
-  6. Launches Flower clients to train and evaluate, logging everything to MLflow.
-  7. Cleans up all background processes gracefully.
+Coordinates the end-to-end Federated Continual Learning pipeline:
+  1. Loads experiment config from YAML for reproducibility.
+  2. Sends Telegram notification on start.
+  3. Synchronizes updated python scripts to remote VMs via SCP.
+  4. Sets up target HTTP services.
+  5. Launches feature extraction on defender nodes.
+  6. Starts Flower server with MLflow logging on the aggregator container.
+  7. Launches attack scenarios sequentially from the traffic generator.
+  8. Runs data quality gate — verifies all classes are present.
+  9. Launches Flower clients to train and evaluate.
+  10. Sends Telegram notification on completion or failure.
+  11. Cleans up all background processes gracefully.
 
 Runs on: Local workstation (Windows host) with access to standard 'ssh' and 'scp'.
 """
@@ -17,7 +21,40 @@ import argparse
 import subprocess
 import time
 import sys
+import os
 
+# Add src/ to path for notifications import
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from notifications import TelegramNotifier
+
+
+# ─── Config Loading ─────────────────────────────────────────────────────────
+
+def load_config(config_path: str) -> dict:
+    """Load experiment configuration from YAML file."""
+    try:
+        import yaml
+    except ImportError:
+        # Fallback: basic YAML parsing for simple configs
+        print("[!] PyYAML not installed locally. Using default config values.")
+        return {}
+
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f)
+
+
+def get_config_value(config: dict, *keys, default=None):
+    """Safely traverse nested config dict."""
+    current = config
+    for key in keys:
+        if isinstance(current, dict):
+            current = current.get(key, default)
+        else:
+            return default
+    return current if current is not None else default
+
+
+# ─── Remote Node ─────────────────────────────────────────────────────────────
 
 class RemoteNode:
     def __init__(self, name, ip, username="root", key_path=None):
@@ -36,15 +73,14 @@ class RemoteNode:
     def run_cmd(self, command, background=False):
         opts = self._get_ssh_opts()
         if background:
-            # nohup and double-forking so that the ssh session can close without killing the job
             full_command = f"nohup {command} > /tmp/{self.name}.log 2>&1 &"
-            ssh_cmd = f"ssh {opts} {self.username}@{self.ip} \"{full_command}\""
+            ssh_cmd = f"ssh -n {opts} {self.username}@{self.ip} \"{full_command}\""
             print(f"[{self.name}] Spawning background: {command}")
             proc = subprocess.Popen(ssh_cmd, shell=True)
             self.procs.append(proc)
             return proc
         else:
-            ssh_cmd = f"ssh {opts} {self.username}@{self.ip} \"{command}\""
+            ssh_cmd = f"ssh -n {opts} {self.username}@{self.ip} \"{command}\""
             print(f"[{self.name}] Running: {command}")
             return subprocess.run(ssh_cmd, shell=True, capture_output=True, text=True)
 
@@ -54,127 +90,262 @@ class RemoteNode:
         print(f"[{self.name}] Transferring {local_path} -> {remote_path}")
         return subprocess.run(scp_cmd, shell=True, capture_output=True, text=True)
 
-    def cleanup(self):
+    def cleanup(self, kill_mlflow=False):
         opts = self._get_ssh_opts()
-        # Gracefully stop processes we launched by checking logs/pids
-        # We kill server.py, client.py, extractor.py, attack_flow.py, busybox httpd
-        kill_cmd = (
-            "pkill -f 'server.py|client.py|extractor.py|attack_flow.py|busybox httpd' "
-            "|| true"
-        )
+        pattern = "server.py|client.py|extractor.py|attack_flow.py|busybox httpd"
+        if kill_mlflow:
+            pattern += "|mlflow"
+        kill_cmd = f"pkill -f '{pattern}' || true"
         print(f"[{self.name}] Cleaning up background processes...")
         subprocess.run(f"ssh {opts} {self.username}@{self.ip} \"{kill_cmd}\"", shell=True, capture_output=True)
 
 
+# ─── Data Quality Gate ───────────────────────────────────────────────────────
+
+def run_data_quality_check(defender_node: RemoteNode) -> dict:
+    """Check label distribution on a defender's ramdisk. Returns {label: count}."""
+    result = defender_node.run_cmd(
+        "~/fl-cl-env/bin/python3 -c \""
+        "import pandas as pd; from pathlib import Path; import sys; "
+        "sys.path.append('/root'); import client; "
+        "files = sorted(Path('/mnt/ramdisk/flows').glob('*.csv')); "
+        "dfs = [pd.read_csv(f) for f in files if not pd.read_csv(f).empty] if files else []; "
+        "df = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame(); "
+        "df['label'] = df.apply(client.assign_label, axis=1) if not df.empty else []; "
+        "counts = df['label'].value_counts().to_dict() if not df.empty else {}; "
+        "print(counts)"
+        "\""
+    )
+    try:
+        # Parse the output dict string
+        import ast
+        return ast.literal_eval(result.stdout.strip())
+    except Exception:
+        return {}
+
+
+# ─── Main ────────────────────────────────────────────────────────────────────
+
 def main():
     parser = argparse.ArgumentParser(description="FL-CL Testbed Orchestrator")
     parser.add_argument("--key", default=None, help="Path to SSH private key")
-    parser.add_argument("--rounds", type=int, default=10, help="FL rounds")
-    parser.add_argument("--lambda-ewc", type=float, default=0.4, help="EWC lambda")
-    parser.add_argument("--duration", type=int, default=30, help="Attack stage duration (seconds)")
+    parser.add_argument("--rounds", type=int, default=None, help="FL rounds (overrides config)")
+    parser.add_argument("--lambda-ewc", type=float, default=None, help="EWC lambda (overrides config)")
+    parser.add_argument("--duration", type=int, default=None, help="Attack stage duration in seconds (overrides config)")
+    parser.add_argument("--config", default="configs/experiment.yaml", help="Experiment config file")
     args = parser.parse_args()
 
-    # Define all remote nodes matching the flat L2 subnet schema
-    aggregator = RemoteNode("fl-aggregator", "10.10.130.10", "root", args.key)
-    def_a = RemoteNode("defender-a", "10.10.130.11", "root", args.key)
-    def_b = RemoteNode("defender-b", "10.10.130.12", "root", args.key)
-    target_a = RemoteNode("target-a1", "10.10.110.15", "root", args.key)
-    target_b = RemoteNode("target-b1", "10.10.120.15", "root", args.key)
-    traffic_gen = RemoteNode("traffic-gen", "10.10.140.10", "root", args.key)
+    # Load config — CLI args override YAML values
+    config = {}
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", args.config)
+    if os.path.exists(config_path):
+        config = load_config(config_path)
+        print(f"[*] Loaded config: {config_path}")
+    elif os.path.exists(args.config):
+        config = load_config(args.config)
+        config_path = args.config
+        print(f"[*] Loaded config: {args.config}")
+    else:
+        print(f"[!] Config not found at {args.config}. Using CLI defaults.")
+        config_path = None
+
+    rounds = args.rounds or get_config_value(config, "fl", "rounds", default=10)
+    lambda_ewc = args.lambda_ewc or get_config_value(config, "cl", "ewc_lambda", default=0.4)
+    duration = args.duration or get_config_value(config, "simulation", "attack_duration_seconds", default=30)
+    experiment_name = get_config_value(config, "experiment", "name", default="FL-CL-Run")
+
+    # Set up Telegram notifications
+    tg_token = get_config_value(config, "notifications", "telegram", "bot_token", default="")
+    tg_chat_id = get_config_value(config, "notifications", "telegram", "chat_id", default="")
+    tg_enabled = get_config_value(config, "notifications", "telegram", "enabled", default=False)
+    notifier = TelegramNotifier(bot_token=tg_token, chat_id=tg_chat_id, enabled=tg_enabled)
+
+    # Define all remote nodes
+    aggregator = RemoteNode("fl-aggregator",
+                            get_config_value(config, "topology", "aggregator", default="10.10.130.10"),
+                            "root", args.key)
+    def_a = RemoteNode("defender-a",
+                       get_config_value(config, "topology", "defender_a", default="10.10.130.11"),
+                       "root", args.key)
+    def_b = RemoteNode("defender-b",
+                       get_config_value(config, "topology", "defender_b", default="10.10.130.12"),
+                       "root", args.key)
+    target_a = RemoteNode("target-a1",
+                          get_config_value(config, "topology", "target_a", default="10.10.110.15"),
+                          "root", args.key)
+    target_b = RemoteNode("target-b1",
+                          get_config_value(config, "topology", "target_b", default="10.10.120.15"),
+                          "root", args.key)
+    traffic_gen = RemoteNode("traffic-gen",
+                             get_config_value(config, "topology", "traffic_gen", default="10.10.140.10"),
+                             "root", args.key)
 
     nodes = [aggregator, def_a, def_b, target_a, target_b, traffic_gen]
 
-    print("\n=== Phase 1: Cleaning up any old testbed processes ===")
+    print(f"\n{'='*60}")
+    print(f"  FL-CL Orchestrator — {experiment_name}")
+    print(f"  Rounds: {rounds} | EWC λ: {lambda_ewc} | Duration: {duration}s")
+    print(f"{'='*60}\n")
+
+    start_time = time.time()
+
+    # Notify start
+    notifier.notify_start(experiment_name, rounds,
+                          f"EWC λ={lambda_ewc}, Duration={duration}s")
+
+    print("=== Phase 1: Cleaning up any old testbed processes ===")
     for node in nodes:
-        node.cleanup()
+        node.cleanup(kill_mlflow=True)
 
-    print("\n=== Phase 2: Synchronizing source code to remote nodes ===")
-    # Aggregator files (src/aggregator/ → LXC 300)
-    aggregator.scp_file("src/aggregator/server.py", "~/server.py")
-    aggregator.scp_file("src/aggregator/model.py", "~/model.py")
-
-    # Defender A files (src/defender/ → VM 310)
-    def_a.scp_file("src/defender/client.py", "~/client.py")
-    def_a.scp_file("src/defender/cl_strategy.py", "~/cl_strategy.py")
-    def_a.scp_file("src/defender/model.py", "~/model.py")
-    def_a.scp_file("src/defender/extractor.py", "~/extractor.py")
-
-    # Defender B files (src/defender/ → VM 320)
-    def_b.scp_file("src/defender/client.py", "~/client.py")
-    def_b.scp_file("src/defender/cl_strategy.py", "~/cl_strategy.py")
-    def_b.scp_file("src/defender/model.py", "~/model.py")
-    def_b.scp_file("src/defender/extractor.py", "~/extractor.py")
-
-    # Traffic Generator files (src/traffic_gen/ → VM 400)
-    traffic_gen.scp_file("src/traffic_gen/attack_flow.py", "~/attack_flow.py")
-
-    print("\n=== Phase 3: Launching Benign Target Servers (busybox httpd) ===")
-    # Target HTTP servers
-    target_a.run_cmd("mkdir -p /tmp/www && echo 'Target A1 Benign Server' > /tmp/www/index.html")
-    target_a.run_cmd("busybox httpd -p 80 -h /tmp/www")
-    target_b.run_cmd("mkdir -p /tmp/www && echo 'Target B1 Benign Server' > /tmp/www/index.html")
-    target_b.run_cmd("busybox httpd -p 80 -h /tmp/www")
-
-    print("\n=== Phase 4: Launching NFStream Traffic Extractors ===")
-    # Start extractor on Defender A & B capturing on ens19, outputting to ramdisk
-    def_a.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 100", background=True)
-    def_b.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 100", background=True)
-
-    print("\n=== Phase 5: Launching MLflow & Flower Server ===")
-    # Start MLflow tracker inside flower env
-    aggregator.run_cmd("/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --allowed-hosts \"*\" --cors-allowed-origins \"*\"", background=True)
-    time.sleep(3) # Wait for MLflow to initialize
-    # Start FL server
-    server_proc = aggregator.run_cmd(
-        f"/opt/flower-env/bin/python3 server.py --rounds {args.rounds} --min-clients 2 --mlflow-uri http://localhost:5000",
-        background=True
-    )
-
-    print("\n=== Phase 6: Starting Threat Simulation Stages ===")
-    # 1. Benign background traffic to Target A and B
-    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.110.15 --duration {args.duration}", background=True)
-    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.120.15 --duration {args.duration}", background=True)
-    time.sleep(args.duration // 2)
-
-    # 2. SSH Brute Force attacks targeting Target A and B
-    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.110.15 --duration {args.duration}", background=True)
-    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.120.15 --duration {args.duration}", background=True)
-    time.sleep(args.duration // 2)
-
-    # 3. Slowloris HTTPS Flooding targeting Target A and B
-    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration {args.duration} --port 80", background=True)
-    traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.120.15 --duration {args.duration} --port 80", background=True)
-    time.sleep(args.duration)
-
-    print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
-    def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {args.lambda_ewc}", background=True)
-    def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {args.lambda_ewc}", background=True)
-
-    print("\n=== Phase 8: Monitoring Training Loop Convergence ===")
-    print("[*] Waiting for Flower server rounds to complete. Press Ctrl+C to terminate early and clean up.")
     try:
-        # Poll the server process or wait for a fixed duration to complete training rounds
-        # Each round takes a few seconds to process, let's wait/poll
+        print("\n=== Phase 2: Synchronizing source code to remote nodes ===")
+        # Aggregator files — model.py comes from defender/ (single source of truth)
+        aggregator.scp_file("src/aggregator/server.py", "~/server.py")
+        aggregator.scp_file("src/defender/model.py", "~/model.py")
+
+        # Send experiment config to aggregator for MLflow artifact logging
+        if config_path and os.path.exists(config_path):
+            aggregator.scp_file(config_path, "~/experiment.yaml")
+
+        # Defender A files
+        def_a.scp_file("src/defender/client.py", "~/client.py")
+        def_a.scp_file("src/defender/cl_strategy.py", "~/cl_strategy.py")
+        def_a.scp_file("src/defender/model.py", "~/model.py")
+        def_a.scp_file("src/defender/extractor.py", "~/extractor.py")
+
+        # Defender B files
+        def_b.scp_file("src/defender/client.py", "~/client.py")
+        def_b.scp_file("src/defender/cl_strategy.py", "~/cl_strategy.py")
+        def_b.scp_file("src/defender/model.py", "~/model.py")
+        def_b.scp_file("src/defender/extractor.py", "~/extractor.py")
+
+        # Traffic Generator files
+        traffic_gen.scp_file("src/traffic_gen/attack_flow.py", "~/attack_flow.py")
+
+        print("\n=== Phase 3: Launching Benign Target Servers (busybox httpd) ===")
+        target_a.run_cmd("mkdir -p /tmp/www && echo 'Target A1 Benign Server' > /tmp/www/index.html")
+        target_a.run_cmd("busybox httpd -p 80 -h /tmp/www")
+        target_b.run_cmd("mkdir -p /tmp/www && echo 'Target B1 Benign Server' > /tmp/www/index.html")
+        target_b.run_cmd("busybox httpd -p 80 -h /tmp/www")
+
+        print("\n=== Phase 4: Launching NFStream Traffic Extractors ===")
+        def_a.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 50", background=True)
+        def_b.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 50", background=True)
+
+        print("\n=== Phase 5: Launching MLflow & Flower Server ===")
+        aggregator.run_cmd("/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --allowed-hosts '*' --cors-allowed-origins '*' --x-frame-options NONE --disable-security-middleware", background=True)
+        time.sleep(3)
+
+        # Start FL server with config artifact logging
+        config_arg = "--config-file ~/experiment.yaml" if config_path else ""
+        server_proc = aggregator.run_cmd(
+            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg}",
+            background=True
+        )
+
+        print("\n=== Phase 6: Starting Threat Simulation Stages ===")
+        target_a_ip = get_config_value(config, "topology", "target_a", default="10.10.110.15")
+        target_b_ip = get_config_value(config, "topology", "target_b", default="10.10.120.15")
+
+        # 1. Benign background traffic
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target {target_a_ip} --duration {duration}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target {target_b_ip} --duration {duration}", background=True)
+        time.sleep(duration // 2)
+
+        # 2. SSH Brute Force
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target {target_a_ip} --duration {duration}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target {target_b_ip} --duration {duration}", background=True)
+        time.sleep(duration // 2)
+
+        # 3. Slowloris HTTPS Flooding
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_a_ip} --duration {duration} --port 80", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_b_ip} --duration {duration} --port 80", background=True)
+        time.sleep(duration // 2)
+
+        # 4. DNS Exfiltration
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target {target_a_ip} --duration {duration}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target {target_b_ip} --duration {duration}", background=True)
+        time.sleep(duration // 2)
+
+        # 5. C2 Botnet Beaconing
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode botnet --target {target_a_ip} --duration {duration}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode botnet --target {target_b_ip} --duration {duration}", background=True)
+        time.sleep(duration)
+
+        print("\n=== Phase 6b: Waiting for flow data to accumulate on ramdisk ===")
+        print("[*] Polling defender-a ramdisk until at least one CSV appears (timeout: 120s)...")
+        ramdisk_ready = False
+        for _ in range(24):
+            check = def_a.run_cmd("ls /mnt/ramdisk/flows/*.csv 2>/dev/null | wc -l")
+            count = check.stdout.strip()
+            if count and int(count) > 0:
+                print(f"[OK] Ramdisk ready - {count} CSV file(s) found on defender-a. Proceeding.")
+                ramdisk_ready = True
+                break
+            print("[~] No flow CSVs yet. Waiting 5s...")
+            time.sleep(5)
+        if not ramdisk_ready:
+            print("[!] WARNING: Ramdisk still empty after 120s. Clients will train on empty data this round.")
+
+        print("\n=== Phase 6c: Data Quality Gate ===")
+        for node_name, node in [("defender-a", def_a), ("defender-b", def_b)]:
+            label_counts = run_data_quality_check(node)
+            if label_counts:
+                label_names = {0: "Normal", 1: "Botnet", 2: "Exfil", 3: "SSH-BF", 4: "DoS"}
+                total = sum(label_counts.values())
+                print(f"[{node_name}] Flow distribution ({total} total):")
+                for label in range(5):
+                    count = label_counts.get(label, 0)
+                    name = label_names.get(label, "?")
+                    print(f"  Class {label} ({name:>7s}): {count}")
+                missing = [label_names[i] for i in range(5) if label_counts.get(i, 0) == 0]
+                if missing:
+                    print(f"[{node_name}] ⚠ Missing classes: {', '.join(missing)}")
+            else:
+                print(f"[{node_name}] ⚠ Could not read label distribution")
+
+        print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
+        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc}", background=True)
+        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc}", background=True)
+
+        print("\n=== Phase 8: Monitoring Training Loop Convergence ===")
+        print("[*] Waiting for Flower server rounds to complete. Press Ctrl+C to terminate early and clean up.")
         start_wait = time.time()
-        # We can poll every 5 seconds. If the training takes too long, we will timeout after 10 minutes.
-        while time.time() - start_wait < 600:
-            # Check if server process has exited (if running locally or remotely, we check via pgrep on aggregator)
+        timeout = max(600, rounds * 25)
+        print(f"[*] Monitoring loop active. Max timeout set to {timeout}s ({timeout/60:.1f} minutes).")
+        while time.time() - start_wait < timeout:
             status = aggregator.run_cmd("pgrep -f '[s]erver.py'")
             if not status.stdout.strip():
-                print("[✓] Flower server has completed its rounds.")
+                print("[OK] Flower server has completed its rounds.")
                 break
             time.sleep(5)
             sys.stdout.write(".")
             sys.stdout.flush()
+
+        elapsed_min = (time.time() - start_time) / 60.0
+
+        # Notify completion
+        notifier.notify_complete(
+            experiment_name=experiment_name,
+            accuracy=0.0,  # Will be visible in MLflow
+            loss=0.0,
+            duration_min=elapsed_min,
+        )
+
     except KeyboardInterrupt:
         print("\n[!] User interrupted the execution. Starting cleanup.")
+        notifier.notify_failure(experiment_name, "User interrupted (KeyboardInterrupt)")
+    except Exception as e:
+        print(f"\n[!] Orchestration error: {e}")
+        notifier.notify_failure(experiment_name, str(e))
+    finally:
+        print("\n=== Phase 9: Cleaning up remote background processes ===")
+        for node in nodes:
+            node.cleanup(kill_mlflow=False)
 
-    print("\n=== Phase 9: Cleaning up remote background processes ===")
-    for node in nodes:
-        node.cleanup()
-
-    print("\n[✓] Orchestration workflow finished successfully!")
-    print("Check MLflow dashboard at http://10.10.130.10:5000 to verify continual learning metrics.")
+        elapsed_min = (time.time() - start_time) / 60.0
+        print(f"\n[OK] Orchestration workflow finished in {elapsed_min:.1f} minutes.")
+        print("Check MLflow dashboard at http://10.10.130.10:5000 to verify continual learning metrics.")
 
 
 if __name__ == "__main__":

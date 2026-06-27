@@ -14,6 +14,8 @@ Usage:
 import argparse
 import os
 import time
+import sys
+import signal
 from pathlib import Path
 
 import pandas as pd
@@ -33,18 +35,32 @@ def extract_features(interface: str, out_dir: str, batch_size: int = 500):
 
     streamer = NFStreamer(
         source=interface,
-        promisc=True,
-        snapshot_len=1536,
-        idle_timeout=120,
-        active_timeout=1800,
-        accounting_mode=3,  # Enable SSL/TLS metadata extraction
+        promiscuous_mode=True,
+        snapshot_length=1536,
+        idle_timeout=10,      # Emit flow records quickly (was 120)
+        active_timeout=60,    # Force-flush long-lived connections (was 1800)
+        n_dissections=20,     # Enable deep packet inspection for TLS metadata
     )
 
     batch = []
     batch_num = 0
+    last_write_time = time.time()
+
+    def handle_signal(signum, frame):
+        print(f"\n[extractor] Received signal {signum}. Flushing remaining {len(batch)} flows...")
+        if batch:
+            nonlocal batch_num
+            batch_num += 1
+            filename = os.path.join(out_dir, f"flows_{batch_num:06d}.csv")
+            pd.DataFrame(batch).to_csv(filename, index=False)
+            print(f"[extractor] Wrote remaining flows → {filename}")
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
 
     print(f"[extractor] Capturing on {interface} → {out_dir}")
-    print(f"[extractor] Batch size: {batch_size} flows per file")
+    print(f"[extractor] Batch size: {batch_size} flows per file (or max 5 seconds wait)")
 
     for flow in streamer:
         features = {
@@ -74,13 +90,14 @@ def extract_features(interface: str, out_dir: str, batch_size: int = 500):
         }
         batch.append(features)
 
-        if len(batch) >= batch_size:
+        current_time = time.time()
+        if len(batch) >= batch_size or (current_time - last_write_time >= 5.0):
             batch_num += 1
             filename = os.path.join(out_dir, f"flows_{batch_num:06d}.csv")
-            df = pd.DataFrame(batch)
-            df.to_csv(filename, index=False)
+            pd.DataFrame(batch).to_csv(filename, index=False)
             print(f"[extractor] Wrote {len(batch)} flows → {filename}")
             batch = []
+            last_write_time = current_time
 
     # Flush remaining flows
     if batch:

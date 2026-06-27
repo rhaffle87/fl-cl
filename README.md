@@ -11,120 +11,113 @@ fl-cl/
 ├── README.md                     ← You are here
 ├── TECH_STACK.md                 ← Complete technology inventory
 │
+├── configs/                      ← Experiment configuration
+│   └── experiment.yaml           ← Reproducible hyperparams, topology, notifications
+│
 ├── docs/                         ← Research documentation
 │   ├── 00_research_paper.md      ← Full integrated paper (Chapters 1–9)
 │   ├── 01_prerequisites.md       ← Hardware, datasets, traffic tools
 │   ├── 02_architecture.md        ← Conceptual blueprint & diagrams
-│   └── 03_workarounds.md         ← Cluster-specific fixes & deployment
+│   ├── 03_workarounds.md         ← Cluster-specific fixes & deployment
+│   ├── 04_deployment_walkthrough.md  ← Step-by-step cluster setup
+│   └── 05_orchestration_walkthrough.md ← Training and attack execution
 │
 ├── infra/                        ← Infrastructure-as-Code (shell scripts)
 │   ├── 01_host_config/           ← PVE hypervisor-level configuration
-│   │   ├── hosts.txt             ← Standardized /etc/hosts template
-│   │   ├── enable_vlan.sh        ← Enable VLAN awareness on vmbr1
-│   │   └── enable_snippets.sh    ← Enable hookscript storage
-│   │
 │   ├── 02_vm_provision/          ← VM/CT creation scripts
-│   │   ├── create_aggregator.sh  ← LXC 300 on node pve
-│   │   ├── create_defender_a.sh  ← VM 310 on node its
-│   │   ├── create_defender_b.sh  ← VM 320 on node node2
-│   │   ├── create_target_a1.sh   ← VM 311 on node its
-│   │   ├── create_target_b1.sh   ← VM 321 on node node2
-│   │   └── create_traffic_gen.sh ← VM 400 on node node2
-│   │
 │   ├── 03_hookscripts/           ← Proxmox lifecycle hookscripts
-│   │   ├── mirror-hook-a.sh      ← Port mirror: VM 311 → VM 310
-│   │   └── mirror-hook-b.sh      ← Port mirror: VM 321 → VM 320
-│   │
 │   └── 04_guest_setup/           ← In-VM software provisioning
-│       ├── setup_aggregator.sh   ← Python + Flower + MLflow
-│       ├── setup_defender.sh     ← Python + PyTorch + Avalanche + NFStream
-│       └── setup_traffic_gen.sh  ← tcpreplay + Hydra + Metasploit + Selenium
 │
-└── src/                          ← Python application code
-    ├── aggregator/               ← FL Aggregator code
-    │   ├── server.py             ← Flower FL aggregator server
-    │   └── model.py              ← CyberDefenseNet (PyTorch MLP)
-    ├── defender/                 ← Defender client code
-    │   ├── client.py             ← Flower FL client + Avalanche CL
-    │   ├── cl_strategy.py        ← EWC continual learning wrapper
-    │   ├── extractor.py          ← NFStream flow feature extraction
-    │   └── model.py              ← CyberDefenseNet (PyTorch MLP)
-    ├── traffic_gen/              ← Traffic Generator code
-    │   └── attack_flow.py        ← Offensive scenario simulator
-    └── orchestrate.py            ← Local workstation orchestrator
+├── src/                          ← Python application code
+│   ├── aggregator/               ← FL Aggregator (LXC 300)
+│   │   └── server.py             ← Flower server + MLflow + checkpointing
+│   ├── defender/                 ← Defender clients (VM 310 & 320)
+│   │   ├── client.py             ← Flower FL client + Avalanche CL
+│   │   ├── cl_strategy.py        ← EWC continual learning (class-weighted)
+│   │   ├── extractor.py          ← NFStream flow feature extraction
+│   │   └── model.py              ← CyberDefenseNet (single source of truth)
+│   ├── traffic_gen/              ← Traffic Generator (VM 400)
+│   │   └── attack_flow.py        ← Offensive scenario simulator
+│   ├── notifications.py          ← Telegram webhook notifications
+│   └── orchestrate.py            ← Local workstation orchestrator
+│
+└── tools/                        ← Diagnostic & validation utilities
+    ├── check_dataset.py          ← Inspect ramdisk flow label distribution
+    ├── check_features.py         ← Per-class feature statistics
+    ├── local_train.py            ← Standalone training + confusion matrix
+    └── validate_model.py         ← Pre-deployment model validation gate
 ```
 
 ---
 
-## Quick Start — Deployment Order
+## Quick Start — Run an Experiment
 
-> Every script includes usage instructions in its header comments.
+### Prerequisites
+- SSH access to all 6 VMs from your local workstation
+- Python environments provisioned on remote nodes (see `infra/04_guest_setup/`)
 
-### Step 1: Host Configuration (run on ALL 3 PVE nodes as root)
+### Option 1: Config-driven (recommended)
+Edit `configs/experiment.yaml` to set your hyperparameters, then:
 ```bash
-# Apply unified hostname resolution
-cp hosts.txt /etc/hosts
-
-# Enable VLAN awareness on vmbr1
-chmod +x enable_vlan.sh && ./enable_vlan.sh
-
-# Enable hookscript storage
-chmod +x enable_snippets.sh && ./enable_snippets.sh
+python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment.yaml
 ```
 
-### Step 2: Provision VMs (run on the designated hypervisor node)
+### Option 2: CLI overrides
 ```bash
-# On node 'pve':
-bash create_aggregator.sh
-
-# On node 'its':
-bash create_defender_a.sh
-bash create_target_a1.sh
-
-# On node 'node2':
-bash create_defender_b.sh
-bash create_target_b1.sh
-bash create_traffic_gen.sh
+python src/orchestrate.py \
+  --key /path/to/ssh_key \
+  --rounds 100 \
+  --lambda-ewc 0.4 \
+  --duration 30
 ```
 
-### Step 3: Deploy Hookscripts (run on hypervisor nodes)
+The orchestrator will:
+1. Clean up old processes on all nodes
+2. SCP source code to remote VMs
+3. Launch target HTTP services, extractors, MLflow, and Flower server
+4. Run 5 attack stages (benign, SSH, Slowloris, DNS exfil, botnet)
+5. Run data quality gate (verify all 5 classes present)
+6. Launch Flower clients for federated training
+7. Save model checkpoints + TorchScript export on aggregator
+8. Send Telegram notification on completion/failure
+
+---
+
+## MLOps Features
+
+| Feature | Implementation |
+|:--------|:---------------|
+| **Experiment Config** | `configs/experiment.yaml` — all params in one YAML, logged as MLflow artifact |
+| **Model Checkpointing** | Best model saved per round to `/opt/mlflow-artifacts/checkpoints/` |
+| **TorchScript Export** | Production model exported for deployment validation |
+| **Data Quality Gate** | Pre-training label distribution check on both defenders |
+| **Model Validation** | `tools/validate_model.py` — per-class accuracy thresholds |
+| **Class-Weighted Loss** | Inverse-frequency weights `[10, 3, 3, 8, 1]` for imbalanced data |
+| **Experiment Tracking** | MLflow at `http://10.10.130.10:5000` with git hash tagging |
+| **Notifications** | Telegram bot for start/complete/fail alerts |
+
+---
+
+## Diagnostic Tools
+
+SCP any tool to a defender VM and run:
+
 ```bash
-# On node 'its':
-cp mirror-hook-a.sh /var/lib/vz/snippets/
-chmod +x /var/lib/vz/snippets/mirror-hook-a.sh
-qm set 311 --hookscript local:snippets/mirror-hook-a.sh
+# Check flow label distribution
+scp tools/check_dataset.py root@10.10.130.11:~/
+ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/check_dataset.py"
 
-# On node 'node2':
-cp mirror-hook-b.sh /var/lib/vz/snippets/
-chmod +x /var/lib/vz/snippets/mirror-hook-b.sh
-qm set 321 --hookscript local:snippets/mirror-hook-b.sh
-```
+# Analyze feature statistics per class
+scp tools/check_features.py root@10.10.130.11:~/
+ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/check_features.py"
 
-### Step 4: Install Software (run inside each guest VM)
-```bash
-# Inside LXC 300:  bash setup_aggregator.sh
-# Inside VM 310:   bash setup_defender.sh
-# Inside VM 320:   bash setup_defender.sh
-# Inside VM 400:   bash setup_traffic_gen.sh
-```
+# Train locally and print confusion matrix
+scp tools/local_train.py root@10.10.130.11:~/
+ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/local_train.py --epochs 40"
 
-### Step 5: Run the Orchestrator
-You can run the entire experiment automatically from your local workstation:
-```bash
-python src/orchestrate.py --key /path/to/ssh_key --rounds 10
-```
-This automated script handles copying files, starting the aggregator server, launching traffic monitoring on both defenders, running the threat campaigns on the traffic generator, and spawning the clients to complete federated rounds.
-
-Alternatively, to run manually:
-```bash
-# On aggregator (LXC 300):
-source /opt/flower-env/bin/activate
-python3 src/aggregator/server.py --rounds 10 --min-clients 2
-
-# On defender VMs (VM 310 & 320):
-source ~/fl-cl-env/bin/activate
-python3 src/defender/extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/
-python3 src/defender/client.py --server 10.10.130.10:8080 --client-id A   # (or B)
+# Validate a saved model checkpoint
+scp tools/validate_model.py root@10.10.130.11:~/
+ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/validate_model.py --checkpoint /path/to/model.pt"
 ```
 
 ---
