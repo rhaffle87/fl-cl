@@ -243,6 +243,7 @@ def main():
     momentum = get_config_value(config, "training", "momentum", default=0.9)
     experiment_name = get_config_value(config, "experiment", "name", default="FL-CL-Run")
     dos_threshold = get_config_value(config, "labeling", "dos_duration_threshold_ms", default=2000)
+    mlops_mode = "experimental"
 
     # Set up Telegram notifications
     tg_token = get_config_value(config, "notifications", "telegram", "bot_token", default="")
