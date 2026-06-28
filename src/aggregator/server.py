@@ -18,6 +18,8 @@ Usage:
 import argparse
 import os
 import subprocess
+import json
+import shutil
 from collections import OrderedDict
 from pathlib import Path
 
@@ -154,33 +156,83 @@ def main():
     parser.add_argument("--checkpoint-dir", default="/opt/mlflow-artifacts/checkpoints",
                         help="Directory to save model checkpoints")
     parser.add_argument("--config-file", default="", help="Experiment config YAML to log as artifact")
+    parser.add_argument("--mlops-mode", default="experimental", choices=["experimental", "production"],
+                        help="MLOps mode (experimental or production)")
+    parser.add_argument("--production-strategy", default="resume", choices=["resume", "fresh"],
+                        help="Production warm-start checkpoint strategy")
     args = parser.parse_args()
 
     # Set up MLflow
     mlflow.set_tracking_uri(args.mlflow_uri)
     mlflow.set_experiment("FL-CL-CyberDefense")
 
-    strategy = MLflowFedAvg(
-        checkpoint_dir=args.checkpoint_dir,
-        export_torchscript=True,
-        fraction_fit=1.0,
-        fraction_evaluate=1.0,
-        min_fit_clients=args.min_clients,
-        min_evaluate_clients=args.min_clients,
-        min_available_clients=args.min_clients,
-        evaluate_metrics_aggregation_fn=weighted_avg,
-    )
+    # MLOps Warm-Start Checkpoint Resumption
+    initial_parameters = None
+    resumed_from_version = None
+    resumed_from_run_id = None
+    latest_ckpt_path = os.path.join(args.checkpoint_dir, "model_latest.pt")
+    
+    if args.mlops_mode == "production":
+        if args.production_strategy == "resume" and os.path.exists(latest_ckpt_path):
+            print(f"[server] Production Warm-Start: Loading weights from {latest_ckpt_path}")
+            try:
+                model = CyberDefenseNet()
+                model.load_state_dict(torch.load(latest_ckpt_path, map_location="cpu"))
+                
+                ndarrays = [val.cpu().numpy() for _, val in model.state_dict().items()]
+                initial_parameters = fl.common.ndarrays_to_parameters(ndarrays)
+                
+                # Load metadata
+                latest_meta_path = os.path.join(args.checkpoint_dir, "model_latest_metadata.json")
+                if os.path.exists(latest_meta_path):
+                    with open(latest_meta_path, "r") as f:
+                        meta = json.load(f)
+                        resumed_from_version = meta.get("model_version")
+                        resumed_from_run_id = meta.get("run_id")
+            except Exception as e:
+                print(f"[server] Failed to load latest checkpoint: {e}. Starting fresh.")
+                initial_parameters = None
+        else:
+            print("[server] Production Start: No prior checkpoint found or fresh flag active. Initializing new model weights.")
+    else:
+        print("[server] Experimental Cold-Start: Training a new model from scratch.")
 
     print(f"[server] Starting Flower aggregator on {args.address}")
     print(f"[server] Rounds: {args.rounds} | Min clients: {args.min_clients}")
     print(f"[server] MLflow Server: {args.mlflow_uri}")
-    print(f"[server] Checkpoints: {args.checkpoint_dir}")
+    print(f"[server] Checkpoints Base Directory: {args.checkpoint_dir}")
+    print(f"[server] MLOps Mode: {args.mlops_mode} | Production Strategy: {args.production_strategy}")
 
     with mlflow.start_run(run_name="FL-CL-Orchestrated-Run") as run:
+        # Define run-specific checkpoint directory to isolate outputs
+        run_checkpoint_dir = os.path.join(args.checkpoint_dir, run.info.run_id)
+        
+        # Instantiate strategy inside the MLflow run context
+        strategy = MLflowFedAvg(
+            checkpoint_dir=run_checkpoint_dir,
+            export_torchscript=True,
+            initial_parameters=initial_parameters,
+            fraction_fit=1.0,
+            fraction_evaluate=1.0,
+            min_fit_clients=args.min_clients,
+            min_evaluate_clients=args.min_clients,
+            min_available_clients=args.min_clients,
+            evaluate_metrics_aggregation_fn=weighted_avg,
+        )
+
         # Log experiment metadata
         mlflow.set_tag("git_commit", get_git_hash())
         mlflow.log_param("fl_rounds", args.rounds)
         mlflow.log_param("min_clients", args.min_clients)
+        
+        # Log MLOps params & tags
+        mlflow.set_tag("mlops_mode", args.mlops_mode)
+        mlflow.set_tag("production_strategy", args.production_strategy if args.mlops_mode == "production" else "N/A")
+        mlflow.set_tag("warm_started", "True" if initial_parameters is not None else "False")
+        if resumed_from_run_id:
+            mlflow.set_tag("resumed_from_run_id", resumed_from_run_id)
+        if resumed_from_version:
+            mlflow.set_tag("resumed_from_version", str(resumed_from_version))
 
         # Log config file as artifact if provided
         if args.config_file and os.path.exists(args.config_file):
@@ -194,14 +246,14 @@ def main():
         )
 
         # Log final best checkpoint as MLflow artifact using MLflow 3.x LoggedModel entities
-        best_ckpt = os.path.join(args.checkpoint_dir, "model_latest.pt")
-        if os.path.exists(best_ckpt):
+        run_best_ckpt = os.path.join(run_checkpoint_dir, "model_latest.pt")
+        if os.path.exists(run_best_ckpt):
             import pandas as pd
             import numpy as np
 
             # Instantiate and load model
             model = CyberDefenseNet()
-            model.load_state_dict(torch.load(best_ckpt))
+            model.load_state_dict(torch.load(run_best_ckpt, map_location="cpu"))
             model.eval()
 
             # Create dummy input example to define signature
@@ -215,7 +267,8 @@ def main():
                 input_example=input_example,
                 serialization_format="pickle"
             )
-            print(f"[server] Logged model to artifact path. ID: {model_info.model_id}")
+            new_version = model_info.registered_model_version
+            print(f"[server] Logged model to artifact path. ID: {model_info.model_id} | Registry Version: {new_version}")
 
             # Inspect and retrieve LoggedModel
             logged_model = mlflow.get_logged_model(model_info.model_id)
@@ -241,13 +294,55 @@ def main():
             )
             print(f"[server] Successfully linked model metrics to model_id: {logged_model.model_id}")
 
-        ts_path = os.path.join(args.checkpoint_dir, "model_latest_scripted.pt")
-        if os.path.exists(ts_path):
-            mlflow.log_artifact(ts_path, artifact_path="model")
+            # Promote model to master checkpoint directory
+            print(f"[server] Copying best checkpoint to master directory: {latest_ckpt_path}")
+            shutil.copy(run_best_ckpt, latest_ckpt_path)
+
+            # Manage Model Registry tagging and promotion via MlflowClient
+            try:
+                from mlflow.tracking import MlflowClient
+                client = MlflowClient()
+                model_name = "CyberDefenseNet"
+                
+                # Set tags on model version object
+                client.set_model_version_tag(model_name, str(new_version), "mlops_mode", args.mlops_mode)
+                if resumed_from_version:
+                    client.set_model_version_tag(model_name, str(new_version), "parent_version", str(resumed_from_version))
+                if resumed_from_run_id:
+                    client.set_model_version_tag(model_name, str(new_version), "resumed_from_run_id", str(resumed_from_run_id))
+                
+                # If production mode, transition to Production stage and archive existing production versions
+                if args.mlops_mode == "production":
+                    print(f"[server] MLOps Promotion: Transitioning version {new_version} to 'Production'...")
+                    client.transition_model_version_stage(
+                        name=model_name,
+                        version=str(new_version),
+                        stage="Production",
+                        archive_existing_versions=True
+                    )
+            except Exception as registry_err:
+                print(f"[server] Warning: Model registry metadata tagging or promotion failed: {registry_err}")
+
+            # Write model latest metadata json
+            meta_data = {
+                "run_id": run.info.run_id,
+                "model_version": str(new_version)
+            }
+            latest_meta_path = os.path.join(args.checkpoint_dir, "model_latest_metadata.json")
+            with open(latest_meta_path, "w") as f:
+                json.dump(meta_data, f, indent=2)
+            print(f"[server] Updated master latest model metadata: {meta_data}")
+
+        run_ts_path = os.path.join(run_checkpoint_dir, "model_latest_scripted.pt")
+        if os.path.exists(run_ts_path):
+            mlflow.log_artifact(run_ts_path, artifact_path="model")
             print(f"[server] Logged TorchScript model artifact")
+            
+            # Copy to master directory
+            master_ts_path = os.path.join(args.checkpoint_dir, "model_latest_scripted.pt")
+            shutil.copy(run_ts_path, master_ts_path)
 
         # Write training summary JSON
-        import json
         summary = {
             "run_id": run.info.run_id,
             "loss": strategy.latest_loss,
