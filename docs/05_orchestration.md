@@ -322,12 +322,23 @@ python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.
 | `--production-strategy` | `resume` | Action strategy for `production` mode: `resume` (warm-start from the existing `champion` model version) or `fresh` (cold-start a new model version). |
 
 > [!TIP]
-> **Security Best Practice**: To avoid storing sensitive credentials in plain-text inside `configs/experiment.yaml`, you can export your Telegram Bot credentials as environment variables on your workstation before running the orchestrator:
+> **Security Best Practice**: To avoid storing sensitive credentials in plain-text inside `configs/experiment.yaml`, you can either create a `.env` file at the root of the repository or export them as environment variables on your workstation before running the orchestrator:
+> 
+> **Option A: Local `.env` File (Recommended)**
+> Create a `.env` file at the project root (ignored by Git):
+> ```env
+> TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
+> TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
+> SSH_KEY_PATH="C:\Users\Username\.ssh\id_ed25519"
+> ```
+> 
+> **Option B: Environment Variables**
 > ```powershell
 > $env:TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
 > $env:TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
+> $env:SSH_KEY_PATH="C:\Users\Username\.ssh\id_ed25519"
 > ```
-> The orchestrator will automatically detect and prioritize these environment variables.
+> The orchestrator and target scripts will automatically detect and load these values.
 
 
 #### MLOps Execution Modes
@@ -562,8 +573,8 @@ To establish a strict promotion logic and track model lineage, the aggregator us
 
 ### Warm-Starting from Registry Champion
 When a training run is launched with `--mlops-mode production --production-strategy resume`, the server checks the Model Registry for the version labeled `champion`:
-1. It retrieves the artifact URI for the version with the `champion` alias.
-2. It downloads the checkpoint weights files (`best_global_model.pth` and optimizer states) from that run's artifacts.
+1. It queries the MLflow Model Registry for the version labeled with the `champion` alias.
+2. It downloads the state dict checkpoint `model_latest.pt` from that run's artifacts.
 3. The server loads these weights and distributes them as the initial parameters in Round 1 of the new training run, warm-starting the continual learning process.
 4. The resulting run registers its final model as a new version and takes over the `champion` alias.
 

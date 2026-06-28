@@ -32,13 +32,13 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 def run_ssh(ip, command, username="root", key_path=None):
-    opts = "-o StrictHostKeyChecking=no -o ConnectTimeout=5"
+    opts = ["-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5"]
     if key_path:
-        opts += f" -i \"{key_path}\""
+        opts += ["-i", key_path]
     
-    ssh_cmd = f"ssh -n {opts} {username}@{ip} \"{command}\""
+    ssh_cmd = ["ssh", "-n"] + opts + [f"{username}@{ip}", command]
     print(f"[{ip}] Running: {command}")
-    return subprocess.run(ssh_cmd, shell=True, capture_output=True, text=True)
+    return subprocess.run(ssh_cmd, capture_output=True, text=True)
 
 def main():
     parser = argparse.ArgumentParser(description="Clean FL-CL Testbed Environment")

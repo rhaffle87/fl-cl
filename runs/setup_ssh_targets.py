@@ -33,12 +33,12 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 def run_ssh(ip, command, username="root", key_path=None):
-    opts = "-o StrictHostKeyChecking=no -o ConnectTimeout=5"
+    opts = ["-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5"]
     if key_path:
-        opts += f" -i \"{key_path}\""
+        opts += ["-i", key_path]
     
-    ssh_cmd = f"ssh -n {opts} {username}@{ip} \"{command}\""
-    return subprocess.run(ssh_cmd, shell=True, capture_output=True, text=True)
+    ssh_cmd = ["ssh", "-n"] + opts + [f"{username}@{ip}", command]
+    return subprocess.run(ssh_cmd, capture_output=True, text=True)
 
 def main():
     parser = argparse.ArgumentParser(description="Configure Target SSH Credentials for Hydra Testing")
@@ -94,9 +94,11 @@ def main():
         # - Set admin password
         # - Force SSH configuration to support PasswordAuthentication
         # - Restart SSH service
+        import shlex
+        escaped_admin_pw = shlex.quote(f"admin:{selected_password}")
         setup_cmds = (
             f"(id -u admin &>/dev/null || adduser -D -s /bin/sh admin || useradd -m -s /bin/bash admin) && "
-            f"echo 'admin:{selected_password}' | chpasswd && "
+            f"echo {escaped_admin_pw} | chpasswd && "
             f"sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config && "
             f"(/etc/init.d/sshd restart || rc-service sshd restart || systemctl restart sshd || systemctl restart ssh || service ssh restart) && "
             f"echo 'SUCCESS'"

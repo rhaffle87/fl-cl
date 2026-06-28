@@ -258,26 +258,52 @@ def main():
     latest_ckpt_path = os.path.join(args.checkpoint_dir, "model_latest.pt")
     
     if args.mlops_mode == "production":
-        if args.production_strategy == "resume" and os.path.exists(latest_ckpt_path):
-            print(f"[server] Production Warm-Start: Loading weights from {latest_ckpt_path}")
+        if args.production_strategy == "resume":
+            # Attempt to download the champion checkpoint from MLflow registry using model version alias
             try:
-                model = CyberDefenseNet()
-                # Security audit: use weights_only=True to prevent arbitrary code execution
-                model.load_state_dict(torch.load(latest_ckpt_path, map_location="cpu", weights_only=True))
+                from mlflow.tracking import MlflowClient
+                client = MlflowClient(tracking_uri=args.mlflow_uri)
+                model_name = "CyberDefenseNet"
+                print(f"[server] Production Warm-Start: Querying MLflow Model Registry for '{model_name}' alias 'champion'...")
+                model_version_details = client.get_model_version_by_alias(model_name, "champion")
+                resumed_from_version = model_version_details.version
+                resumed_from_run_id = model_version_details.run_id
                 
-                ndarrays = [val.cpu().numpy() for _, val in model.state_dict().items()]
-                initial_parameters = fl.common.ndarrays_to_parameters(ndarrays)
-                
-                # Load metadata
-                latest_meta_path = os.path.join(args.checkpoint_dir, "model_latest_metadata.json")
-                if os.path.exists(latest_meta_path):
-                    with open(latest_meta_path, "r") as f:
-                        meta = json.load(f)
-                        resumed_from_version = meta.get("model_version")
-                        resumed_from_run_id = meta.get("run_id")
+                print(f"[server] Production Warm-Start: Downloading model_latest.pt from run {resumed_from_run_id}...")
+                import mlflow.artifacts
+                downloaded_path = mlflow.artifacts.download_artifacts(
+                    run_id=resumed_from_run_id,
+                    artifact_path="model/model_latest.pt"
+                )
+                if downloaded_path and os.path.exists(downloaded_path):
+                    latest_ckpt_path = downloaded_path
+                    print(f"[server] Production Warm-Start: Successfully downloaded champion weights to {downloaded_path}")
             except Exception as e:
-                print(f"[server] Failed to load latest checkpoint: {e}. Starting fresh.")
-                initial_parameters = None
+                print(f"[server] Registry lookup for 'champion' failed ({e}). Falling back to local check.")
+
+            if os.path.exists(latest_ckpt_path):
+                print(f"[server] Production Warm-Start: Loading weights from {latest_ckpt_path}")
+                try:
+                    model = CyberDefenseNet()
+                    # Security audit: use weights_only=True to prevent arbitrary code execution
+                    model.load_state_dict(torch.load(latest_ckpt_path, map_location="cpu", weights_only=True))
+                    
+                    ndarrays = [val.cpu().numpy() for _, val in model.state_dict().items()]
+                    initial_parameters = fl.common.ndarrays_to_parameters(ndarrays)
+                    
+                    # If we didn't query the registry successfully but loaded locally, try to read local metadata
+                    if not resumed_from_version:
+                        latest_meta_path = os.path.join(args.checkpoint_dir, "model_latest_metadata.json")
+                        if os.path.exists(latest_meta_path):
+                            with open(latest_meta_path, "r") as f:
+                                meta = json.load(f)
+                                resumed_from_version = meta.get("model_version")
+                                resumed_from_run_id = meta.get("run_id")
+                except Exception as e:
+                    print(f"[server] Failed to load latest checkpoint: {e}. Starting fresh.")
+                    initial_parameters = None
+            else:
+                print("[server] Production Start: No prior checkpoint found or fresh flag active. Initializing new model weights.")
         else:
             print("[server] Production Start: No prior checkpoint found or fresh flag active. Initializing new model weights.")
     else:
@@ -550,6 +576,16 @@ def main():
                 json.dump(meta_data, f, indent=2)
             os.chmod(latest_meta_path, 0o600)
             print(f"[server] Updated master latest model metadata: {meta_data}")
+
+        run_ckpt_path = os.path.join(run_checkpoint_dir, "model_latest.pt")
+        if os.path.exists(run_ckpt_path):
+            mlflow.log_artifact(run_ckpt_path, artifact_path="model")
+            print(f"[server] Logged State Dict model artifact")
+            
+            # Copy to master directory
+            master_ckpt_path = os.path.join(args.checkpoint_dir, "model_latest.pt")
+            shutil.copy(run_ckpt_path, master_ckpt_path)
+            os.chmod(master_ckpt_path, 0o600)
 
         run_ts_path = os.path.join(run_checkpoint_dir, "model_latest_scripted.pt")
         if os.path.exists(run_ts_path):

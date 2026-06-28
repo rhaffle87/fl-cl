@@ -19,9 +19,9 @@ fl-cl/
 │   ├── 01_prerequisites.md       ← Hardware, datasets, traffic tools
 │   ├── 02_architecture.md        ← Conceptual blueprint & diagrams
 │   ├── 03_workarounds.md         ← Cluster-specific fixes & deployment
-│   ├── 04_deployment.md             ← Step-by-step cluster setup
-│   ├── 05_orchestration.md          ← Training and attack execution
-│   └── 06_federated_continual_learning.md ← End-to-end FCL technical explanation
+│   ├── 04_deployment.md          ← Step-by-step cluster setup
+│   ├── 05_orchestration.md       ← Training and attack execution
+│   └── 06_fcl.md                 ← End-to-end FCL technical explanation
 │
 ├── infra/                        ← Infrastructure-as-Code (shell scripts)
 │   ├── 01_host_config/           ← PVE hypervisor-level configuration
@@ -64,14 +64,21 @@ fl-cl/
 - Python environments provisioned on remote nodes (see `infra/04_guest_setup/`)
 
 ### 1. Pre-flight Setup & Cleanup
-Before starting a simulation run, prepare the testbed by executing the helper scripts:
+First, configure your `.env` file at the root of the project with your Telegram credentials and local SSH private key path:
+```env
+TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
+TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
+SSH_KEY_PATH="C:\Users\Username\.ssh\id_ed25519"
+```
+
+Prepare the testbed by executing the helper scripts (which auto-load settings from `.env`):
 
 ```bash
 # Configure "admin" user with a challenging wordlist password on targets
-python runs/setup_ssh_targets.py --key /path/to/ssh_key
+python runs/setup_ssh_targets.py
 
 # Reset MLflow database, clear active flow CSVs, logs, and processes
-python runs/clean_testbed.py --key /path/to/ssh_key
+python runs/clean_testbed.py
 ```
 
 ### 2. Execute Training Run
@@ -79,13 +86,13 @@ Run the simulation and federated training. The pipeline supports two MLOps modes
 
 ```bash
 # Execute training in experimental mode (cold start, registers model with 'challenger' alias)
-python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment.yaml --mlops-mode experimental
+python src/orchestrate.py --mlops-mode experimental
 
 # Execute training in production mode with a resume strategy (warm-starts training using the latest 'champion' model version)
-python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment.yaml --mlops-mode production --production-strategy resume
+python src/orchestrate.py --mlops-mode production --production-strategy resume
 
 # Execute training in production mode from scratch (cold start, registers new model and promotes to 'champion' alias on finish)
-python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment.yaml --mlops-mode production --production-strategy fresh
+python src/orchestrate.py --mlops-mode production --production-strategy fresh
 ```
 
 The orchestrator will automatically:
@@ -167,5 +174,5 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/validate_model.py --checkpoint 
 | [Workarounds](docs/03_workarounds.md) | Cluster-specific fixes and step-by-step configurations |
 | [Deployment](docs/04_deployment.md) | Step-by-step cluster setup, provisioning, and installations |
 | [Orchestration](docs/05_orchestration.md) | Detailed guide to training and attack execution |
-| [FCL Explained](docs/06_federated_continual_learning.md) | End-to-end technical explanation of how FCL works |
+| [FCL Explained](docs/06_fcl.md) | End-to-end technical explanation of how FCL works |
 | [Tech Stack](TECH_STACK.md) | Full technology inventory per layer |

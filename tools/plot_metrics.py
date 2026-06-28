@@ -35,19 +35,27 @@ def run_plotting(key_path, aggregator_ip, local_db="mlflow_temp.db", run_id_arg=
         output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "exports", "plots"))
     os.makedirs(output_dir, exist_ok=True)
 
+    ssh_opts = ["-o", "StrictHostKeyChecking=no"]
+    if key_path:
+        ssh_opts += ["-i", key_path]
+
     # 1. Back up database remotely using Python's sqlite3 backup API
     print(f"[*] Backing up remote MLflow database on {aggregator_ip}...")
-    backup_cmd = f'ssh -i "{key_path}" -o StrictHostKeyChecking=no root@{aggregator_ip} "python3 -c \\"import sqlite3; src = sqlite3.connect(\'/root/mlflow.db\'); dst = sqlite3.connect(\'/tmp/mlflow_backup.db\'); src.backup(dst); dst.close(); src.close()\\""'
-    subprocess.run(backup_cmd, shell=True, check=True)
+    backup_script = "import sqlite3; src = sqlite3.connect('/root/mlflow.db'); dst = sqlite3.connect('/tmp/mlflow_backup.db'); src.backup(dst); dst.close(); src.close()"
+    backup_cmd = ["ssh"] + ssh_opts + [f"root@{aggregator_ip}", f"python3 -c \"{backup_script}\""]
+    subprocess.run(backup_cmd, check=True)
 
     # 2. Download backup via SCP
     print(f"[*] Downloading remote MLflow database backup to {local_db}...")
-    scp_cmd = f'scp -i "{key_path}" -o StrictHostKeyChecking=no root@{aggregator_ip}:/tmp/mlflow_backup.db "{local_db}"'
-    subprocess.run(scp_cmd, shell=True, check=True)
+    scp_opts = ["-o", "StrictHostKeyChecking=no"]
+    if key_path:
+        scp_opts += ["-i", key_path]
+    scp_cmd = ["scp"] + scp_opts + [f"root@{aggregator_ip}:/tmp/mlflow_backup.db", local_db]
+    subprocess.run(scp_cmd, check=True)
 
     # 3. Delete remote backup file
-    cleanup_remote_cmd = f'ssh -i "{key_path}" -o StrictHostKeyChecking=no root@{aggregator_ip} "rm -f /tmp/mlflow_backup.db"'
-    subprocess.run(cleanup_remote_cmd, shell=True, check=True)
+    cleanup_remote_cmd = ["ssh"] + ssh_opts + [f"root@{aggregator_ip}", "rm -f /tmp/mlflow_backup.db"]
+    subprocess.run(cleanup_remote_cmd, check=True)
 
     # 4. Query metrics
     conn = sqlite3.connect(local_db)

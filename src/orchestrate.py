@@ -83,9 +83,9 @@ class RemoteNode:
         self.procs = []
 
     def _get_ssh_opts(self):
-        opts = "-o StrictHostKeyChecking=no"
+        opts = ["-o", "StrictHostKeyChecking=no"]
         if self.key_path:
-            opts += f" -i \"{self.key_path}\""
+            opts += ["-i", self.key_path]
         return opts
 
     def run_cmd(self, command, background=False, log_name=None):
@@ -105,21 +105,21 @@ class RemoteNode:
                 else:
                     log_name = f"{self.name}.log"
             full_command = f"nohup {command} > /tmp/{log_name} 2>&1 &"
-            ssh_cmd = f"ssh -n {opts} {self.username}@{self.ip} \"{full_command}\""
+            ssh_cmd = ["ssh", "-n"] + opts + [f"{self.username}@{self.ip}", full_command]
             print(f"[{self.name}] Spawning background (logs -> /tmp/{log_name}): {command}")
-            proc = subprocess.Popen(ssh_cmd, shell=True)
+            proc = subprocess.Popen(ssh_cmd)
             self.procs.append(proc)
             return proc
         else:
-            ssh_cmd = f"ssh -n {opts} {self.username}@{self.ip} \"{command}\""
+            ssh_cmd = ["ssh", "-n"] + opts + [f"{self.username}@{self.ip}", command]
             print(f"[{self.name}] Running: {command}")
-            return subprocess.run(ssh_cmd, shell=True, capture_output=True, text=True)
+            return subprocess.run(ssh_cmd, capture_output=True, text=True)
 
     def scp_file(self, local_path, remote_path):
         opts = self._get_ssh_opts()
-        scp_cmd = f"scp {opts} {local_path} {self.username}@{self.ip}:{remote_path}"
+        scp_cmd = ["scp"] + opts + [local_path, f"{self.username}@{self.ip}:{remote_path}"]
         print(f"[{self.name}] Transferring {local_path} -> {remote_path}")
-        return subprocess.run(scp_cmd, shell=True, capture_output=True, text=True)
+        return subprocess.run(scp_cmd, capture_output=True, text=True)
 
     def cleanup(self, kill_mlflow=False):
         opts = self._get_ssh_opts()
@@ -128,7 +128,8 @@ class RemoteNode:
             pattern += "|mlflow"
         kill_cmd = f"pkill -f '{pattern}' || killall -9 nc || true"
         print(f"[{self.name}] Cleaning up background processes...")
-        subprocess.run(f"ssh -n {opts} {self.username}@{self.ip} \"{kill_cmd}\"", shell=True, capture_output=True)
+        ssh_cmd = ["ssh", "-n"] + opts + [f"{self.username}@{self.ip}", kill_cmd]
+        subprocess.run(ssh_cmd, capture_output=True)
 
 
 
@@ -274,25 +275,31 @@ def main():
         tg_enabled = True
     notifier = TelegramNotifier(bot_token=tg_token, chat_id=tg_chat_id, enabled=tg_enabled)
 
+    # Determine the key path to use for remote node communication
+    default_key = os.path.expanduser("~/.ssh/id_ed25519")
+    if not os.path.exists(default_key) and os.path.exists(os.path.expanduser("~/.ssh/id_rsa")):
+        default_key = os.path.expanduser("~/.ssh/id_rsa")
+    key_path = args.key or os.environ.get("SSH_KEY_PATH") or default_key
+
     # Define all remote nodes
     aggregator = RemoteNode("fl-aggregator",
                             get_config_value(config, "topology", "aggregator", default="10.10.130.10"),
-                            "root", args.key)
+                            "root", key_path)
     def_a = RemoteNode("defender-a",
                        get_config_value(config, "topology", "defender_a", default="10.10.130.11"),
-                       "root", args.key)
+                       "root", key_path)
     def_b = RemoteNode("defender-b",
                        get_config_value(config, "topology", "defender_b", default="10.10.130.12"),
-                       "root", args.key)
+                       "root", key_path)
     target_a = RemoteNode("target-a1",
                           get_config_value(config, "topology", "target_a", default="10.10.110.15"),
-                          "root", args.key)
+                          "root", key_path)
     target_b = RemoteNode("target-b1",
                           get_config_value(config, "topology", "target_b", default="10.10.120.15"),
-                          "root", args.key)
+                          "root", key_path)
     traffic_gen = RemoteNode("traffic-gen",
                              get_config_value(config, "topology", "traffic_gen", default="10.10.140.10"),
-                             "root", args.key)
+                             "root", key_path)
 
     nodes = [aggregator, def_a, def_b, target_a, target_b, traffic_gen]
 
@@ -545,15 +552,9 @@ def main():
             experiment_id=experiment_id,
         )
 
-        # Determine the key path to use for local plotting (dynamically resolve home dir for security)
-        default_key = os.path.expanduser("~/.ssh/id_ed25519")
-        if not os.path.exists(default_key) and os.path.exists(os.path.expanduser("~/.ssh/id_rsa")):
-            default_key = os.path.expanduser("~/.ssh/id_rsa")
-        plotting_key = args.key or os.environ.get("SSH_KEY_PATH") or default_key
-
         # Trigger automated plots and report generation
         run_post_training_plots_and_report(
-            key_path=plotting_key,
+            key_path=key_path,
             aggregator_ip=aggregator.ip,
             experiment_name=exp_name_modified,
             rounds=rounds,
