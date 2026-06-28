@@ -74,10 +74,10 @@ class RemoteNode:
         opts = self._get_ssh_opts()
         if background:
             if not log_name:
-                if "mlflow" in command:
-                    log_name = "mlflow.log"
-                elif "server.py" in command:
+                if "server.py" in command:
                     log_name = "flower-server.log"
+                elif "mlflow" in command:
+                    log_name = "mlflow.log"
                 elif "client.py" in command:
                     log_name = "flower-client.log"
                 elif "extractor.py" in command:
@@ -105,12 +105,13 @@ class RemoteNode:
 
     def cleanup(self, kill_mlflow=False):
         opts = self._get_ssh_opts()
-        pattern = "server.py|client.py|extractor.py|attack_flow.py|busybox httpd"
+        pattern = "server.py|client.py|extractor.py|attack_flow.py|busybox httpd|normal_traffic_loop|curl|simple_httpd.sh|nc"
         if kill_mlflow:
             pattern += "|mlflow"
-        kill_cmd = f"pkill -f '{pattern}' || true"
+        kill_cmd = f"pkill -f '{pattern}' || killall -9 nc || true"
         print(f"[{self.name}] Cleaning up background processes...")
-        subprocess.run(f"ssh {opts} {self.username}@{self.ip} \"{kill_cmd}\"", shell=True, capture_output=True)
+        subprocess.run(f"ssh -n {opts} {self.username}@{self.ip} \"{kill_cmd}\"", shell=True, capture_output=True)
+
 
 
 def run_data_quality_check(defender_node: RemoteNode) -> dict:
@@ -305,6 +306,9 @@ def main():
                 node.cleanup(kill_mlflow=True)
         else:
             node.cleanup(kill_mlflow=True)
+            if node.name in ["defender-a", "defender-b"]:
+                print(f"[{node.name}] Cleaning up ramdisk flows directory...")
+                node.run_cmd("rm -rf /mnt/ramdisk/flows/* || true")
 
     try:
         print("\n=== Phase 2: Synchronizing source code to remote nodes ===")
@@ -333,11 +337,31 @@ def main():
         # Traffic Generator files
         traffic_gen.scp_file("src/traffic_gen/attack_flow.py", "~/attack_flow.py")
 
-        print("\n=== Phase 3: Launching Benign Target Servers (busybox httpd) ===")
-        target_a.run_cmd("mkdir -p /tmp/www && echo 'Target A1 Benign Server' > /tmp/www/index.html")
-        target_a.run_cmd("busybox httpd -p 80 -h /tmp/www")
-        target_b.run_cmd("mkdir -p /tmp/www && echo 'Target B1 Benign Server' > /tmp/www/index.html")
-        target_b.run_cmd("busybox httpd -p 80 -h /tmp/www")
+        # Target files
+        target_a.scp_file("src/traffic_gen/simple_httpd.sh", "/tmp/simple_httpd.sh")
+        target_b.scp_file("src/traffic_gen/simple_httpd.sh", "/tmp/simple_httpd.sh")
+
+        print("\n=== Phase 3: Launching Benign Target Servers (simple_httpd.sh) ===")
+        target_a.run_cmd("chmod +x /tmp/simple_httpd.sh && nohup /tmp/simple_httpd.sh >/dev/null 2>&1 &", background=True)
+        target_b.run_cmd("chmod +x /tmp/simple_httpd.sh && nohup /tmp/simple_httpd.sh >/dev/null 2>&1 &", background=True)
+
+        print("\n=== Phase 3b: Generating Normal Traffic from Defender Nodes ===")
+        # Defender IPs (10.10.130.11/12) are NOT the traffic_gen IP (10.10.140.10),
+        # so assign_label() classifies these flows as class 0 (Normal).
+        # Use background=True (nohup mode) so the loop fully detaches without blocking orchestration.
+        target_a_ip = get_config_value(config, "topology", "target_a", default="10.10.110.15")
+        target_b_ip = get_config_value(config, "topology", "target_b", default="10.10.120.15")
+        print(f"[*] Spawning Normal traffic from defender nodes (curl -> {target_a_ip}, {target_b_ip})...")
+        def_a.run_cmd(
+            f"bash -c 'while true; do normal_traffic_loop=1; curl -s -o /dev/null http://{target_a_ip}/ http://{target_b_ip}/ --max-time 3 --connect-timeout 2; sleep 0.5; done'",
+            background=True,
+            log_name="normal-traffic-a.log"
+        )
+        def_b.run_cmd(
+            f"bash -c 'while true; do normal_traffic_loop=1; curl -s -o /dev/null http://{target_a_ip}/ http://{target_b_ip}/ --max-time 3 --connect-timeout 2; sleep 0.5; done'",
+            background=True,
+            log_name="normal-traffic-b.log"
+        )
 
         print("\n=== Phase 4: Launching NFStream Traffic Extractors ===")
         def_a.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 500", background=True)
@@ -361,28 +385,28 @@ def main():
         )
 
         print("\n=== Phase 6: Starting Threat Simulation Stages ===")
-        target_a_ip = get_config_value(config, "topology", "target_a", default="10.10.110.15")
-        target_b_ip = get_config_value(config, "topology", "target_b", default="10.10.120.15")
+        # target_a_ip and target_b_ip already defined in Phase 3b above
 
-        # 1. Benign background traffic
+        # 1. Benign background traffic from traffic-gen (labeled DoS/port-80 by assign_label)
+        #    Real Normal flows come from defender nodes in Phase 3b above.
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target {target_a_ip} --duration {duration}", background=True)
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target {target_b_ip} --duration {duration}", background=True)
-        time.sleep(duration // 2)
+        time.sleep(duration // 3)  # Shorter wait — we rely on defender curl for Normal class
 
-        # 2. SSH Brute Force
+        # 2. SSH Brute Force — extended wait to generate more SSH-BF (class 3) samples
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target {target_a_ip} --duration {duration}", background=True)
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target {target_b_ip} --duration {duration}", background=True)
-        time.sleep(duration // 2)
+        time.sleep(duration)  # Full duration wait for SSH to generate more flows
 
-        # 3. Slowloris HTTP Flooding
+        # 3. Slowloris DoS — extended wait to generate more DoS (class 4) samples
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_a_ip} --duration {duration} --port 80", background=True)
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_b_ip} --duration {duration} --port 80", background=True)
-        time.sleep(duration // 2)
+        time.sleep(duration)  # Full duration wait for DoS flows to accumulate
 
-        # 4. DNS Exfiltration
+        # 4. DNS Exfiltration — shortened wait to avoid over-dominating dataset
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target {target_a_ip} --duration {duration}", background=True)
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target {target_b_ip} --duration {duration}", background=True)
-        time.sleep(duration // 2)
+        time.sleep(duration // 3)  # Shorter wait — Exfil over-represented in data
 
         # 5. C2 Botnet Beaconing
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode botnet --target {target_a_ip} --duration {duration}", background=True)
@@ -417,9 +441,9 @@ def main():
                     print(f"  Class {label} ({name:>7s}): {count}")
                 missing = [label_names[i] for i in range(5) if label_counts.get(i, 0) == 0]
                 if missing:
-                    print(f"[{node_name}] ⚠ Missing classes: {', '.join(missing)}")
+                    print(f"[{node_name}] [!] WARNING: Missing classes: {', '.join(missing)}")
             else:
-                print(f"[{node_name}] ⚠ Could not read label distribution")
+                print(f"[{node_name}] [!] WARNING: Could not read label distribution")
 
         print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
         def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum}", background=True)

@@ -17,9 +17,13 @@ from torch.nn import CrossEntropyLoss
 from avalanche.training.supervised import EWC
 
 
+# Gradient clip norm — prevents NaN loss from EWC Fisher penalty explosion
+_GRAD_CLIP_MAX_NORM = 1.0
+
+
 def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=None, lr: float = 0.01, momentum: float = 0.9):
     """
-    Create an EWC-equipped continual learner.
+    Create an EWC-equipped continual learner with gradient clipping.
 
     Args:
         model:         CyberDefenseNet instance
@@ -37,10 +41,24 @@ def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=
         class_weights = [12.0, 3.0, 3.0, 15.0, 1.0]
     
     weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
+    # Normalize class weights so they sum to the number of classes, preventing gradient explosion/NaNs
+    weights_tensor = (weights_tensor / weights_tensor.sum()) * len(class_weights)
+
+    optimizer = SGD(model.parameters(), lr=lr, momentum=momentum)
+
+    # Register gradient clipping hook on optimizer step to prevent NaN propagation.
+    # This fires before each parameter update, capping the global gradient norm.
+    _orig_step = optimizer.step
+
+    def _clipped_step(closure=None):
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=_GRAD_CLIP_MAX_NORM)
+        return _orig_step(closure)
+
+    optimizer.step = _clipped_step
 
     return EWC(
         model=model,
-        optimizer=SGD(model.parameters(), lr=lr, momentum=momentum),
+        optimizer=optimizer,
         criterion=CrossEntropyLoss(weight=weights_tensor),
         ewc_lambda=ewc_lambda,
         train_mb_size=32,

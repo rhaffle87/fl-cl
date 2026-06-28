@@ -11,6 +11,13 @@ import json
 from datetime import datetime
 
 
+def escape_html(text: str) -> str:
+    """Escapes special characters to be safe for Telegram HTML parse_mode."""
+    if not isinstance(text, str):
+        text = str(text)
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
 class TelegramNotifier:
     """Lightweight Telegram bot notifier (no external dependencies)."""
 
@@ -21,7 +28,7 @@ class TelegramNotifier:
         self.chat_id = chat_id
         self.enabled = enabled and bool(bot_token) and bool(chat_id)
 
-    def send(self, message: str, parse_mode: str = "Markdown") -> bool:
+    def send(self, message: str, parse_mode: str = "HTML") -> bool:
         """Send a message to the configured Telegram chat.
 
         Returns True on success, False on failure (never raises).
@@ -52,23 +59,31 @@ class TelegramNotifier:
 
     def notify_start(self, experiment_name: str, rounds: int, config_summary: str = "", 
                      mlops_mode: str = "experimental", git_commit: str = "unknown"):
-        """Notify that an FL-CL experiment has started with a professional MLOps alert format."""
+        """Notify that an FL-CL experiment has started with a professional HTML MLOps alert format."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        name_esc = escape_html(experiment_name)
+        mode_esc = escape_html(mlops_mode.upper())
+        rounds_esc = escape_html(str(rounds))
+        commit_esc = escape_html(git_commit[:8] if git_commit else "unknown")
+        time_esc = escape_html(timestamp)
+        
         msg = (
-            f"🚀 *[RUNNING] FL-CL Pipeline Start Alert*\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🔹 *Experiment:* `{experiment_name}`\n"
-            f"🔹 *MLOps Mode:* `{mlops_mode.upper()}`\n"
-            f"🔹 *Rounds:* `{rounds}`\n"
-            f"🔹 *Git Commit:* `{git_commit[:8]}`\n"
-            f"🔹 *Timestamp:* `{timestamp}`\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 <b>[MLOps Pipeline] FL-CL Training Initiated</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>🔹 Environment:</b> <code>Proxmox-Testbed</code>\n"
+            f"<b>🔹 Experiment:</b> <code>{name_esc}</code>\n"
+            f"<b>🔹 MLOps Mode:</b> <code>{mode_esc}</code>\n"
+            f"<b>🔹 Federated Rounds:</b> <code>{rounds_esc}</code>\n"
+            f"<b>🔹 Git Commit:</b> <code>{commit_esc}</code>\n"
+            f"<b>🔹 Started At:</b> <code>{time_esc}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         )
         if config_summary:
-            msg += f"⚙️ *Configuration Parameters:*\n```\n{config_summary}\n```\n"
+            config_esc = escape_html(config_summary)
+            msg += f"⚙️ <b>Execution Parameters:</b>\n<pre>{config_esc}</pre>\n"
             
-        return self.send(msg)
+        return self.send(msg, parse_mode="HTML")
 
     def notify_complete(self, experiment_name: str, accuracy: float, loss: float,
                         class_accuracies: dict = None, duration_min: float = 0,
@@ -76,57 +91,74 @@ class TelegramNotifier:
         """Notify that an FL-CL experiment completed successfully with professional metrics."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        msg = (
-            f"✅ *[SUCCESS] FL-CL Pipeline Completion Alert*\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🔹 *Experiment:* `{experiment_name}`\n"
-            f"🔹 *Accuracy:* `{accuracy:.4f}` (`{accuracy*100:.2f}%`)\n"
-            f"🔹 *Loss:* `{loss:.4f}`\n"
-        )
+        name_esc = escape_html(experiment_name)
+        acc_esc = escape_html(f"{accuracy * 100:.2f}%")
+        loss_esc = escape_html(f"{loss:.4f}")
+        time_esc = escape_html(timestamp)
+        duration_esc = escape_html(f"{duration_min:.1f} minutes" if duration_min > 0 else "N/A")
+        run_esc = escape_html(run_id[:8] if run_id else "N/A")
         
-        if duration_min > 0:
-            msg += f"🔹 *Duration:* `{duration_min:.1f} minutes`\n"
-            
-        if run_id:
-            msg += f"🔹 *MLflow Run ID:* `{run_id[:8]}...`\n"
-            if mlflow_uri and experiment_id:
-                base_uri = mlflow_uri.rstrip("/")
-                run_url = f"{base_uri}/#/experiments/{experiment_id}/runs/{run_id}"
-                msg += f"🔗 [Open MLflow Dashboard]({run_url})\n"
-                
-        msg += f"🔹 *Timestamp:* `{timestamp}`\n"
-        msg += f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg = (
+            f"🟢 <b>[MLOps Pipeline] FL-CL Training Completed</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>🔹 Environment:</b> <code>Proxmox-Testbed</code>\n"
+            f"<b>🔹 Experiment:</b> <code>{name_esc}</code>\n"
+            f"<b>🔹 Status:</b> <code>SUCCESS</code>\n\n"
+            f"📊 <b>Global Evaluation Metrics:</b>\n"
+            f"• <b>Overall Accuracy:</b> <code>{acc_esc}</code>\n"
+            f"• <b>Final Aggregated Loss:</b> <code>{loss_esc}</code>\n"
+            f"• <b>Total Duration:</b> <code>{duration_esc}</code>\n"
+            f"• <b>MLflow Run ID:</b> <code>{run_esc}</code>\n\n"
+        )
         
         if class_accuracies:
             names = {0: "Normal", 1: "Botnet", 2: "Exfil", 3: "SSH-BF", 4: "DoS"}
-            msg += "*📊 Per-Class Accuracy Evaluation:*\n"
+            msg += "📈 <b>Per-Class Accuracy Breakdown:</b>\n"
             for cls, acc in sorted(class_accuracies.items()):
                 name = names.get(cls, f"Class {cls}")
                 percent = acc * 100
                 bar_len = int(acc * 10)
                 bar = "█" * bar_len + "░" * (10 - bar_len)
-                msg += f"• `{name:>8s}`: `{percent:6.2f}%` `[{bar}]`\n"
-                
-        return self.send(msg)
+                name_padded = f"{name:<8s}"
+                msg += f"• <code>{escape_html(name_padded)}</code>: <code>{percent:6.2f}%</code> <code>[{bar}]</code>\n"
+            msg += "\n"
+            
+        if run_id and mlflow_uri and experiment_id:
+            base_uri = mlflow_uri.rstrip("/")
+            run_url = f"{base_uri}/#/experiments/{experiment_id}/runs/{run_id}"
+            msg += (
+                f"🔗 <b>Dashboard Link:</b>\n"
+                f"• <a href=\"{run_url}\">Open MLflow Dashboard</a>\n\n"
+            )
+            
+        msg += (
+            f"📅 <b>Completed At:</b> <code>{time_esc}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        )
+        return self.send(msg, parse_mode="HTML")
 
     def notify_failure(self, experiment_name: str, error: str, round_num: int = 0, duration_min: float = 0):
         """Notify that an FL-CL experiment failed with detailed diagnostics."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        name_esc = escape_html(experiment_name)
+        time_esc = escape_html(timestamp)
+        
+        round_info = f"• <b>Failed at Round:</b> <code>{round_num}</code>\n" if round_num > 0 else ""
+        duration_info = f"• <b>Elapsed Time:</b> <code>{duration_min:.1f} minutes</code>\n" if duration_min > 0 else ""
+        
+        error_esc = escape_html(error[:800])
         msg = (
-            f"❌ *[FAILED] FL-CL Pipeline Failure Alert*\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🔹 *Experiment:* `{experiment_name}`\n"
+            f"🔴 <b>[MLOps Pipeline] FL-CL Training Failed</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>🔹 Environment:</b> <code>Proxmox-Testbed</code>\n"
+            f"<b>🔹 Experiment:</b> <code>{name_esc}</code>\n"
+            f"<b>🔹 Status:</b> <code>FAILED</code>\n"
+            f"{round_info}"
+            f"{duration_info}\n"
+            f"💥 <b>Failure Diagnostics & Stacktrace:</b>\n"
+            f"<pre>{error_esc}</pre>\n\n"
+            f"📅 <b>Failed At:</b> <code>{time_esc}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         )
-        if round_num > 0:
-            msg += f"🔹 *Failed at Round:* `{round_num}`\n"
-        if duration_min > 0:
-            msg += f"🔹 *Elapsed Time:* `{duration_min:.1f} minutes`\n"
-            
-        msg += (
-            f"🔹 *Timestamp:* `{timestamp}`\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"💥 *Error Stacktrace:*\n"
-            f"```\n{error[:500]}\n```"
-        )
-        return self.send(msg)
+        return self.send(msg, parse_mode="HTML")

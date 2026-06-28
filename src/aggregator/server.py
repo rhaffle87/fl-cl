@@ -119,9 +119,22 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
             parameters, config = aggregated
             ndarrays = fl.common.parameters_to_ndarrays(parameters)
 
+            # Security + stability guard: sanitize NaN/Inf values before checkpointing
+            sanitized_arrays = []
+            total_nan = 0
+            for arr in ndarrays:
+                import numpy as np
+                nan_count = np.isnan(arr).sum() + np.isinf(arr).sum()
+                if nan_count > 0:
+                    total_nan += int(nan_count)
+                    arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+                sanitized_arrays.append(arr)
+            if total_nan > 0:
+                print(f"[server] WARNING: Aggregated weights contained {total_nan} NaN/Inf values at round {server_round}. Sanitized to zero.")
+
             model = CyberDefenseNet()
             state_dict = OrderedDict(
-                {k: torch.tensor(v) for k, v in zip(model.state_dict().keys(), ndarrays)}
+                {k: torch.tensor(v) for k, v in zip(model.state_dict().keys(), sanitized_arrays)}
             )
             model.load_state_dict(state_dict, strict=True)
 
@@ -148,6 +161,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                 print(f"[server] Checkpoint saved: {ckpt_path}")
 
         return aggregated
+
 
 
 def get_git_hash(cli_commit=None):

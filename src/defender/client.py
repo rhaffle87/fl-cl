@@ -198,8 +198,16 @@ class CyberDefenseClient(fl.client.NumPyClient):
         return [v.cpu().numpy() for _, v in self.net.state_dict().items()]
 
     def set_parameters(self, params):
+        sanitized = []
+        for v in params:
+            t = torch.tensor(v)
+            nan_count = torch.isnan(t).sum().item() + torch.isinf(t).sum().item()
+            if nan_count > 0:
+                print(f"[client] WARNING: Received {nan_count} NaN/Inf values in weight tensor. Replacing with zeros.")
+                t = torch.nan_to_num(t, nan=0.0, posinf=0.0, neginf=0.0)
+            sanitized.append(t)
         state = OrderedDict(
-            {k: torch.tensor(v) for k, v in zip(self.net.state_dict().keys(), params)}
+            {k: v for k, v in zip(self.net.state_dict().keys(), sanitized)}
         )
         self.net.load_state_dict(state, strict=True)
 
@@ -215,9 +223,18 @@ class CyberDefenseClient(fl.client.NumPyClient):
             print(f"[client] Trained on {num_samples} flows")
         except FileNotFoundError as e:
             print(f"[client] WARNING: {e}. Skipping training this round (no flows yet).")
+        # Validate outgoing parameters — never send NaN weights back to server
+        out_params = self.get_parameters(config={})
+        clean_params = []
+        for i, v in enumerate(out_params):
+            t = torch.tensor(v)
+            if torch.isnan(t).any() or torch.isinf(t).any():
+                print(f"[client] WARNING: Outgoing weight tensor[{i}] contains NaN/Inf. Replacing with zeros before upload.")
+                t = torch.nan_to_num(t, nan=0.0, posinf=0.0, neginf=0.0)
+            clean_params.append(t.numpy())
         # Return at least 1 so FedAvg aggregate_inplace never divides by zero
         # when all clients have an empty ramdisk (e.g. extractor not ready yet).
-        return self.get_parameters(config={}), max(num_samples, 1), {}
+        return clean_params, max(num_samples, 1), {}
 
     @mlflow.trace(name="client_evaluate")
     def evaluate(self, parameters, config):
