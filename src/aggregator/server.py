@@ -146,8 +146,10 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
         return aggregated
 
 
-def get_git_hash():
+def get_git_hash(cli_commit=None):
     """Get current git commit hash for run traceability."""
+    if cli_commit and cli_commit != "unknown":
+        return cli_commit
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -214,6 +216,7 @@ def main():
                         help="MLops mode (experimental or production)")
     parser.add_argument("--production-strategy", default="resume", choices=["resume", "fresh"],
                         help="Production warm-start checkpoint strategy")
+    parser.add_argument("--git-commit", default="unknown", help="Git commit hash from orchestrator workstation")
     args = parser.parse_args()
 
     # Performance optimization: enable SQLite Write-Ahead Logging
@@ -293,7 +296,7 @@ def main():
         mlflow.log_params(params)
 
         tags = {
-            "git_commit": get_git_hash(),
+            "git_commit": get_git_hash(args.git_commit),
             "mlops_mode": args.mlops_mode,
             "production_strategy": args.production_strategy if args.mlops_mode == "production" else "N/A",
             "warm_started": "True" if initial_parameters is not None else "False"
@@ -317,7 +320,13 @@ def main():
         )
 
         # Log final best checkpoint as MLflow artifact using MLflow 3.x LoggedModel entities
-        run_best_ckpt = os.path.join(run_checkpoint_dir, "model_latest.pt")
+        # Determine the best checkpoint path from best_round
+        best_round_filename = f"model_round_{strategy.best_round:04d}.pt"
+        run_best_ckpt = os.path.join(run_checkpoint_dir, best_round_filename)
+        # Fallback if best_round file doesn't exist
+        if not os.path.exists(run_best_ckpt):
+            run_best_ckpt = os.path.join(run_checkpoint_dir, "model_latest.pt")
+        
         if os.path.exists(run_best_ckpt):
             import pandas as pd
             import numpy as np
@@ -376,8 +385,56 @@ def main():
                 client = MlflowClient()
                 model_name = "CyberDefenseNet"
                 
+                # Update high-level registered model metadata (description and tags)
+                registered_model_desc = (
+                    "Global federated model for 5-class encrypted network intrusion detection. "
+                    "Employs PyTorch (CyberDefenseNet architecture) combined with client-side Avalanche EWC "
+                    "(Elastic Weight Consolidation) to adapt incrementally to new security threats without "
+                    "forgetting historical signatures."
+                )
+                client.update_registered_model(
+                    name=model_name,
+                    description=registered_model_desc
+                )
+                client.set_registered_model_tag(model_name, "task", "Network Intrusion Detection")
+                client.set_registered_model_tag(model_name, "framework", "PyTorch")
+                client.set_registered_model_tag(model_name, "input_dim", "32")
+                client.set_registered_model_tag(model_name, "classes", "0: Normal, 1: Botnet, 2: DNS Exfiltration, 3: SSH Brute Force, 4: DoS")
+                client.set_registered_model_tag(model_name, "cl_strategy", "EWC")
+                
+                # Construct detailed model version description
+                version_desc = (
+                    f"MLOps Mode: {args.mlops_mode}\n"
+                    f"Production Strategy: {args.production_strategy if args.mlops_mode == 'production' else 'N/A'}\n"
+                    f"Git Commit: {get_git_hash(args.git_commit)}\n"
+                    f"FL Rounds: {args.rounds}\n"
+                    f"Evaluation Metrics at Best Round {strategy.best_round}:\n"
+                    f"  - Overall Accuracy: {strategy.latest_accuracy*100:.2f}%\n"
+                    f"  - Aggregated Loss: {strategy.best_loss:.4f}\n"
+                )
+                class_labels = {0: "Normal", 1: "Botnet", 2: "DNS Exfiltration", 3: "SSH Brute Force", 4: "DoS"}
+                for i in range(5):
+                    class_acc = strategy.latest_metrics.get(f"accuracy_class_{i}")
+                    if class_acc is not None:
+                        version_desc += f"  - Class {i} ({class_labels[i]}): {class_acc*100:.2f}%\n"
+                
+                client.update_model_version(
+                    name=model_name,
+                    version=str(new_version),
+                    description=version_desc
+                )
+
                 # Set tags on model version object
                 client.set_model_version_tag(model_name, str(new_version), "mlops_mode", args.mlops_mode)
+                client.set_model_version_tag(model_name, str(new_version), "git_commit", get_git_hash(args.git_commit))
+                client.set_model_version_tag(model_name, str(new_version), "accuracy", f"{strategy.latest_accuracy:.6f}")
+                client.set_model_version_tag(model_name, str(new_version), "loss", f"{strategy.best_loss:.6f}")
+                client.set_model_version_tag(model_name, str(new_version), "fl_rounds", str(args.rounds))
+                
+                class_3_acc = strategy.latest_metrics.get("accuracy_class_3")
+                if class_3_acc is not None:
+                    client.set_model_version_tag(model_name, str(new_version), "accuracy_class_3", f"{class_3_acc:.6f}")
+
                 if resumed_from_version:
                     client.set_model_version_tag(model_name, str(new_version), "parent_version", str(resumed_from_version))
                 if resumed_from_run_id:

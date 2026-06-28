@@ -354,7 +354,7 @@ def main():
         # Start FL server with config artifact logging
         config_arg = "--config-file ~/experiment.yaml" if config_path else ""
         server_proc = aggregator.run_cmd(
-            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy}",
+            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit}",
             background=True
         )
 
