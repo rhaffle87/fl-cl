@@ -50,6 +50,3 @@ runs/target_credentials.json
 
 # Scratch scripts/temporary code
 scratch/
-
-# Generated run outputs (plots, metrics, summaries)
-exports/
