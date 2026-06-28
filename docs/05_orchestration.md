@@ -59,10 +59,7 @@ Scripts are grouped into logical folders based on their role and deployment targ
 ```
 fl-cl/
 ├── configs/
-│   ├── experiment.yaml    # Central configuration file for hyperparameters & topology
-│   ├── experiment_100.yaml # 100-round scratch configuration
-│   ├── experiment_500.yaml # 500-round warm-start configuration
-│   └── experiment_1000.yaml # 1000-round warm-start configuration
+│   └── experiment.yaml    # Central configuration file for hyperparameters & topology
 │
 ├── runs/
 │   ├── clean_testbed.py   # Wipes state and stops processes across testbed nodes

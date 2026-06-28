@@ -12,10 +12,7 @@ fl-cl/
 ├── TECH_STACK.md                 ← Complete technology inventory
 │
 ├── configs/                      ← Experiment configurations
-│   ├── experiment.yaml           ← Reproducible hyperparams, topology, notifications
-│   ├── experiment_100.yaml       ← 100-round scratch configuration
-│   ├── experiment_500.yaml       ← 500-round warm-start configuration
-│   └── experiment_1000.yaml      ← 1000-round warm-start configuration
+│   └── experiment.yaml           ← Reproducible hyperparams, topology, notifications
 │
 ├── docs/                         ← Research documentation
 │   ├── 00_research_paper.md      ← Full integrated paper (Chapters 1–9)
@@ -77,18 +74,12 @@ python runs/setup_ssh_targets.py --key /path/to/ssh_key
 python runs/clean_testbed.py --key /path/to/ssh_key
 ```
 
-### 2. Execute Training Progression
-Run the simulation and federated training sequentially to model adaptation over time:
+### 2. Execute Training Run
+Run the simulation and federated training:
 
 ```bash
-# Phase 1: 100 Rounds from Scratch (Base Model)
-python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment_100.yaml
-
-# Phase 2: Warm-Start/Resume to 500 Rounds
-python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment_500.yaml
-
-# Phase 3: Warm-Start/Resume to 1000 Rounds
-python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment_1000.yaml
+# Execute training (by default 100 rounds from scratch)
+python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment.yaml
 ```
 
 The orchestrator will automatically:

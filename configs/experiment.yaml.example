@@ -88,12 +88,6 @@ checkpointing:
 
 # ── MLOps Mode Configuration ────────────────────────────────
 mlops:
-  # Mode options: "experimental" (cold start) or "production" (warm start)
-  mode: "production"
-  
-  # Production Strategy: "resume" (continue from latest checkpoint) or "fresh" (new start)
-  production_strategy: "resume"
-  
   # Model registry reference name in MLflow
   registered_model_name: "CyberDefenseNet"
 

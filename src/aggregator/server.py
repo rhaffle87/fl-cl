@@ -230,10 +230,6 @@ def main():
     parser.add_argument("--checkpoint-dir", default="/opt/mlflow-artifacts/checkpoints",
                         help="Directory to save model checkpoints")
     parser.add_argument("--config-file", default="", help="Experiment config YAML to log as artifact")
-    parser.add_argument("--mlops-mode", default="experimental", choices=["experimental", "production"],
-                        help="MLops mode (experimental or production)")
-    parser.add_argument("--production-strategy", default="resume", choices=["resume", "fresh"],
-                        help="Production warm-start checkpoint strategy")
     parser.add_argument("--git-commit", default="unknown", help="Git commit hash from orchestrator workstation")
     args = parser.parse_args()
 
@@ -251,43 +247,18 @@ def main():
     except Exception as e:
         print(f"[server] Warning: Could not enforce base checkpoint directory permissions: {e}")
 
-    # MLOps Warm-Start Checkpoint Resumption
+    # Always start clean training from scratch
     initial_parameters = None
     resumed_from_version = None
     resumed_from_run_id = None
-    latest_ckpt_path = os.path.join(args.checkpoint_dir, "model_latest.pt")
-    
-    if args.mlops_mode == "production":
-        if args.production_strategy == "resume" and os.path.exists(latest_ckpt_path):
-            print(f"[server] Production Warm-Start: Loading weights from {latest_ckpt_path}")
-            try:
-                model = CyberDefenseNet()
-                # Security audit: use weights_only=True to prevent arbitrary code execution
-                model.load_state_dict(torch.load(latest_ckpt_path, map_location="cpu", weights_only=True))
-                
-                ndarrays = [val.cpu().numpy() for _, val in model.state_dict().items()]
-                initial_parameters = fl.common.ndarrays_to_parameters(ndarrays)
-                
-                # Load metadata
-                latest_meta_path = os.path.join(args.checkpoint_dir, "model_latest_metadata.json")
-                if os.path.exists(latest_meta_path):
-                    with open(latest_meta_path, "r") as f:
-                        meta = json.load(f)
-                        resumed_from_version = meta.get("model_version")
-                        resumed_from_run_id = meta.get("run_id")
-            except Exception as e:
-                print(f"[server] Failed to load latest checkpoint: {e}. Starting fresh.")
-                initial_parameters = None
-        else:
-            print("[server] Production Start: No prior checkpoint found or fresh flag active. Initializing new model weights.")
-    else:
-        print("[server] Experimental Cold-Start: Training a new model from scratch.")
+    mlops_mode = "experimental"
+    production_strategy = "fresh"
+    print("[server] Cold-Start: Training a new model from scratch.")
 
     print(f"[server] Starting Flower aggregator on {args.address}")
     print(f"[server] Rounds: {args.rounds} | Min clients: {args.min_clients}")
     print(f"[server] MLflow Server: {args.mlflow_uri}")
     print(f"[server] Checkpoints Base Directory: {args.checkpoint_dir}")
-    print(f"[server] MLOps Mode: {args.mlops_mode} | Production Strategy: {args.production_strategy}")
 
     with mlflow.start_run(run_name="FL-CL-Orchestrated-Run") as run:
         # Define run-specific checkpoint directory to isolate outputs
@@ -314,15 +285,8 @@ def main():
         mlflow.log_params(params)
 
         tags = {
-            "git_commit": get_git_hash(args.git_commit),
-            "mlops_mode": args.mlops_mode,
-            "production_strategy": args.production_strategy if args.mlops_mode == "production" else "N/A",
-            "warm_started": "True" if initial_parameters is not None else "False"
+            "git_commit": get_git_hash(args.git_commit)
         }
-        if resumed_from_run_id:
-            tags["resumed_from_run_id"] = resumed_from_run_id
-        if resumed_from_version:
-            tags["resumed_from_version"] = str(resumed_from_version)
         mlflow.set_tags(tags)
 
         # Log config file as sanitized artifact if provided
@@ -425,8 +389,8 @@ def main():
                 
                 # Construct detailed model version description
                 version_desc = (
-                    f"MLOps Mode: {args.mlops_mode}\n"
-                    f"Production Strategy: {args.production_strategy if args.mlops_mode == 'production' else 'N/A'}\n"
+                    f"MLOps Mode: {mlops_mode}\n"
+                    f"Production Strategy: {production_strategy if mlops_mode == 'production' else 'N/A'}\n"
                     f"Git Commit: {get_git_hash(args.git_commit)}\n"
                     f"FL Rounds: {args.rounds}\n"
                     f"Evaluation Metrics at Best Round {strategy.best_round}:\n"
@@ -446,7 +410,7 @@ def main():
                 )
 
                 # Set tags on model version object
-                client.set_model_version_tag(model_name, str(new_version), "mlops_mode", args.mlops_mode)
+                client.set_model_version_tag(model_name, str(new_version), "mlops_mode", mlops_mode)
                 client.set_model_version_tag(model_name, str(new_version), "git_commit", get_git_hash(args.git_commit))
                 client.set_model_version_tag(model_name, str(new_version), "accuracy", f"{strategy.best_accuracy:.6f}")
                 client.set_model_version_tag(model_name, str(new_version), "loss", f"{strategy.best_loss:.6f}")
@@ -462,7 +426,7 @@ def main():
                     client.set_model_version_tag(model_name, str(new_version), "resumed_from_run_id", str(resumed_from_run_id))
                 
                 # If production mode, transition to Production stage and archive existing production versions
-                if args.mlops_mode == "production":
+                if mlops_mode == "production":
                     print(f"[server] MLOps Promotion: Transitioning version {new_version} to 'Production'...")
                     client.transition_model_version_stage(
                         name=model_name,

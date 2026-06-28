@@ -218,8 +218,6 @@ def main():
     parser.add_argument("--lambda-ewc", type=float, default=None, help="EWC lambda (overrides config)")
     parser.add_argument("--duration", type=int, default=None, help="Attack stage duration in seconds (overrides config)")
     parser.add_argument("--config", default="configs/experiment.yaml", help="Experiment config file")
-    parser.add_argument("--mlops-mode", default=None, choices=["experimental", "production"], help="MLOps mode (experimental or production)")
-    parser.add_argument("--production-strategy", default=None, choices=["resume", "fresh"], help="Production strategy (resume or fresh)")
     args = parser.parse_args()
 
     # Load config — CLI args override YAML values
@@ -244,8 +242,6 @@ def main():
     lr = get_config_value(config, "training", "lr", default=0.01)
     momentum = get_config_value(config, "training", "momentum", default=0.9)
     experiment_name = get_config_value(config, "experiment", "name", default="FL-CL-Run")
-    mlops_mode = args.mlops_mode or get_config_value(config, "mlops", "mode", default="experimental")
-    production_strategy = args.production_strategy or get_config_value(config, "mlops", "production_strategy", default="resume")
     dos_threshold = get_config_value(config, "labeling", "dos_duration_threshold_ms", default=2000)
 
     # Set up Telegram notifications
@@ -387,7 +383,7 @@ def main():
         # Start FL server with config artifact logging
         config_arg = "--config-file ~/experiment.yaml" if config_path else ""
         server_proc = aggregator.run_cmd(
-            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit}",
+            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --git-commit {git_commit}",
             background=True
         )
 
