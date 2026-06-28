@@ -456,19 +456,33 @@ def main():
         def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold}", background=True)
         def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold}", background=True)
 
+        stopped_early = False
         print("\n=== Phase 8: Monitoring Training Loop Convergence ===")
-        print("[*] Waiting for Flower server rounds to complete. Press Ctrl+C to terminate early and clean up.")
+        print("[*] Waiting for Flower server rounds to complete. Press Ctrl+C to terminate gracefully early.")
         start_wait = time.time()
         timeout = max(600, rounds * 25)
         print(f"[*] Monitoring loop active. Max timeout set to {timeout}s ({timeout/60:.1f} minutes).")
-        while time.time() - start_wait < timeout:
-            status = aggregator.run_cmd("pgrep -f '[s]erver.py'")
-            if not status.stdout.strip():
-                print("[OK] Flower server has completed its rounds.")
-                break
+        try:
+            while time.time() - start_wait < timeout:
+                status = aggregator.run_cmd("pgrep -f '[s]erver.py'")
+                if not status.stdout.strip():
+                    print("[OK] Flower server has completed its rounds.")
+                    break
+                time.sleep(5)
+                sys.stdout.write(".")
+                sys.stdout.flush()
+        except KeyboardInterrupt:
+            print("\n[!] Ctrl+C detected. Gracefully stopping training early...")
+            stopped_early = True
+            # Terminate clients first so they stop attempting to communicate
+            print("[*] Stopping Flower clients...")
+            for client_node in [def_a, def_b]:
+                client_node.run_cmd("pkill -f 'client.py'")
+            # Terminate server.py with SIGTERM to trigger its SystemExit cleanup logic
+            print("[*] Stopping Flower server...")
+            aggregator.run_cmd("pkill -f 'server.py'")
+            print("[*] Waiting 5 seconds for server to finalize metrics and checkpoints...")
             time.sleep(5)
-            sys.stdout.write(".")
-            sys.stdout.flush()
 
         elapsed_min = (time.time() - start_time) / 60.0
 
@@ -499,8 +513,9 @@ def main():
                 print(f"\n[!] Failed to parse training metrics JSON: {e}")
 
         # Notify completion
+        exp_name_modified = f"{experiment_name} (Stopped Early)" if stopped_early else experiment_name
         notifier.notify_complete(
-            experiment_name=experiment_name,
+            experiment_name=exp_name_modified,
             accuracy=accuracy,
             loss=loss,
             class_accuracies=class_accuracies,
@@ -517,7 +532,7 @@ def main():
         run_post_training_plots_and_report(
             key_path=plotting_key,
             aggregator_ip=aggregator.ip,
-            experiment_name=experiment_name,
+            experiment_name=exp_name_modified,
             rounds=rounds,
             lambda_ewc=lambda_ewc
         )

@@ -331,11 +331,14 @@ def main():
             mlflow.log_artifact(sanitized_path, artifact_path="config")
             print(f"[server] Logged sanitized config artifact: {sanitized_path}")
 
-        fl.server.start_server(
-            server_address=args.address,
-            config=fl.server.ServerConfig(num_rounds=args.rounds),
-            strategy=strategy,
-        )
+        try:
+            fl.server.start_server(
+                server_address=args.address,
+                config=fl.server.ServerConfig(num_rounds=args.rounds),
+                strategy=strategy,
+            )
+        except (KeyboardInterrupt, SystemExit):
+            print("\n[server] [!] Caught termination signal. Initiating graceful early shutdown...")
 
         # Log final best checkpoint as MLflow artifact using MLflow 3.x LoggedModel entities
         # Determine the best checkpoint path from best_round
@@ -495,13 +498,17 @@ def main():
         summary = {
             "run_id": run.info.run_id,
             "experiment_id": run.info.experiment_id,
-            "loss": strategy.best_loss,
-            "accuracy": strategy.best_accuracy,
-            "best_loss": strategy.best_loss,
+            "loss": strategy.best_loss if strategy.best_loss != float("inf") else strategy.latest_loss,
+            "accuracy": strategy.best_accuracy if strategy.best_round > 0 else strategy.latest_accuracy,
+            "best_loss": strategy.best_loss if strategy.best_loss != float("inf") else strategy.latest_loss,
             "best_round": strategy.best_round,
             "class_accuracies": {
                 int(k.split("_")[-1]): float(v)
                 for k, v in strategy.best_metrics.items()
+                if k.startswith("accuracy_class_")
+            } if strategy.best_round > 0 else {
+                int(k.split("_")[-1]): float(v)
+                for k, v in strategy.latest_metrics.items()
                 if k.startswith("accuracy_class_")
             }
         }
