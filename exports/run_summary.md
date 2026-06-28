@@ -3,7 +3,7 @@
 - **MLflow Run ID**: `f6f42b26836b4bafa319c8abf58c5b63`
 - **Total FL Rounds**: `100`
 - **Continual Learning (EWC) Lambda**: `0.1`
-- **Generated At**: 2026-06-28 17:50:46
+- **Generated At**: 2026-06-28 17:57:08
 
 ## Final Metrics Summary
 | Metric | Value |
@@ -14,10 +14,10 @@
 | accuracy_class_2 | 0.996063 |
 | accuracy_class_3 | 1.000000 |
 | accuracy_class_4 | 1.000000 |
-| best_loss | nan |
-| best_round | nan |
-| final_best_loss | nan |
-| final_best_round | nan |
+| best_loss | 0.037608 |
+| best_round | 95.000000 |
+| final_best_loss | 0.037608 |
+| final_best_round | 95.000000 |
 | loss | 0.041662 |
 
 ## Convergence Plots per Traffic Class

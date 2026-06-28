@@ -72,6 +72,7 @@ def run_plotting(key_path, aggregator_ip, local_db="mlflow_temp.db", run_id_arg=
         raise ValueError(f"No metrics found for run {run_id}.")
         
     df = df.sort_values("Round")
+    df = df.ffill()
 
     # 5. Plot and Export Metrics Individually
     plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')
