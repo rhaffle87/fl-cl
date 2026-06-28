@@ -273,9 +273,24 @@ def main():
 
     start_time = time.time()
 
+    # Retrieve git commit hash for notification and tagging
+    git_commit = "unknown"
+    try:
+        git_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], 
+            stderr=subprocess.DEVNULL
+        ).decode("utf-8").strip()
+    except Exception:
+        pass
+
     # Notify start
-    notifier.notify_start(experiment_name, rounds,
-                          f"EWC lambda={lambda_ewc}, Duration={duration}s")
+    notifier.notify_start(
+        experiment_name=experiment_name,
+        rounds=rounds,
+        config_summary=f"EWC lambda={lambda_ewc}, Duration={duration}s",
+        mlops_mode=mlops_mode,
+        git_commit=git_commit
+    )
 
     print("=== Phase 1: Cleaning up any old testbed processes ===")
     for node in nodes:
@@ -428,6 +443,8 @@ def main():
         accuracy = 0.0
         loss = 0.0
         class_accuracies = {}
+        run_id = None
+        experiment_id = None
         
         # Wait a moment for server.py to write the metrics file
         time.sleep(2)
@@ -440,6 +457,8 @@ def main():
                 loss = float(metrics_data.get("loss", 0.0))
                 raw_classes = metrics_data.get("class_accuracies", {})
                 class_accuracies = {int(k): float(v) for k, v in raw_classes.items()}
+                run_id = metrics_data.get("run_id")
+                experiment_id = metrics_data.get("experiment_id")
                 print(f"\n[aggregator] Training summary fetched successfully:")
                 print(f"  Final Accuracy: {accuracy*100:.2f}% | Final Loss: {loss:.4f}")
                 print(f"  Best Loss: {metrics_data.get('best_loss', 0.0):.4f} at round {metrics_data.get('best_round', 0)}")
@@ -453,6 +472,9 @@ def main():
             loss=loss,
             class_accuracies=class_accuracies,
             duration_min=elapsed_min,
+            run_id=run_id,
+            mlflow_uri=f"http://{aggregator.ip}:5000",
+            experiment_id=experiment_id,
         )
 
         # Determine the key path to use for local plotting
@@ -469,10 +491,12 @@ def main():
 
     except KeyboardInterrupt:
         print("\n[!] User interrupted the execution. Starting cleanup.")
-        notifier.notify_failure(experiment_name, "User interrupted (KeyboardInterrupt)")
+        elapsed_min = (time.time() - start_time) / 60.0
+        notifier.notify_failure(experiment_name, "User interrupted (KeyboardInterrupt)", duration_min=elapsed_min)
     except Exception as e:
         print(f"\n[!] Orchestration error: {e}")
-        notifier.notify_failure(experiment_name, str(e))
+        elapsed_min = (time.time() - start_time) / 60.0
+        notifier.notify_failure(experiment_name, str(e), duration_min=elapsed_min)
     finally:
         print("\n=== Phase 9: Cleaning up remote background processes ===")
         for node in nodes:

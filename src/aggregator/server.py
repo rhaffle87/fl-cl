@@ -20,6 +20,7 @@ import os
 import subprocess
 import json
 import shutil
+import sqlite3
 from collections import OrderedDict
 from pathlib import Path
 
@@ -72,7 +73,13 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
         self.latest_loss = 0.0
         self.latest_accuracy = 0.0
         self.latest_metrics = {}
-        Path(self.checkpoint_dir).mkdir(parents=True, exist_ok=True)
+        
+        # Security audit: enforce strict 0700 owner-only permissions on directories
+        try:
+            os.makedirs(self.checkpoint_dir, mode=0o700, exist_ok=True)
+            os.chmod(self.checkpoint_dir, 0o700)
+        except Exception as e:
+            print(f"[server] Warning: Could not enforce directory permissions on {self.checkpoint_dir}: {e}")
 
     @mlflow.trace(name="aggregate_evaluate")
     def aggregate_evaluate(self, server_round, results, failures):
@@ -117,10 +124,13 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
             # Save PyTorch checkpoint
             ckpt_path = os.path.join(self.checkpoint_dir, f"model_round_{server_round:04d}.pt")
             torch.save(model.state_dict(), ckpt_path)
+            # Security audit: enforce strict 0600 owner-only permissions on weights
+            os.chmod(ckpt_path, 0o600)
 
             # Save latest checkpoint (always overwrite)
             latest_path = os.path.join(self.checkpoint_dir, "model_latest.pt")
             torch.save(model.state_dict(), latest_path)
+            os.chmod(latest_path, 0o600)
 
             # Export TorchScript for deployment validation
             if self.export_torchscript:
@@ -128,6 +138,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                 scripted = torch.jit.script(model)
                 ts_path = os.path.join(self.checkpoint_dir, "model_latest_scripted.pt")
                 scripted.save(ts_path)
+                os.chmod(ts_path, 0o600)
 
             if server_round % 10 == 0:
                 print(f"[server] Checkpoint saved: {ckpt_path}")
@@ -147,6 +158,49 @@ def get_git_hash():
         return "unknown"
 
 
+def enable_sqlite_wal(db_path: str = "/root/mlflow.db"):
+    """Enable SQLite WAL (Write-Ahead Logging) mode for performance optimization."""
+    if not os.path.exists(db_path):
+        db_path = "mlflow.db"
+
+    if os.path.exists(db_path):
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL;")
+            mode = cursor.fetchone()[0]
+            conn.close()
+            print(f"[server] SQLite WAL Mode enabled: {mode} (on {db_path})")
+            return True
+        except Exception as e:
+            print(f"[server] Warning: Could not enable WAL mode: {e}")
+    else:
+        print(f"[server] SQLite DB not found at {db_path}, skipping WAL optimization.")
+    return False
+
+
+def sanitize_config(config_path: str) -> str:
+    """Sanitize sensitive credentials from config and write to a safe tmp file."""
+    try:
+        import yaml
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+        
+        # Redact telegram bot token if present
+        if isinstance(config, dict) and "notifications" in config:
+            tg_conf = config["notifications"].get("telegram", {})
+            if isinstance(tg_conf, dict) and "bot_token" in tg_conf and tg_conf["bot_token"]:
+                tg_conf["bot_token"] = "[REDACTED]"
+        
+        sanitized_path = "/tmp/sanitized_experiment.yaml"
+        with open(sanitized_path, "w") as f:
+            yaml.safe_dump(config, f, default_flow_style=False)
+        return sanitized_path
+    except Exception as e:
+        print(f"[server] Warning: Sanitization failed: {e}. Logging original config.")
+        return config_path
+
+
 def main():
     parser = argparse.ArgumentParser(description="FL-CL Aggregator Server")
     parser.add_argument("--address", default="0.0.0.0:8080", help="Server bind address")
@@ -157,14 +211,24 @@ def main():
                         help="Directory to save model checkpoints")
     parser.add_argument("--config-file", default="", help="Experiment config YAML to log as artifact")
     parser.add_argument("--mlops-mode", default="experimental", choices=["experimental", "production"],
-                        help="MLOps mode (experimental or production)")
+                        help="MLops mode (experimental or production)")
     parser.add_argument("--production-strategy", default="resume", choices=["resume", "fresh"],
                         help="Production warm-start checkpoint strategy")
     args = parser.parse_args()
 
+    # Performance optimization: enable SQLite Write-Ahead Logging
+    enable_sqlite_wal()
+
     # Set up MLflow
     mlflow.set_tracking_uri(args.mlflow_uri)
     mlflow.set_experiment("FL-CL-CyberDefense")
+
+    # Security audit: restrict directory permissions
+    try:
+        os.makedirs(args.checkpoint_dir, mode=0o700, exist_ok=True)
+        os.chmod(args.checkpoint_dir, 0o700)
+    except Exception as e:
+        print(f"[server] Warning: Could not enforce base checkpoint directory permissions: {e}")
 
     # MLOps Warm-Start Checkpoint Resumption
     initial_parameters = None
@@ -177,7 +241,8 @@ def main():
             print(f"[server] Production Warm-Start: Loading weights from {latest_ckpt_path}")
             try:
                 model = CyberDefenseNet()
-                model.load_state_dict(torch.load(latest_ckpt_path, map_location="cpu"))
+                # Security audit: use weights_only=True to prevent arbitrary code execution
+                model.load_state_dict(torch.load(latest_ckpt_path, map_location="cpu", weights_only=True))
                 
                 ndarrays = [val.cpu().numpy() for _, val in model.state_dict().items()]
                 initial_parameters = fl.common.ndarrays_to_parameters(ndarrays)
@@ -220,24 +285,30 @@ def main():
             evaluate_metrics_aggregation_fn=weighted_avg,
         )
 
-        # Log experiment metadata
-        mlflow.set_tag("git_commit", get_git_hash())
-        mlflow.log_param("fl_rounds", args.rounds)
-        mlflow.log_param("min_clients", args.min_clients)
-        
-        # Log MLOps params & tags
-        mlflow.set_tag("mlops_mode", args.mlops_mode)
-        mlflow.set_tag("production_strategy", args.production_strategy if args.mlops_mode == "production" else "N/A")
-        mlflow.set_tag("warm_started", "True" if initial_parameters is not None else "False")
-        if resumed_from_run_id:
-            mlflow.set_tag("resumed_from_run_id", resumed_from_run_id)
-        if resumed_from_version:
-            mlflow.set_tag("resumed_from_version", str(resumed_from_version))
+        # Performance optimization: batch log parameters and tags (reduces REST calls to 2)
+        params = {
+            "fl_rounds": args.rounds,
+            "min_clients": args.min_clients
+        }
+        mlflow.log_params(params)
 
-        # Log config file as artifact if provided
+        tags = {
+            "git_commit": get_git_hash(),
+            "mlops_mode": args.mlops_mode,
+            "production_strategy": args.production_strategy if args.mlops_mode == "production" else "N/A",
+            "warm_started": "True" if initial_parameters is not None else "False"
+        }
+        if resumed_from_run_id:
+            tags["resumed_from_run_id"] = resumed_from_run_id
+        if resumed_from_version:
+            tags["resumed_from_version"] = str(resumed_from_version)
+        mlflow.set_tags(tags)
+
+        # Log config file as sanitized artifact if provided
         if args.config_file and os.path.exists(args.config_file):
-            mlflow.log_artifact(args.config_file, artifact_path="config")
-            print(f"[server] Logged config artifact: {args.config_file}")
+            sanitized_path = sanitize_config(args.config_file)
+            mlflow.log_artifact(sanitized_path, artifact_path="config")
+            print(f"[server] Logged sanitized config artifact: {sanitized_path}")
 
         fl.server.start_server(
             server_address=args.address,
@@ -251,9 +322,9 @@ def main():
             import pandas as pd
             import numpy as np
 
-            # Instantiate and load model
+            # Instantiate and load model safely
             model = CyberDefenseNet()
-            model.load_state_dict(torch.load(run_best_ckpt, map_location="cpu"))
+            model.load_state_dict(torch.load(run_best_ckpt, map_location="cpu", weights_only=True))
             model.eval()
 
             # Create dummy input example to define signature
@@ -297,6 +368,7 @@ def main():
             # Promote model to master checkpoint directory
             print(f"[server] Copying best checkpoint to master directory: {latest_ckpt_path}")
             shutil.copy(run_best_ckpt, latest_ckpt_path)
+            os.chmod(latest_ckpt_path, 0o600)
 
             # Manage Model Registry tagging and promotion via MlflowClient
             try:
@@ -331,6 +403,7 @@ def main():
             latest_meta_path = os.path.join(args.checkpoint_dir, "model_latest_metadata.json")
             with open(latest_meta_path, "w") as f:
                 json.dump(meta_data, f, indent=2)
+            os.chmod(latest_meta_path, 0o600)
             print(f"[server] Updated master latest model metadata: {meta_data}")
 
         run_ts_path = os.path.join(run_checkpoint_dir, "model_latest_scripted.pt")
@@ -341,10 +414,12 @@ def main():
             # Copy to master directory
             master_ts_path = os.path.join(args.checkpoint_dir, "model_latest_scripted.pt")
             shutil.copy(run_ts_path, master_ts_path)
+            os.chmod(master_ts_path, 0o600)
 
-        # Write training summary JSON
+        # Write training summary JSON including run and experiment details
         summary = {
             "run_id": run.info.run_id,
+            "experiment_id": run.info.experiment_id,
             "loss": strategy.latest_loss,
             "accuracy": strategy.latest_accuracy,
             "best_loss": strategy.best_loss,
