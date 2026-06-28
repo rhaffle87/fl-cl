@@ -17,7 +17,7 @@ from torch.nn import CrossEntropyLoss
 from avalanche.training.supervised import EWC
 
 
-def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=None):
+def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=None, lr: float = 0.01, momentum: float = 0.9):
     """
     Create an EWC-equipped continual learner.
 
@@ -27,6 +27,8 @@ def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=
         ewc_lambda:    Regularization strength. Higher = more stability (less forgetting),
                        lower = more plasticity (faster adaptation). Tune via MLflow.
         class_weights: List of 5 floats for class weights.
+        lr:            Learning rate for the local SGD optimizer.
+        momentum:      Momentum for the local SGD optimizer.
 
     Returns:
         Avalanche EWC strategy object with train() and eval() methods.
@@ -38,7 +40,7 @@ def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=
 
     return EWC(
         model=model,
-        optimizer=SGD(model.parameters(), lr=0.01, momentum=0.9),
+        optimizer=SGD(model.parameters(), lr=lr, momentum=momentum),
         criterion=CrossEntropyLoss(weight=weights_tensor),
         ewc_lambda=ewc_lambda,
         train_mb_size=32,
@@ -46,3 +48,4 @@ def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=
         eval_mb_size=32,
         device=device,
     )
+

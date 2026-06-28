@@ -70,6 +70,8 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
         self.export_torchscript = export_torchscript
         self.best_loss = float("inf")
         self.best_round = 0
+        self.best_accuracy = 0.0
+        self.best_metrics = {}
         self.latest_loss = 0.0
         self.latest_accuracy = 0.0
         self.latest_metrics = {}
@@ -100,6 +102,8 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
             if loss < self.best_loss:
                 self.best_loss = loss
                 self.best_round = server_round
+                self.best_accuracy = accuracy
+                self.best_metrics = metrics.copy()
                 mlflow.log_metric("best_loss", loss, step=server_round)
                 mlflow.log_metric("best_round", server_round, step=server_round)
                 print(f"[server] ★ New best model at round {server_round} (loss={loss:.4f})")
@@ -409,12 +413,12 @@ def main():
                     f"Git Commit: {get_git_hash(args.git_commit)}\n"
                     f"FL Rounds: {args.rounds}\n"
                     f"Evaluation Metrics at Best Round {strategy.best_round}:\n"
-                    f"  - Overall Accuracy: {strategy.latest_accuracy*100:.2f}%\n"
+                    f"  - Overall Accuracy: {strategy.best_accuracy*100:.2f}%\n"
                     f"  - Aggregated Loss: {strategy.best_loss:.4f}\n"
                 )
                 class_labels = {0: "Normal", 1: "Botnet", 2: "DNS Exfiltration", 3: "SSH Brute Force", 4: "DoS"}
                 for i in range(5):
-                    class_acc = strategy.latest_metrics.get(f"accuracy_class_{i}")
+                    class_acc = strategy.best_metrics.get(f"accuracy_class_{i}")
                     if class_acc is not None:
                         version_desc += f"  - Class {i} ({class_labels[i]}): {class_acc*100:.2f}%\n"
                 
@@ -427,11 +431,11 @@ def main():
                 # Set tags on model version object
                 client.set_model_version_tag(model_name, str(new_version), "mlops_mode", args.mlops_mode)
                 client.set_model_version_tag(model_name, str(new_version), "git_commit", get_git_hash(args.git_commit))
-                client.set_model_version_tag(model_name, str(new_version), "accuracy", f"{strategy.latest_accuracy:.6f}")
+                client.set_model_version_tag(model_name, str(new_version), "accuracy", f"{strategy.best_accuracy:.6f}")
                 client.set_model_version_tag(model_name, str(new_version), "loss", f"{strategy.best_loss:.6f}")
                 client.set_model_version_tag(model_name, str(new_version), "fl_rounds", str(args.rounds))
                 
-                class_3_acc = strategy.latest_metrics.get("accuracy_class_3")
+                class_3_acc = strategy.best_metrics.get("accuracy_class_3")
                 if class_3_acc is not None:
                     client.set_model_version_tag(model_name, str(new_version), "accuracy_class_3", f"{class_3_acc:.6f}")
 
@@ -477,13 +481,13 @@ def main():
         summary = {
             "run_id": run.info.run_id,
             "experiment_id": run.info.experiment_id,
-            "loss": strategy.latest_loss,
-            "accuracy": strategy.latest_accuracy,
+            "loss": strategy.best_loss,
+            "accuracy": strategy.best_accuracy,
             "best_loss": strategy.best_loss,
             "best_round": strategy.best_round,
             "class_accuracies": {
                 int(k.split("_")[-1]): float(v)
-                for k, v in strategy.latest_metrics.items()
+                for k, v in strategy.best_metrics.items()
                 if k.startswith("accuracy_class_")
             }
         }

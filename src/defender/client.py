@@ -278,6 +278,8 @@ def main():
     parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory")
     parser.add_argument("--ewc-lambda", type=float, default=0.4, help="EWC regularization strength")
     parser.add_argument("--class-weights", default="12.0,3.0,3.0,15.0,1.0", help="Comma-separated class weights")
+    parser.add_argument("--lr", type=float, default=0.01, help="SGD learning rate")
+    parser.add_argument("--momentum", type=float, default=0.9, help="SGD momentum")
     args = parser.parse_args()
 
     # Set up MLflow
@@ -288,11 +290,19 @@ def main():
     print(f"[client-{args.client_id}] Device: {device}")
     print(f"[client-{args.client_id}] Server: {args.server}")
     print(f"[client-{args.client_id}] Flows:  {args.flows_dir}")
+    print(f"[client-{args.client_id}] SGD lr: {args.lr} | momentum: {args.momentum}")
 
     net = CyberDefenseNet().to(device)
     
     weights = [float(w) for w in args.class_weights.split(",")]
-    cl = get_continual_learner(net, device, ewc_lambda=args.ewc_lambda, class_weights=weights)
+    cl = get_continual_learner(
+        net, 
+        device, 
+        ewc_lambda=args.ewc_lambda, 
+        class_weights=weights,
+        lr=args.lr,
+        momentum=args.momentum
+    )
 
     fl.client.start_numpy_client(
         server_address=args.server,

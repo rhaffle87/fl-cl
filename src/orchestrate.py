@@ -234,6 +234,8 @@ def main():
     duration = args.duration or get_config_value(config, "simulation", "attack_duration_seconds", default=30)
     class_weights = get_config_value(config, "training", "class_weights", default=[12.0, 3.0, 3.0, 15.0, 1.0])
     weights_str = ",".join(map(str, class_weights))
+    lr = get_config_value(config, "training", "lr", default=0.01)
+    momentum = get_config_value(config, "training", "momentum", default=0.9)
     experiment_name = get_config_value(config, "experiment", "name", default="FL-CL-Run")
     mlops_mode = args.mlops_mode or get_config_value(config, "mlops", "mode", default="experimental")
     production_strategy = args.production_strategy or get_config_value(config, "mlops", "production_strategy", default="resume")
@@ -420,8 +422,8 @@ def main():
                 print(f"[{node_name}] ⚠ Could not read label distribution")
 
         print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
-        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str}", background=True)
-        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc} --class-weights {weights_str}", background=True)
+        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum}", background=True)
+        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum}", background=True)
 
         print("\n=== Phase 8: Monitoring Training Loop Convergence ===")
         print("[*] Waiting for Flower server rounds to complete. Press Ctrl+C to terminate early and clean up.")

@@ -1,24 +1,24 @@
 # FL-CL Experiment Run Summary: FL-CL-EWC-Baseline
 
-- **MLflow Run ID**: `a24073ad8f5348a8ad0ae2009602c2c6`
+- **MLflow Run ID**: `d024628e3e6e46d0881aef78265f2c7e`
 - **Total FL Rounds**: `100`
-- **Continual Learning (EWC) Lambda**: `0.25`
-- **Generated At**: 2026-06-28 09:13:13
+- **Continual Learning (EWC) Lambda**: `0.5`
+- **Generated At**: 2026-06-28 11:35:06
 
 ## Final Metrics Summary
 | Metric | Value |
 |:---|:---|
-| accuracy | 0.993191 |
-| accuracy_class_0 | 0.993731 |
+| accuracy | 0.994872 |
+| accuracy_class_0 | 0.956925 |
 | accuracy_class_1 | 1.000000 |
-| accuracy_class_2 | 0.998678 |
-| accuracy_class_3 | 0.888323 |
-| accuracy_class_4 | 0.998921 |
+| accuracy_class_2 | 0.998229 |
+| accuracy_class_3 | 1.000000 |
+| accuracy_class_4 | 0.998915 |
 | best_loss | nan |
 | best_round | nan |
 | final_best_loss | nan |
 | final_best_round | nan |
-| loss | 0.259713 |
+| loss | 0.096673 |
 
 ## Convergence Plots per Traffic Class
 Click on each class below to view its convergence plot (incorporating Loss, Global Accuracy, and Class Accuracy):
