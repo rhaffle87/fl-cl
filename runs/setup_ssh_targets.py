@@ -10,6 +10,24 @@ import subprocess
 import sys
 import yaml
 
+def load_env(env_path: str = ".env"):
+    """Load environment variables from a .env file if it exists."""
+    if not os.path.exists(env_path):
+        return
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                os.environ[key] = val
+
+# Load local environment variables
+load_env()
+
 def load_config(config_path: str) -> dict:
     with open(config_path, "r") as f:
         return yaml.safe_load(f)

@@ -23,6 +23,24 @@ import time
 import sys
 import os
 
+def load_env(env_path: str = ".env"):
+    """Load environment variables from a .env file if it exists."""
+    if not os.path.exists(env_path):
+        return
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                os.environ[key] = val
+
+# Load local environment variables
+load_env()
+
 # Add src/ to path for notifications import
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from notifications import TelegramNotifier

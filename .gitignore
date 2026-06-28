@@ -50,3 +50,6 @@ runs/target_credentials.json
 
 # Scratch scripts/temporary code
 scratch/
+
+# Local environment variables
+.env
