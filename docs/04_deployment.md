@@ -437,33 +437,18 @@ Federated coordination uses the **Flower** framework. Local parameter updates ar
 ```
 
 #### Step 6.1: Run the Flower Server (`server.py` on LXC 300)
-The server runs on the Aggregator. It waits for clients to connect, distributes global model parameters, and aggregates updates:
+The server runs on the Aggregator node. It manages the training lifecycle by orchestrating rounds, collecting client parameter changes, and executing global evaluations. It subclasses the Flower `FedAvg` strategy (`MLflowFedAvg`) to integrate MLflow tracking, evaluation tables, dataset linkages, and model versioning alias promotion.
 
-```python
-# server.py
-import flwr as fl
+Key operations implemented:
+* **MLflow Tracking**: Logs loss and accuracy metrics per round under trace decorators (`@mlflow.trace`).
+* **Evaluation Tables**: Logs per-class validation metrics to a structured table using `mlflow.log_table()`.
+* **Dataset Linkage**: Documents the aggregated client flow distribution by logging an MLflow `Dataset` entity.
+* **Registry Governance**: On training completion, registers the model to the MLflow Model Registry and promotes the model version using aliases (`champion` for production mode, `challenger` for experimental mode) instead of deprecated registry stages.
+* **CLI Options**: Supports `--mlops-mode` (`experimental` | `production`) and `--production-strategy` (`resume` | `fresh`).
 
-def weighted_avg(metrics):
-    accuracies = [n * m["accuracy"] for n, m in metrics]
-    total_samples = [n for n, _ in metrics]
-    return {"accuracy": sum(accuracies) / sum(total_samples)}
-
-strategy = fl.server.strategy.FedAvg(
-    fraction_fit=1.0,
-    fraction_evaluate=1.0,
-    min_fit_clients=2,
-    min_evaluate_clients=2,
-    min_available_clients=2,
-    evaluate_metrics_aggregation_fn=weighted_avg,
-)
-
-if __name__ == "__main__":
-    print("[*] Starting Flower Server on port 8080...")
-    fl.server.start_server(
-        server_address="0.0.0.0:8080",
-        config=fl.server.ServerConfig(num_rounds=100),  # Configurable via experiment.yaml
-        strategy=strategy
-    )
+Run execution example:
+```bash
+python src/aggregator/server.py --rounds 100 --mlops-mode production --production-strategy resume
 ```
 
 #### Step 6.2: Run the FL Client (`client.py` on Defender VMs)
@@ -569,11 +554,14 @@ mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db
 Instead of manual start sequences, the master controller script `src/orchestrate.py` automates code deployment, server startup, traffic injection, and client execution:
 
 ```powershell
-# From local workstation, use config-driven orchestration (recommended):
-python src/orchestrate.py --key C:\Users\user\.ssh\id_ed25519 --config configs/experiment.yaml
+# From local workstation, execute in experimental mode (cold start, challenger model alias):
+python src/orchestrate.py --key ~/.ssh/id_ed25519 --config configs/experiment.yaml --mlops-mode experimental
 
-# Or with CLI overrides:
-python src/orchestrate.py --key C:\Users\user\.ssh\id_ed25519 --rounds 100 --lambda-ewc 0.25 --duration 60
+# Execute in production mode, resuming from the latest champion version weights:
+python src/orchestrate.py --key ~/.ssh/id_ed25519 --config configs/experiment.yaml --mlops-mode production --production-strategy resume
+
+# Or execute with custom rounds and CLI overrides:
+python src/orchestrate.py --key ~/.ssh/id_ed25519 --rounds 100 --lambda-ewc 0.25 --duration 60 --mlops-mode experimental
 ```
 
 #### Step 8.3: Manual Verification & Health Check Commands

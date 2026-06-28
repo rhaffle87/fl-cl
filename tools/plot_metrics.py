@@ -148,7 +148,13 @@ def run_plotting(key_path, aggregator_ip, local_db="mlflow_temp.db", run_id_arg=
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export and plot MLflow metrics for FL-CL experiments.")
-    parser.add_argument("--key", default=r"~/.ssh/id_ed25519", help="Path to SSH private key")
+    # Dynamic cross-platform fallback for default SSH key
+    default_key = os.path.expanduser("~/.ssh/id_ed25519")
+    if not os.path.exists(default_key) and os.path.exists(os.path.expanduser("~/.ssh/id_rsa")):
+        default_key = os.path.expanduser("~/.ssh/id_rsa")
+    default_key = os.environ.get("SSH_KEY_PATH") or default_key
+
+    parser.add_argument("--key", default=default_key, help="Path to SSH private key")
     parser.add_argument("--ip", default="10.10.130.10", help="Aggregator IP address")
     parser.add_argument("--db", default="mlflow_temp.db", help="Local temporary DB name")
     parser.add_argument("--run-id", default=None, help="Specific Run ID to plot (defaults to latest)")

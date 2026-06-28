@@ -315,9 +315,27 @@ python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.
 |:---------|:--------|:------------|
 | `--key` | System default | Path to your SSH private key |
 | `--config` | `configs/experiment.yaml` | Path to YAML experiment configuration |
-| `--rounds` | 100 | Number of federated averaging rounds |
-| `--lambda-ewc` | 0.25 | EWC regularization strength |
-| `--duration` | 60 | Duration (seconds) of each attack stage |
+| `--rounds` | 100 | Number of federated averaging rounds (overrides config) |
+| `--lambda-ewc` | 0.25 | EWC regularization strength (overrides config) |
+| `--duration` | 60 | Duration (seconds) of each attack stage (overrides config) |
+| `--mlops-mode` | `experimental` | MLOps Mode (`experimental` or `production`). Configures model version naming, registration behavior, and dashboard tagging. |
+| `--production-strategy` | `resume` | Action strategy for `production` mode: `resume` (warm-start from the existing `champion` model version) or `fresh` (cold-start a new model version). |
+
+> [!TIP]
+> **Security Best Practice**: To avoid storing sensitive credentials in plain-text inside `configs/experiment.yaml`, you can export your Telegram Bot credentials as environment variables on your workstation before running the orchestrator:
+> ```powershell
+> $env:TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
+> $env:TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
+> ```
+> The orchestrator will automatically detect and prioritize these environment variables.
+
+
+#### MLOps Execution Modes
+* **Experimental Mode (`--mlops-mode experimental`)**: Meant for training new models or hyperparameter tuning. The training proceeds as a cold-start (or warm-start if checkpoints exist), and the final registered model is assigned the `challenger` alias in MLflow.
+* **Production Mode (`--mlops-mode production`)**: Meant for maintaining the production-grade model. Under this mode, the orchestrator handles lifecycle state promotions:
+  * **Resume Strategy (`--production-strategy resume`)**: Checks the Model Registry for the version tagged with the `champion` alias. If present, it warm-starts the aggregator and client networks using this champion version's weights, ensuring continual learning continuity.
+  * **Fresh Strategy (`--production-strategy fresh`)**: Ignores existing registry weights and cold-starts training from scratch. Upon completion, the new model is registered and automatically promoted to the `champion` alias (displacing any previous champion).
+
 
 ### Step 2: Phase 1 — Process Cleanup
 
@@ -361,13 +379,20 @@ On **FL Aggregator** (`10.10.130.10`):
 
 First, the MLflow tracking server starts:
 ```bash
-/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db
+/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --allowed-hosts '*' --cors-allowed-origins '*' --x-frame-options NONE --disable-security-middleware
 ```
 The orchestrator waits 3 seconds for MLflow to initialize, then starts the Flower server:
 ```bash
-/opt/flower-env/bin/python3 server.py --rounds 100 --min-clients 2 --mlflow-uri http://localhost:5000
+/opt/flower-env/bin/python3 server.py --rounds 100 --min-clients 2 --mlflow-uri http://localhost:5000 --config-file ~/experiment.yaml --mlops-mode production --production-strategy resume --git-commit 2da6a4964aa6cdcf06937d80cec9006dc2d325a7
 ```
+The new parameters control MLOps integration and registry behavior:
+* `--config-file`: Optional path to the active experiment configuration YAML file, which is automatically saved as an MLflow run artifact.
+* `--mlops-mode`: Either `experimental` or `production`. Controls the registration alias logic (`challenger` vs `champion`).
+* `--production-strategy`: Either `resume` or `fresh`. Used under `production` mode to determine if training should warm-start from the registry's existing `champion` model weights, or cold-start from scratch.
+* `--git-commit`: The current Git commit SHA-1 of the workstation codebase, which is dynamically logged as a run tag `git_commit` and detailed in the MLflow note.
+
 The server now waits for 2 clients to connect before beginning round 1.
+
 
 ### Step 7: Phase 6 — Sequential Threat Simulation
 
@@ -459,6 +484,31 @@ Key metrics to monitor across rounds:
 
 **Detecting catastrophic forgetting:** If `accuracy_class_3` drops significantly after the Slowloris phase (Phase 6 Stage 3), it indicates the model is forgetting BruteForce patterns. Increase `--lambda-ewc` (e.g., to 0.6 or 0.8) and re-run.
 
+### Programmatic Run Tags & Markdown Descriptions
+The pipeline automatically tags every MLflow run with metadata describing its MLOps configuration:
+* `mlops_mode`: `production` or `experimental`.
+* `production_strategy`: `fresh` or `resume` (omitted if mode is experimental).
+* `git_commit`: Workstation git commit SHA-1 hash for reproducibility.
+* `warm_started`: `True` if initialized using weights from a previous version, otherwise `False`.
+* `resumed_from_run_id`: The MLflow run ID of the model weights loaded (if warm-started).
+* `resumed_from_version`: The Model Registry version number used as the warm-start base.
+
+Additionally, a detailed, structured Markdown summary is generated and saved under the run's `mlflow.note.content` tag, displaying as the main description in the MLflow UI. This includes:
+* **MLOps Metadata**: Execution mode, production strategy, workstation git commit, and warm-start indicator.
+* **Warm-Start Pedigree**: Parent run ID and model version (if resuming).
+* **Final Performance metrics**: Final global loss, best loss round, overall validation accuracy, and class-by-class accuracies.
+
+### Evaluation Tables Logging
+To resolve the limitations of flat scalar metrics (where class metrics are mixed across time), the server logs a class-wise evaluation table after every federated averaging round using `mlflow.log_table()`.
+
+This creates a structured artifact file named `evaluation_metrics_summary.json` containing:
+* `round`: The training round index.
+* `accuracy`: Global model accuracy.
+* `class_0_accuracy`, `class_1_accuracy`, etc.: Per-class accuracy metrics (sentinel `-1.0` is filtered out if no samples were evaluated).
+* `class_0_samples`, `class_1_samples`, etc.: The count of test samples evaluated for each class during that round.
+
+You can view, search, query, and plot this dataset directly from the MLflow run detail page's "Artifacts" tab.
+
 ### Expected Metrics Behavior & Anomalies
 
 When evaluating results inside the MLflow dashboard or CSV exports:
@@ -493,4 +543,48 @@ ssh root@10.10.130.11 "cat /tmp/flower-client.log"
 
 # On Traffic Generator:
 ssh root@10.10.140.10 "cat /tmp/attack_flow.log"
+```
+
+---
+
+## 6. Model Registry Governance & Aliases
+
+To establish a strict promotion logic and track model lineage, the aggregator uses modern MLflow 3.x **Model Version Aliases** instead of legacy stages (`Production`, `Staging`, etc.). All registered versions are saved to the central registry under the registered model name `FL-CL-CyberDefense-Model`.
+
+### Promotion Rules by MLOps Mode
+* **Experimental Mode (`--mlops-mode experimental`)**:
+  - The model is registered to the registry under a new version number.
+  - The new version is automatically tagged with the **`challenger`** alias, indicating it is under testing.
+* **Production Mode (`--mlops-mode production`)**:
+  - The model is registered under a new version number.
+  - The new version is automatically promoted to the **`champion`** alias.
+  - MLflow automatically removes the `champion` alias from any previous model version and assigns it to this newly promoted version, enforcing a single current production model.
+
+### Warm-Starting from Registry Champion
+When a training run is launched with `--mlops-mode production --production-strategy resume`, the server checks the Model Registry for the version labeled `champion`:
+1. It retrieves the artifact URI for the version with the `champion` alias.
+2. It downloads the checkpoint weights files (`best_global_model.pth` and optimizer states) from that run's artifacts.
+3. The server loads these weights and distributes them as the initial parameters in Round 1 of the new training run, warm-starting the continual learning process.
+4. The resulting run registers its final model as a new version and takes over the `champion` alias.
+
+### Retrieving Models Programmatically
+Downstream client services or deployment agents can query the latest active champion model via the MLflow Client API:
+
+```python
+import mlflow
+from mlflow.tracking import MlflowClient
+
+mlflow.set_tracking_uri("http://10.10.130.10:5000")
+client = MlflowClient()
+
+# Get champion version metadata
+champion_meta = client.get_model_version_by_alias(
+    name="FL-CL-CyberDefense-Model",
+    alias="champion"
+)
+print(f"Active Champion Version: {champion_meta.version} (Run ID: {champion_meta.run_id})")
+
+# Load champion model directly
+model_uri = f"models:/FL-CL-CyberDefense-Model@champion"
+loaded_model = mlflow.pytorch.load_model(model_uri)
 ```

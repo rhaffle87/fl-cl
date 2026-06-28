@@ -75,22 +75,28 @@ python runs/clean_testbed.py --key /path/to/ssh_key
 ```
 
 ### 2. Execute Training Run
-Run the simulation and federated training:
+Run the simulation and federated training. The pipeline supports two MLOps modes (`experimental` or `production`) and production strategies (`resume` or `fresh`):
 
 ```bash
-# Execute training (by default 100 rounds from scratch)
-python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment.yaml
+# Execute training in experimental mode (cold start, registers model with 'challenger' alias)
+python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment.yaml --mlops-mode experimental
+
+# Execute training in production mode with a resume strategy (warm-starts training using the latest 'champion' model version)
+python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment.yaml --mlops-mode production --production-strategy resume
+
+# Execute training in production mode from scratch (cold start, registers new model and promotes to 'champion' alias on finish)
+python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment.yaml --mlops-mode production --production-strategy fresh
 ```
 
 The orchestrator will automatically:
 1. Clean up old processes on nodes
 2. SCP current source code to remote VMs
-3. Launch target HTTP services, extractors, MLflow, and Flower server
+3. Launch target HTTP services, extractors, MLflow, and Flower server (with proper MLOps and strategy configuration flags)
 4. Run simulated attack stages (benign, SSH, Slowloris, DNS exfil, botnet)
 5. Verify data quality gate (all 5 classes present)
 6. Launch Flower clients for training
-7. Save model checkpoints and Promote best to Registry on aggregator
-8. Notify via Telegram on completion/failure
+7. Save model checkpoints, warm-start if resuming, and register the final best model using MLflow 3.x LoggedModel entities with appropriate Model Version Aliases
+8. Notify via Telegram upon completion or failure
 
 
 ---
@@ -101,11 +107,15 @@ The orchestrator will automatically:
 |:--------|:---------------|
 | **Experiment Config** | `configs/experiment.yaml` — all params in one YAML, logged as MLflow artifact |
 | **Model Checkpointing** | Best model saved per round to `/opt/mlflow-artifacts/checkpoints/` |
+| **Model Registry** | MLflow 3.x LoggedModel entities registered to central Model Registry |
+| **Registry Governance** | Transitioned from deprecated stages to Model Version Aliases (`champion` for production, `challenger` for experimental models) |
+| **Evaluation Tables** | Class-wise accuracies logged as JSON datasets via `mlflow.log_table()` |
+| **Programmatic Tags & Notes** | Run tagged with MLOps parameters, git commit, parent versions, and structured markdown summaries in `mlflow.note.content` |
 | **TorchScript Export** | Production model exported for deployment validation |
 | **Data Quality Gate** | Pre-training label distribution check on both defenders |
 | **Model Validation** | `tools/validate_model.py` — per-class accuracy thresholds |
 | **Class-Weighted Loss** | Per-class weights `[8.0, 20.0, 3.0, 15.0, 10.0]` for imbalanced data |
-| **Experiment Tracking** | MLflow at `http://10.10.130.10:5000` with git hash tagging |
+| **Experiment Tracking** | MLflow at `http://10.10.130.10:5000` with git hash tagging, parameters, and metrics tracking |
 | **Notifications** | Telegram bot for start/complete/fail alerts |
 
 ---

@@ -298,18 +298,32 @@ def aggregate_fit(self, server_round, results, failures):
 After aggregation, the server also runs a global evaluation round:
 
 ```python
+@mlflow.trace(name="aggregate_evaluate")
 def aggregate_evaluate(self, server_round, results, failures):
     aggregated_result = super().aggregate_evaluate(server_round, results, failures)
-    loss, metrics = aggregated_result
-    accuracy = metrics.get("accuracy", 0.0)
+    if aggregated_result:
+        loss, metrics = aggregated_result
+        accuracy = metrics.get("accuracy", 0.0)
+        self.latest_loss = loss
+        self.latest_accuracy = accuracy
+        self.latest_metrics = metrics
 
-    # Log to MLflow for tracking
-    mlflow.log_metric("loss", loss, step=server_round)
-    mlflow.log_metric("accuracy", accuracy, step=server_round)
+        print(f"[server] Round {server_round} Aggregated Loss: {loss:.4f} | Accuracy: {accuracy:.4f}")
+        mlflow.log_metric("loss", loss, step=server_round)
+        for k, v in metrics.items():
+            mlflow.log_metric(k, v, step=server_round)
 
-    # Per-class accuracy tracking
-    for k, v in metrics.items():
-        mlflow.log_metric(k, v, step=server_round)
+        # Checkpoint best model
+        if loss < self.best_loss:
+            self.best_loss = loss
+            self.best_round = server_round
+            self.best_accuracy = accuracy
+            self.best_metrics = metrics.copy()
+            mlflow.log_metric("best_loss", loss, step=server_round)
+            mlflow.log_metric("best_round", server_round, step=server_round)
+            print(f"[server] ★ New best model at round {server_round} (loss={loss:.4f})")
+
+    return aggregated_result
 ```
 
 The per-class accuracy aggregation uses `weighted_avg()`, which weights each client's class accuracy by its sample count while skipping clients that had no samples for a given class (reported as sentinel value `-1.0`):
@@ -329,6 +343,25 @@ def weighted_avg(metrics):
 
     return aggregated_metrics
 ```
+
+### 3.5.2 Post-Training: Registration, Datasets, and Governance
+Once training completes (all rounds finished), the server executes the final pipeline integration steps:
+
+1. **Log Model Artifact**: The PyTorch model is registered to MLflow using `mlflow.pytorch.log_model(..., registered_model_name="CyberDefenseNet")`.
+2. **Link Training Dataset**: The aggregator documents training context using an MLflow `Dataset` entity:
+   ```python
+   dataset_summary = pd.DataFrame([
+       {"class": "Normal", "defender_a": 22, "defender_b": 10},
+       # ... other classes
+   ])
+   train_dataset = mlflow.data.from_pandas(dataset_summary, name="aggregated_training_flows")
+   mlflow.log_metrics(..., model_id=logged_model.model_id, dataset=train_dataset)
+   ```
+3. **Structured Markdown Note**: The `mlflow.note.content` tag is updated programmatically to display execution metadata and final best class-wise metrics inside the MLflow UI.
+4. **Log Evaluation Table**: Detailed per-class accuracies and sample counts are saved as a structured JSON table artifact (`evaluation_metrics_summary.json` via `mlflow.log_table()`).
+5. **Enforce Version Aliases**: Using `MlflowClient`, the new version is registered and promoted to:
+   - **`champion`** (in `production` mode), replacing any old champion.
+   - **`challenger`** (in `experimental` mode).
 
 ---
 
@@ -461,7 +494,14 @@ Overall accuracy plateauing?
 ### Execute
 
 ```powershell
-python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.yaml
+# Option A: Experimental mode (Cold start, registers model to Registry under 'challenger' alias)
+python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.yaml --mlops-mode experimental
+
+# Option B: Production mode with Resume strategy (Warm-starts from the latest registered 'champion' version weights)
+python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.yaml --mlops-mode production --production-strategy resume
+
+# Option C: Production mode with Fresh strategy (Cold starts a new model version and promotes it to 'champion' alias on finish)
+python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.yaml --mlops-mode production --production-strategy fresh
 ```
 
 ### What Happens Automatically

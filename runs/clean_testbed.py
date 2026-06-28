@@ -25,7 +25,13 @@ def run_ssh(ip, command, username="root", key_path=None):
 def main():
     parser = argparse.ArgumentParser(description="Clean FL-CL Testbed Environment")
     parser.add_argument("--config", default="configs/experiment.yaml", help="Path to experiment config YAML")
-    parser.add_argument("--key", default="~/.ssh/id_ed25519", help="Path to private SSH key")
+    # Dynamic cross-platform fallback for default SSH key
+    default_key = os.path.expanduser("~/.ssh/id_ed25519")
+    if not os.path.exists(default_key) and os.path.exists(os.path.expanduser("~/.ssh/id_rsa")):
+        default_key = os.path.expanduser("~/.ssh/id_rsa")
+    default_key = os.environ.get("SSH_KEY_PATH") or default_key
+
+    parser.add_argument("--key", default=default_key, help="Path to private SSH key")
     args = parser.parse_args()
 
     if not os.path.exists(args.config):

@@ -325,6 +325,20 @@ def main():
             tags["resumed_from_version"] = str(resumed_from_version)
         mlflow.set_tags(tags)
 
+        # Construct initial run description (notes) with rich markdown information
+        run_desc = (
+            f"### Federated Continual Learning Run\n"
+            f"- **MLOps Mode**: `{args.mlops_mode.upper()}`\n"
+            f"- **Production Strategy**: `{args.production_strategy if args.mlops_mode == 'production' else 'N/A'}`\n"
+            f"- **Git Commit**: `{get_git_hash(args.git_commit)}`\n"
+            f"- **FL Rounds**: `{args.rounds}`\n"
+            f"- **Warm Started**: `{'True' if initial_parameters is not None else 'False'}`\n"
+        )
+        if resumed_from_run_id:
+            run_desc += f"- **Resumed From Run ID**: `{resumed_from_run_id}` (Version `{resumed_from_version}`)\n"
+        
+        mlflow.set_tag("mlflow.note.content", run_desc)
+
         # Log config file as sanitized artifact if provided
         if args.config_file and os.path.exists(args.config_file):
             sanitized_path = sanitize_config(args.config_file)
@@ -395,6 +409,43 @@ def main():
             )
             print(f"[server] Successfully linked model metrics to model_id: {logged_model.model_id}")
 
+            # Update run description notes with final performance details
+            try:
+                run_desc += (
+                    f"\n### Final Performance Summary\n"
+                    f"- **Global Accuracy**: `{strategy.best_accuracy*100:.4f}%` (Best Round: `{strategy.best_round}`)\n"
+                    f"- **Global Loss**: `{strategy.best_loss:.6f}`\n"
+                    f"- **Class-wise Accuracies**:\n"
+                )
+                class_labels = {0: "Normal", 1: "Botnet", 2: "DNS Exfiltration", 3: "SSH Brute Force", 4: "DoS"}
+                for i in range(5):
+                    class_acc = strategy.best_metrics.get(f"accuracy_class_{i}")
+                    if class_acc is not None:
+                        run_desc += f"  - **{class_labels[i]}**: `{class_acc*100:.2f}%`\n"
+                mlflow.set_tag("mlflow.note.content", run_desc)
+                print("[server] Updated MLflow run description with final metrics summary.")
+            except Exception as note_err:
+                print(f"[server] Warning: Could not update run description note: {note_err}")
+
+            # Log custom Evaluation Table to MLflow
+            try:
+                import pandas as pd
+                class_labels = {0: "Normal", 1: "Botnet", 2: "DNS Exfiltration", 3: "SSH Brute Force", 4: "DoS"}
+                eval_data = []
+                for i in range(5):
+                    class_acc = strategy.best_metrics.get(f"accuracy_class_{i}")
+                    eval_data.append({
+                        "class_id": i,
+                        "class_name": class_labels[i],
+                        "accuracy": float(class_acc) if class_acc is not None else 0.0,
+                        "status": "Perfect" if class_acc == 1.0 else "Acceptable" if class_acc >= 0.99 else "Needs Improvement"
+                    })
+                eval_df = pd.DataFrame(eval_data)
+                mlflow.log_table(data=eval_df, artifact_file="evaluation_metrics_summary.json")
+                print("[server] Logged evaluation metrics summary table to MLflow.")
+            except Exception as table_err:
+                print(f"[server] Warning: Could not log evaluation table artifact: {table_err}")
+
             # Promote model to master checkpoint directory
             print(f"[server] Copying best checkpoint to master directory: {latest_ckpt_path}")
             shutil.copy(run_best_ckpt, latest_ckpt_path)
@@ -461,14 +512,30 @@ def main():
                 if resumed_from_run_id:
                     client.set_model_version_tag(model_name, str(new_version), "resumed_from_run_id", str(resumed_from_run_id))
                 
-                # If production mode, transition to Production stage and archive existing production versions
+                # Assign model version aliases mindfully (MLflow 3.x aliases replace deprecated stages)
                 if args.mlops_mode == "production":
-                    print(f"[server] MLOps Promotion: Transitioning version {new_version} to 'Production'...")
-                    client.transition_model_version_stage(
+                    print(f"[server] MLOps Promotion: Assigning 'champion' alias to version {new_version}...")
+                    client.set_registered_model_alias(
                         name=model_name,
-                        version=str(new_version),
-                        stage="Production",
-                        archive_existing_versions=True
+                        alias="champion",
+                        version=str(new_version)
+                    )
+                    # For backwards compatibility with older dashboard layouts, also set deprecated stage
+                    try:
+                        client.transition_model_version_stage(
+                            name=model_name,
+                            version=str(new_version),
+                            stage="Production",
+                            archive_existing_versions=True
+                        )
+                    except Exception:
+                        pass
+                else:
+                    print(f"[server] MLOps Promotion: Assigning 'challenger' alias to version {new_version}...")
+                    client.set_registered_model_alias(
+                        name=model_name,
+                        alias="challenger",
+                        version=str(new_version)
                     )
             except Exception as registry_err:
                 print(f"[server] Warning: Model registry metadata tagging or promotion failed: {registry_err}")

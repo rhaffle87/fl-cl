@@ -248,10 +248,12 @@ def main():
     mlops_mode = args.mlops_mode or get_config_value(config, "mlops", "mode", default="experimental")
     production_strategy = args.production_strategy or get_config_value(config, "mlops", "production_strategy", default="resume")
 
-    # Set up Telegram notifications
-    tg_token = get_config_value(config, "notifications", "telegram", "bot_token", default="")
-    tg_chat_id = get_config_value(config, "notifications", "telegram", "chat_id", default="")
+    # Set up Telegram notifications (prioritize environment variables for security)
+    tg_token = os.environ.get("TELEGRAM_BOT_TOKEN") or get_config_value(config, "notifications", "telegram", "bot_token", default="")
+    tg_chat_id = os.environ.get("TELEGRAM_CHAT_ID") or get_config_value(config, "notifications", "telegram", "chat_id", default="")
     tg_enabled = get_config_value(config, "notifications", "telegram", "enabled", default=False)
+    if os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID"):
+        tg_enabled = True
     notifier = TelegramNotifier(bot_token=tg_token, chat_id=tg_chat_id, enabled=tg_enabled)
 
     # Define all remote nodes
@@ -525,8 +527,11 @@ def main():
             experiment_id=experiment_id,
         )
 
-        # Determine the key path to use for local plotting
-        plotting_key = args.key or r"~/.ssh/id_ed25519"
+        # Determine the key path to use for local plotting (dynamically resolve home dir for security)
+        default_key = os.path.expanduser("~/.ssh/id_ed25519")
+        if not os.path.exists(default_key) and os.path.exists(os.path.expanduser("~/.ssh/id_rsa")):
+            default_key = os.path.expanduser("~/.ssh/id_rsa")
+        plotting_key = args.key or os.environ.get("SSH_KEY_PATH") or default_key
 
         # Trigger automated plots and report generation
         run_post_training_plots_and_report(
