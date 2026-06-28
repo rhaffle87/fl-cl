@@ -32,11 +32,12 @@ def main():
     parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory")
     parser.add_argument("--epochs", type=int, default=40, help="Training epochs")
     parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
+    parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
     args = parser.parse_args()
 
     print("Loading ramdisk flows...")
     try:
-        X, y = client.load_ramdisk_flows(args.flows_dir)
+        X, y = client.load_ramdisk_flows(args.flows_dir, dos_threshold_ms=args.dos_threshold_ms)
     except Exception as e:
         print(f"Error loading flows: {e}")
         return

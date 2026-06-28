@@ -114,9 +114,9 @@ class RemoteNode:
 
 
 
-def run_data_quality_check(defender_node: RemoteNode) -> dict:
+def run_data_quality_check(defender_node: RemoteNode, dos_threshold: float = 2000) -> dict:
     """Check label distribution on a defender's ramdisk. Returns {label: count}."""
-    result = defender_node.run_cmd("~/fl-cl-env/bin/python3 ~/check_dataset.py --json")
+    result = defender_node.run_cmd(f"~/fl-cl-env/bin/python3 ~/check_dataset.py --json --dos-threshold-ms {dos_threshold}")
     try:
         import json
         output = result.stdout.strip()
@@ -240,6 +240,7 @@ def main():
     experiment_name = get_config_value(config, "experiment", "name", default="FL-CL-Run")
     mlops_mode = args.mlops_mode or get_config_value(config, "mlops", "mode", default="experimental")
     production_strategy = args.production_strategy or get_config_value(config, "mlops", "production_strategy", default="resume")
+    dos_threshold = get_config_value(config, "labeling", "dos_duration_threshold_ms", default=2000)
 
     # Set up Telegram notifications
     tg_token = get_config_value(config, "notifications", "telegram", "bot_token", default="")
@@ -430,7 +431,7 @@ def main():
 
         print("\n=== Phase 6c: Data Quality Gate ===")
         for node_name, node in [("defender-a", def_a), ("defender-b", def_b)]:
-            label_counts = run_data_quality_check(node)
+            label_counts = run_data_quality_check(node, dos_threshold=dos_threshold)
             if label_counts:
                 label_names = {0: "Normal", 1: "Botnet", 2: "Exfil", 3: "SSH-BF", 4: "DoS"}
                 total = sum(label_counts.values())
@@ -446,8 +447,8 @@ def main():
                 print(f"[{node_name}] [!] WARNING: Could not read label distribution")
 
         print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
-        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum}", background=True)
-        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum}", background=True)
+        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold}", background=True)
+        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold}", background=True)
 
         print("\n=== Phase 8: Monitoring Training Loop Convergence ===")
         print("[*] Waiting for Flower server rounds to complete. Press Ctrl+C to terminate early and clean up.")

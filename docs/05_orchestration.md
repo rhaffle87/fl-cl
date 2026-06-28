@@ -59,7 +59,14 @@ Scripts are grouped into logical folders based on their role and deployment targ
 ```
 fl-cl/
 ├── configs/
-│   └── experiment.yaml    # Central configuration file for hyperparameters & topology
+│   ├── experiment.yaml    # Central configuration file for hyperparameters & topology
+│   ├── experiment_100.yaml # 100-round scratch configuration
+│   ├── experiment_500.yaml # 500-round warm-start configuration
+│   └── experiment_1000.yaml # 1000-round warm-start configuration
+│
+├── runs/
+│   ├── clean_testbed.py   # Wipes state and stops processes across testbed nodes
+│   └── setup_ssh_targets.py # Dynamically creates admin users with non-trivial passwords on targets
 │
 ├── src/
 │   ├── aggregator/        # → FL Aggregator (LXC 300)  10.10.130.10

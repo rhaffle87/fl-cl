@@ -44,3 +44,15 @@ checkpoints/
 
 # Local configuration overrides (containing Telegram keys/tokens)
 configs/experiment.yaml
+configs/experiment_100.yaml
+configs/experiment_500.yaml
+configs/experiment_1000.yaml
+
+# Dynamic target credentials (containing SSH password/metadata)
+runs/target_credentials.json
+
+# Scratch scripts/temporary code
+scratch/
+
+# Generated run outputs (plots, metrics, summaries)
+exports/

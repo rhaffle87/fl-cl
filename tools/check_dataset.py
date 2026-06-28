@@ -22,6 +22,7 @@ def main():
     parser = argparse.ArgumentParser(description="Inspect ramdisk flow label distribution")
     parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory")
     parser.add_argument("--json", action="store_true", help="Output JSON dict of counts only")
+    parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
     args = parser.parse_args()
 
     csv_files = sorted(Path(args.flows_dir).glob("*.csv"))
@@ -43,7 +44,7 @@ def main():
         sys.exit(1)
 
     df = pd.concat(dfs, ignore_index=True)
-    df["label"] = df.apply(client.assign_label, axis=1)
+    df["label"] = df.apply(client.assign_label, axis=1, dos_threshold_ms=args.dos_threshold_ms)
 
     if args.json:
         counts = df["label"].value_counts().to_dict()

@@ -37,6 +37,7 @@ def main():
     parser = argparse.ArgumentParser(description="Model validation gate")
     parser.add_argument("--checkpoint", required=True, help="Path to TorchScript model (.pt)")
     parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory")
+    parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
     args = parser.parse_args()
 
     print(f"Loading checkpoint: {args.checkpoint}")
@@ -46,7 +47,7 @@ def main():
 
     print(f"Loading flows from: {args.flows_dir}")
     try:
-        X, y = client.load_ramdisk_flows(args.flows_dir)
+        X, y = client.load_ramdisk_flows(args.flows_dir, dos_threshold_ms=args.dos_threshold_ms)
     except FileNotFoundError as e:
         print(f"FAIL: {e}")
         sys.exit(1)

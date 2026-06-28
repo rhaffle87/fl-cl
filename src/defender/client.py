@@ -60,7 +60,7 @@ except ImportError:
     pass
 
 
-def assign_label(row):
+def assign_label(row, dos_threshold_ms=2000):
     """
     Dynamically assign threat labels to flows based on source/destination IP and port fields:
         0: Normal (benign traffic)
@@ -90,7 +90,14 @@ def assign_label(row):
         if dst_port == 22 or src_port == 22:
             return 3  # BruteForce
         elif dst_port in [80, 443] or src_port in [80, 443]:
-            return 4  # DoS
+            try:
+                duration_ms = float(row.get("duration_ms", 0))
+            except (ValueError, TypeError):
+                duration_ms = 0
+            if duration_ms > dos_threshold_ms:
+                return 4  # DoS
+            else:
+                return 0  # Normal (benign background web requests)
         elif dst_port in [8080, 8888, 9000] or src_port in [8080, 8888, 9000]:
             return 1  # Botnet
         elif dst_port == 53 or src_port == 53:
@@ -100,7 +107,7 @@ def assign_label(row):
     return 0  # Normal
 
 
-def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows"):
+def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: float = 2000):
     """
     Load all CSV flow files from the RAM disk and convert to PyTorch tensors.
     """
@@ -145,7 +152,7 @@ def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows"):
         X = X[:, :32]
 
     # Assign labels dynamically based on IP and port fields
-    df["label"] = df.apply(assign_label, axis=1)
+    df["label"] = df.apply(assign_label, axis=1, dos_threshold_ms=dos_threshold_ms)
     y = df["label"].values.astype(np.int64)
 
     return torch.tensor(X), torch.tensor(y)
@@ -189,10 +196,11 @@ import mlflow
 class CyberDefenseClient(fl.client.NumPyClient):
     """Flower client wrapping the Avalanche CL training loop."""
 
-    def __init__(self, net, cl_strategy, flows_dir):
+    def __init__(self, net, cl_strategy, flows_dir, dos_threshold_ms=2000):
         self.net = net
         self.cl = cl_strategy
         self.flows_dir = flows_dir
+        self.dos_threshold_ms = dos_threshold_ms
 
     def get_parameters(self, config):
         return [v.cpu().numpy() for _, v in self.net.state_dict().items()]
@@ -216,7 +224,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
         self.set_parameters(parameters)
         num_samples = 0
         try:
-            X, y = load_ramdisk_flows(self.flows_dir)
+            X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms)
             num_samples = len(X)
             experience = get_experience(X, y)
             self.cl.train(experience)
@@ -240,7 +248,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
         try:
-            X, y = load_ramdisk_flows(self.flows_dir)
+            X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms)
             dataset = TensorDataset(X, y)
             dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
 
@@ -297,6 +305,7 @@ def main():
     parser.add_argument("--class-weights", default="12.0,3.0,3.0,15.0,1.0", help="Comma-separated class weights")
     parser.add_argument("--lr", type=float, default=0.01, help="SGD learning rate")
     parser.add_argument("--momentum", type=float, default=0.9, help="SGD momentum")
+    parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
     args = parser.parse_args()
 
     # Set up MLflow
@@ -308,6 +317,7 @@ def main():
     print(f"[client-{args.client_id}] Server: {args.server}")
     print(f"[client-{args.client_id}] Flows:  {args.flows_dir}")
     print(f"[client-{args.client_id}] SGD lr: {args.lr} | momentum: {args.momentum}")
+    print(f"[client-{args.client_id}] DoS duration threshold: {args.dos_threshold_ms} ms")
 
     net = CyberDefenseNet().to(device)
     
@@ -323,7 +333,7 @@ def main():
 
     fl.client.start_numpy_client(
         server_address=args.server,
-        client=CyberDefenseClient(net, cl, args.flows_dir),
+        client=CyberDefenseClient(net, cl, args.flows_dir, dos_threshold_ms=args.dos_threshold_ms),
     )
 
 

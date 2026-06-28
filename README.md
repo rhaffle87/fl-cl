@@ -11,8 +11,11 @@ fl-cl/
 ├── README.md                     ← You are here
 ├── TECH_STACK.md                 ← Complete technology inventory
 │
-├── configs/                      ← Experiment configuration
-│   └── experiment.yaml           ← Reproducible hyperparams, topology, notifications
+├── configs/                      ← Experiment configurations
+│   ├── experiment.yaml           ← Reproducible hyperparams, topology, notifications
+│   ├── experiment_100.yaml       ← 100-round scratch configuration
+│   ├── experiment_500.yaml       ← 500-round warm-start configuration
+│   └── experiment_1000.yaml      ← 1000-round warm-start configuration
 │
 ├── docs/                         ← Research documentation
 │   ├── 00_research_paper.md      ← Full integrated paper (Chapters 1–9)
@@ -28,6 +31,10 @@ fl-cl/
 │   ├── 02_vm_provision/          ← VM/CT creation scripts
 │   ├── 03_hookscripts/           ← Proxmox lifecycle hookscripts
 │   └── 04_guest_setup/           ← In-VM software provisioning
+│
+├── runs/                         ← Simulation preparation scripts
+│   ├── clean_testbed.py          ← Clean MLflow DB & target leftover flows/logs/processes
+│   └── setup_ssh_targets.py      ← Configure challenging target SSH passwords
 │
 ├── src/                          ← Python application code
 │   ├── aggregator/               ← FL Aggregator (LXC 300)
@@ -59,30 +66,41 @@ fl-cl/
 - SSH access to all 6 VMs from your local workstation
 - Python environments provisioned on remote nodes (see `infra/04_guest_setup/`)
 
-### Option 1: Config-driven (recommended)
-Edit `configs/experiment.yaml` to set your hyperparameters, then:
+### 1. Pre-flight Setup & Cleanup
+Before starting a simulation run, prepare the testbed by executing the helper scripts:
+
 ```bash
-python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment.yaml
+# Configure "admin" user with a challenging wordlist password on targets
+python runs/setup_ssh_targets.py --key /path/to/ssh_key
+
+# Reset MLflow database, clear active flow CSVs, logs, and processes
+python runs/clean_testbed.py --key /path/to/ssh_key
 ```
 
-### Option 2: CLI overrides
+### 2. Execute Training Progression
+Run the simulation and federated training sequentially to model adaptation over time:
+
 ```bash
-python src/orchestrate.py \
-  --key /path/to/ssh_key \
-  --rounds 100 \
-  --lambda-ewc 0.25 \
-  --duration 60
+# Phase 1: 100 Rounds from Scratch (Base Model)
+python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment_100.yaml
+
+# Phase 2: Warm-Start/Resume to 500 Rounds
+python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment_500.yaml
+
+# Phase 3: Warm-Start/Resume to 1000 Rounds
+python src/orchestrate.py --key /path/to/ssh_key --config configs/experiment_1000.yaml
 ```
 
-The orchestrator will:
-1. Clean up old processes on all nodes
-2. SCP source code to remote VMs
+The orchestrator will automatically:
+1. Clean up old processes on nodes
+2. SCP current source code to remote VMs
 3. Launch target HTTP services, extractors, MLflow, and Flower server
-4. Run 5 attack stages (benign, SSH, Slowloris, DNS exfil, botnet)
-5. Run data quality gate (verify all 5 classes present)
-6. Launch Flower clients for federated training
-7. Save model checkpoints + TorchScript export on aggregator
-8. Send Telegram notification on completion/failure
+4. Run simulated attack stages (benign, SSH, Slowloris, DNS exfil, botnet)
+5. Verify data quality gate (all 5 classes present)
+6. Launch Flower clients for training
+7. Save model checkpoints and Promote best to Registry on aggregator
+8. Notify via Telegram on completion/failure
+
 
 ---
 
