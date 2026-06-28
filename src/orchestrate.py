@@ -150,11 +150,17 @@ def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name,
 
         from plot_metrics import run_plotting
 
-        # We want plots to go to exports/plots/
-        exports_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "exports"))
-        plots_dir = os.path.join(exports_dir, "plots")
+        # Create a unique directory for this specific run in exports/
+        timestamp = time.strftime('%Y%m%d_%H%M%S')
+        clean_name = experiment_name.replace(" ", "_").replace(":", "_").replace("/", "_")
+        run_dir_name = f"{clean_name}_{timestamp}"
+        
+        exports_base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "exports"))
+        run_dir = os.path.join(exports_base_dir, run_dir_name)
+        plots_dir = os.path.join(run_dir, "plots")
         os.makedirs(plots_dir, exist_ok=True)
 
+        print(f"[*] Exporting results to folder: {run_dir}")
         print("[*] Retrieving metrics and plotting convergence graphs...")
         results = run_plotting(
             key_path=key_path,
@@ -167,8 +173,8 @@ def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name,
         final_metrics = results.get("final_metrics", {})
         exported_plots = results.get("exported_plots", {})
 
-        # Generate Markdown Summary Report
-        summary_path = os.path.join(exports_dir, "run_summary.md")
+        # Generate Markdown Summary Report inside the specific run directory
+        summary_path = os.path.join(run_dir, "run_summary.md")
         print(f"[*] Writing training run summary report to {summary_path}...")
 
         with open(summary_path, "w") as f:
