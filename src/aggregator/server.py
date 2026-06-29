@@ -244,6 +244,7 @@ def main():
     # Set up MLflow
     mlflow.set_tracking_uri(args.mlflow_uri)
     mlflow.set_experiment("FL-CL-CyberDefense")
+    mlflow.enable_system_metrics_logging()
 
     # Security audit: restrict directory permissions
     try:
