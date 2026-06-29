@@ -222,6 +222,26 @@ def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name,
 
         print(f"[OK] Visual report generated successfully at {summary_path}")
 
+        # Call Local LLM Threat Analysis & MLflow Artifact Upload
+        try:
+            print("\n=== Phase 8c: Querying Local LLM for Report Analysis & Artifact Upload ===")
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            tools_dir = os.path.join(project_root, "tools")
+            if tools_dir not in sys.path:
+                sys.path.insert(0, tools_dir)
+            import generate_llm_report
+            generate_llm_report.append_and_upload_report(
+                run_dir=run_dir,
+                run_id=run_id,
+                final_metrics=final_metrics,
+                lambda_ewc=lambda_ewc,
+                rounds=rounds,
+                aggregator_ip=aggregator_ip
+            )
+        except Exception as llm_err:
+            print(f"[!] Warning: Local LLM reporting or artifact upload failed: {llm_err}")
+
+
     except ImportError as ie:
         print(f"[!] Warning: Could not run automated plotting because dependencies are missing: {ie}")
     except Exception as e:

@@ -530,7 +530,29 @@ When evaluating results inside the MLflow dashboard or CSV exports:
    - **Severe Class Imbalance**: The traffic generator produces thousands of malicious flows during active attack phases, whereas the benign flow generation runs yield a very small handful. As a result, the global validation accuracy is heavily dominated by the attack detection rates.
    - **Administrative Port 22 Overlap**: The heuristic labeling logic in `client.py` assigns Class 0 (Normal) to all non-attacker flows. However, the orchestrator script continuously issues administrative SSH connections on port 22 to check process statuses. Since these administrative flows share structural characteristics (port 22) with the SSH Brute Force attacks (Class 3), the model correctly notices the feature overlap and biases toward classifying all port 22 flows as malicious, lowering the benign class accuracy.
 
+### 5.4 Post-Run Local LLM Analytics & Reporting
+
+To automate the review of final training metrics and assist in detecting catastrophic forgetting or tuning hyperparameters, the pipeline integrates a local Ollama-based LLM analyst.
+
+#### Configuration (`.env`)
+The local `.env` file at the project root configures the proxy parameters and target model:
+```env
+# Ollama AI Configuration
+OLLAMA_ENDPOINT="https://ollama-server.tail2ae479.ts.net"
+OLLAMA_KEY="d15ec28ba9641db36a78c7764539c4a68c7825c8215a1a9478ff535881728e78"
+OLLAMA_MODEL="qwen2.5-coder:1.5b-base"
+```
+
+#### Automation & Upload Flow
+1. **Proxy Authentication**: The Ollama instance is protected by an Nginx reverse proxy requiring the custom `x-fcl-key` header.
+2. **Analysis Generation**: When the master orchestrator completes training, it triggers `tools/generate_llm_report.py`.
+3. **Optimized CPU Inference**: The script queries the Ollama server requesting a structured markdown evaluation of the training run. It specifies `num_thread: 4` and targets the lightweight `qwen2.5-coder:1.5b-base` model, ensuring fast sub-20-second generations on CPU-only infrastructure.
+4. **MLflow Artifact Registration**: The returned analysis is appended to the run's `run_summary.md` report, and then programmatically uploaded to the MLflow server via the tracking API under the active run ID.
+
+---
+
 ### Manual SSH Checks
+
 
 **Verify extractor is capturing flows:**
 ```bash

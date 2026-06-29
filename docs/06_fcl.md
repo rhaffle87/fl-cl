@@ -362,6 +362,7 @@ Once training completes (all rounds finished), the server executes the final pip
 5. **Enforce Version Aliases**: Using `MlflowClient`, the new version is registered and promoted to:
    - **`champion`** (in `production` mode), replacing any old champion.
    - **`challenger`** (in `experimental` mode).
+6. **Local LLM Post-Run Analysis**: The orchestrator triggers `tools/generate_llm_report.py`, querying a local CPU-bound Ollama service (`qwen2.5-coder:1.5b-base`) via an Nginx authentication proxy. The generated markdown threat analysis is appended to `run_summary.md` and registered in MLflow under the current run as an experiment artifact.
 
 ---
 

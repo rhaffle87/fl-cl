@@ -50,6 +50,7 @@ fl-cl/
     ├── check_dataset.py          ← Inspect ramdisk flow label distribution
     ├── check_features.py         ← Per-class feature statistics
     ├── enable_wal.py             ← Enable WAL mode on MLflow SQLite DB
+    ├── generate_llm_report.py    ← Post-training local LLM threat report generator
     ├── local_train.py            ← Standalone training + confusion matrix
     ├── plot_metrics.py           ← Post-training convergence plot generator
     └── validate_model.py         ← Pre-deployment model validation gate
@@ -64,12 +65,18 @@ fl-cl/
 - Python environments provisioned on remote nodes (see `infra/04_guest_setup/`)
 
 ### 1. Pre-flight Setup & Cleanup
-First, configure your `.env` file at the root of the project with your Telegram credentials and local SSH private key path:
+First, configure your `.env` file at the root of the project with your credentials and SSH private key path:
 ```env
 TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
 TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
 SSH_KEY_PATH="C:\Users\Username\.ssh\id_ed25519"
+
+# Ollama AI Reporting Configuration
+OLLAMA_ENDPOINT="https://ollama-server.tail2ae479.ts.net"
+OLLAMA_KEY="d15ec28ba9641db36a78c7764539c4a68c7825c8215a1a9478ff535881728e78"
+OLLAMA_MODEL="qwen2.5-coder:1.5b-base"
 ```
+
 
 Prepare the testbed by executing the helper scripts (which auto-load settings from `.env`):
 

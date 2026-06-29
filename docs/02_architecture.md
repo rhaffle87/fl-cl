@@ -322,7 +322,23 @@ if __name__ == "__main__":
     )
 ```
 
+### 5.5 Local LLM Reporting Engine (`generate_llm_report.py`)
+
+To close the MLOps loop, the pipeline triggers an automated post-training analysis workflow upon completion:
+
+```
+[ orchestrate.py ] ──► [ generate_llm_report.py ] ──► Nginx Proxy ──► [ Ollama (qwen2.5-coder:1.5b) ]
+                                                            │
+                                                            ▼ (markdown report)
+                                                     [ MLflow Runs / Artifacts ]
+```
+
+1. **Analytical Assessment**: The aggregator collects the training results (validation losses, final class-specific detection accuracies, and EWC backward transfer metrics).
+2. **CPU-Bound Inference**: The report engine interfaces with a local Ollama endpoint secured by an Nginx dual-key reverse proxy. The prompt is designed to run efficiently on CPU-only infrastructure, targeting the optimized `qwen2.5-coder:1.5b-base` model with controlled thread concurrency (`num_thread: 4`).
+3. **Artifact Registration**: The engine appends the generated security threat report directly to the run's `run_summary.md` and uploads it to the active MLflow run tracking database as an artifact.
+
 ---
+
 
 ## 6. Setup Workflow (Step-by-Step)
 
