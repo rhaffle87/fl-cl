@@ -7,6 +7,31 @@ import subprocess
 from datetime import datetime
 import mlflow
 
+def load_env(env_name: str = ".env"):
+    """Load environment variables from a .env file searching upward from the script directory."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    while True:
+        env_path = os.path.join(current_dir, env_name)
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" in line:
+                        key, val = line.split("=", 1)
+                        key = key.strip()
+                        val = val.strip().strip('"').strip("'")
+                        os.environ[key] = val
+            break
+        parent = os.path.dirname(current_dir)
+        if parent == current_dir:
+            break
+        current_dir = parent
+
+# Load local environment variables
+load_env()
+
 # Prevent Windows Unicode/emoji console encoding errors
 if sys.platform.startswith('win'):
     try:

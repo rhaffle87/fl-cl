@@ -582,7 +582,7 @@ ssh root@10.10.140.10 "cat /tmp/attack_flow.log"
 
 ## 6. Model Registry Governance & Aliases
 
-To establish a strict promotion logic and track model lineage, the aggregator uses modern MLflow 3.x **Model Version Aliases** instead of legacy stages (`Production`, `Staging`, etc.). All registered versions are saved to the central registry under the registered model name `FL-CL-CyberDefense-Model`.
+To establish a strict promotion logic and track model lineage, the aggregator uses modern MLflow 3.x **Model Version Aliases** instead of legacy stages (`Production`, `Staging`, etc.). All registered versions are saved to the central registry under the registered model name `CyberDefenseNet`.
 
 ### Promotion Rules by MLOps Mode
 * **Experimental Mode (`--mlops-mode experimental`)**:
@@ -612,13 +612,13 @@ client = MlflowClient()
 
 # Get champion version metadata
 champion_meta = client.get_model_version_by_alias(
-    name="FL-CL-CyberDefense-Model",
+    name="CyberDefenseNet",
     alias="champion"
 )
 print(f"Active Champion Version: {champion_meta.version} (Run ID: {champion_meta.run_id})")
 
 # Load champion model directly
-model_uri = f"models:/FL-CL-CyberDefense-Model@champion"
+model_uri = f"models:/CyberDefenseNet@champion"
 loaded_model = mlflow.pytorch.load_model(model_uri)
 ```
 
@@ -690,6 +690,6 @@ The gate compares the candidate model's validation metrics against the current r
    $$\text{BWT}_{\text{average}} \ge -0.05$$
 
 ### 9.2 Registry Promotion Control
-* **Pass**: If the candidate passes all gates, it is registered under the `FL-CL-CyberDefense-Model` registry name, and the `champion` alias is atomically shifted to the new version.
+* **Pass**: If the candidate passes all gates, it is registered under the `CyberDefenseNet` registry name, and the `champion` alias is atomically shifted to the new version.
 * **Fail**: If any threshold is violated, the model version is still registered for audit purposes, but it is tagged as `failed_validation` and the `champion` alias remains on the previous stable version. A notification is issued.
 

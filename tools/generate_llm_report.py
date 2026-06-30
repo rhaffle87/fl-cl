@@ -5,25 +5,27 @@ import requests
 import argparse
 from mlflow.tracking import MlflowClient
 
-def load_env(env_path: str = ".env"):
-    """Load environment variables from a .env file if it exists."""
-    if not os.path.exists(env_path):
-        # Resolve relative to project root if run from subdirectories
-        resolved_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", env_path))
-        if os.path.exists(resolved_path):
-            env_path = resolved_path
-        else:
-            return
-    with open(env_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" in line:
-                key, val = line.split("=", 1)
-                key = key.strip()
-                val = val.strip().strip('"').strip("'")
-                os.environ[key] = val
+def load_env(env_name: str = ".env"):
+    """Load environment variables from a .env file searching upward from the script directory."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    while True:
+        env_path = os.path.join(current_dir, env_name)
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" in line:
+                        key, val = line.split("=", 1)
+                        key = key.strip()
+                        val = val.strip().strip('"').strip("'")
+                        os.environ[key] = val
+            break
+        parent = os.path.dirname(current_dir)
+        if parent == current_dir:
+            break
+        current_dir = parent
 
 # Load local environment variables
 load_env()
@@ -52,34 +54,28 @@ def generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds):
         except (ValueError, TypeError):
             formatted_metrics[k] = v
 
-    prompt = f"""
-    You are an expert AI Security MLOps Analyzer assisting in evaluating a Federated Continual Learning (FL-CL) run.
-    The goal is to detect threat simulations while ensuring the model does not suffer from catastrophic forgetting.
+    prompt = f"""# FL-CL Security MLOps Evaluation Report
+- **MLflow Run ID**: {run_id}
+- **Total Rounds**: {rounds}
+- **Continual Learning Strategy**: Avalanche Elastic Weight Consolidation (EWC)
+- **EWC Lambda**: {lambda_ewc}
 
-    Run Configuration:
-    - MLflow Run ID: {run_id}
-    - Total Rounds: {rounds}
-    - Continual Learning Strategy: Avalanche Elastic Weight Consolidation (EWC)
-    - EWC Lambda: {lambda_ewc}
+## Final Aggregated Training Metrics
+```json
+{json.dumps(formatted_metrics, indent=2)}
+```
 
-    Final Aggregated Training Metrics:
-    {json.dumps(formatted_metrics, indent=2)}
-
-    Please write a structured evaluation report containing:
-    1. **Executive Summary**: A brief, high-level evaluation of this experiment.
-    2. **Convergence Analysis**: Assessment of global loss drop and overall validation accuracy.
-    3. **Catastrophic Forgetting Assessment**: Analyze if newer tasks/threat classes (such as DoS, Botnets, or SSH Brute force) caused performance degradation in previously learned tasks (like Normal traffic or DNS Exfiltration).
-    4. **MLOps Recommendations**: Concrete advice on hyperparameter tuning (e.g. should EWC lambda be adjusted?) or changes to training rounds for the next run.
-
-    Keep the report professional, analytical, and formatted in clean markdown without any surrounding conversational text (just return the markdown report).
-    """
+## 1. Executive Summary
+"""
 
     payload = {
         "model": model,
         "prompt": prompt,
         "stream": False,
         "options": {
-            "num_thread": 4
+            "num_thread": 4,
+            "temperature": 0.2,
+            "num_predict": 384
         }
     }
 
@@ -116,6 +112,12 @@ def append_and_upload_report(run_dir, run_id, final_metrics, lambda_ewc, rounds,
         with open(summary_path, "a") as f:
             f.write("\n---\n\n")
             f.write(f"## Local AI Threat Analysis ({model})\n\n")
+            f.write("# FL-CL Security MLOps Evaluation Report\n")
+            f.write(f"- **MLflow Run ID**: {run_id}\n")
+            f.write(f"- **Total Rounds**: {rounds}\n")
+            f.write(f"- **Continual Learning Strategy**: Avalanche Elastic Weight Consolidation (EWC)\n")
+            f.write(f"- **EWC Lambda**: {lambda_ewc}\n\n")
+            f.write("## 1. Executive Summary\n")
             f.write(analysis)
             f.write("\n")
     except Exception as e:
