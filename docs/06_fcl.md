@@ -542,7 +542,7 @@ To transition from basic collaborative training to a highly robust enterprise de
 ### 8.2 Cryptographic Data Lineage Tracking
 - **Purpose**: Establishes immutable dataset provenance to guarantee training reproducibility and compliance audits.
 - **Execution**: The orchestrator automatically computes SHA-256 digests of the active CSV flows on client RAM disks prior to client execution.
-- **Lineage Registry**: The client-side digests are registered as MLflow parameters, and a merged graph checksum $\text{SHA-256}(\text{hash\_A} \mathbin{\Vert} \text{hash\_B})$ is registered alongside a structured `dataset_lineage.json` artifact containing system configurations, git commit SHAs, and timestamped statistics.
+- **Lineage Registry**: The client-side digests are registered as MLflow parameters, and a merged graph checksum $\text{SHA-256}(\text{hash\\_A} \mathbin{\Vert} \text{hash\\_B})$ is registered alongside a structured `dataset_lineage.json` artifact containing system configurations, git commit SHAs, and timestamped statistics.
 
 ### 8.3 Automated Registry Governance & Validation Gates
 - **Purpose**: Restricts automated Model Registry promotions to only candidate models that satisfy strict continual learning performance and communication constraints.
