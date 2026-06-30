@@ -10,6 +10,7 @@ Per federated round:
   3. Returns updated weights to the aggregator via gRPC
 """
 
+import os
 import argparse
 from collections import OrderedDict
 from pathlib import Path

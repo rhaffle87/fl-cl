@@ -99,7 +99,7 @@ mlops:
 On validation rounds, the aggregator automatically decides whether to promote the model using strict criteria:
 - **Per-class F1-score**: Evaluates each class individually.
 - **Catastrophic Forgetting Prevention**: Verifies that Backward Transfer (BWT) $\ge 0$. Any drop below 0 is flagged as forgetting and blocks promotion.
-- **Communication Budget**: Rejects models with client-aggregator transmission overhead $> 200$MB.
+- **Communication Budget**: Rejects models with client-aggregator transmission overhead $> 200$ MB.
 
 ### 3. Automated Telegram Alerts & LLM Reporting
 - **On Promotion Failure**: Sends a warning to Telegram with the exact criteria that failed (e.g., `BWT regression detected: -0.12`).
