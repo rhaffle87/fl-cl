@@ -1,0 +1,22 @@
+# ─────────────────────────────────────────────────────────────
+# FL-CL Local Experiment Configuration Override Example
+# ─────────────────────────────────────────────────────────────
+# Copy this file to configs/local_experiment.yaml to customize
+# your local setup. The local_*.yaml files are ignored by git.
+# ─────────────────────────────────────────────────────────────
+
+# You only need to define the keys you want to override.
+# For example, if you want to override local Proxmox guest IPs:
+
+# topology:
+#   aggregator: "10.10.130.10"
+#   defender_a: "10.10.130.11"
+#   defender_b: "10.10.130.12"
+#   target_a: "10.10.110.15"
+#   target_b: "10.10.120.15"
+#   traffic_gen: "10.10.140.10"
+
+# notifications:
+#   telegram:
+#     enabled: false
+#     # Note: Credentials (bot_token/chat_id) should be set in .env
