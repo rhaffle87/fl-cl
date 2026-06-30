@@ -261,6 +261,9 @@ class CyberDefenseClient(fl.client.NumPyClient):
 
             class_correct = {i: 0 for i in range(5)}
             class_total = {i: 0 for i in range(5)}
+            class_tp = {i: 0 for i in range(5)}
+            class_fp = {i: 0 for i in range(5)}
+            class_fn = {i: 0 for i in range(5)}
 
             with torch.no_grad():
                 for X_batch, y_batch in dataloader:
@@ -274,22 +277,36 @@ class CyberDefenseClient(fl.client.NumPyClient):
 
                     for label in range(5):
                         label_mask = (y_batch == label)
+                        pred_mask = (predicted == label)
                         class_total[label] += label_mask.sum().item()
                         class_correct[label] += ((predicted == y_batch) & label_mask).sum().item()
+                        
+                        class_tp[label] += (pred_mask & label_mask).sum().item()
+                        class_fp[label] += (pred_mask & ~label_mask).sum().item()
+                        class_fn[label] += (~pred_mask & label_mask).sum().item()
 
             avg_loss = total_loss / total if total > 0 else 0.0
             accuracy = correct / total if total > 0 else 0.0
 
-            class_accuracies = {}
+            class_metrics = {}
             for label in range(5):
                 if class_total[label] > 0:
-                    class_accuracies[f"accuracy_class_{label}"] = class_correct[label] / class_total[label]
+                    class_metrics[f"accuracy_class_{label}"] = class_correct[label] / class_total[label]
+                    tp = class_tp[label]
+                    fp = class_fp[label]
+                    fn = class_fn[label]
+                    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+                    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+                    class_metrics[f"f1_class_{label}"] = (
+                        2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+                    )
                 else:
-                    class_accuracies[f"accuracy_class_{label}"] = -1.0  # Sentinel for no samples
+                    class_metrics[f"accuracy_class_{label}"] = -1.0
+                    class_metrics[f"f1_class_{label}"] = -1.0
 
             metrics = {
                 "accuracy": accuracy,
-                **class_accuracies
+                **class_metrics
             }
             return avg_loss, total, metrics
         except FileNotFoundError:
@@ -306,6 +323,7 @@ def main():
     parser.add_argument("--lr", type=float, default=0.01, help="SGD learning rate")
     parser.add_argument("--momentum", type=float, default=0.9, help="SGD momentum")
     parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
+    parser.add_argument("--batch-size", type=int, default=32, help="Local training batch size")
     args = parser.parse_args()
 
     # Set up MLflow
@@ -316,7 +334,7 @@ def main():
     print(f"[client-{args.client_id}] Device: {device}")
     print(f"[client-{args.client_id}] Server: {args.server}")
     print(f"[client-{args.client_id}] Flows:  {args.flows_dir}")
-    print(f"[client-{args.client_id}] SGD lr: {args.lr} | momentum: {args.momentum}")
+    print(f"[client-{args.client_id}] SGD lr: {args.lr} | momentum: {args.momentum} | batch_size: {args.batch_size}")
     print(f"[client-{args.client_id}] DoS duration threshold: {args.dos_threshold_ms} ms")
 
     net = CyberDefenseNet().to(device)
@@ -328,7 +346,8 @@ def main():
         ewc_lambda=args.ewc_lambda, 
         class_weights=weights,
         lr=args.lr,
-        momentum=args.momentum
+        momentum=args.momentum,
+        batch_size=args.batch_size
     )
 
     fl.client.start_numpy_client(

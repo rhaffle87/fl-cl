@@ -57,6 +57,23 @@ def weighted_avg(metrics):
                 class_weights.append(n)
         if sum(class_weights) > 0:
             aggregated_metrics[class_key] = sum([w * v for w, v in zip(class_weights, class_vals)]) / sum(class_weights)
+        else:
+            aggregated_metrics[class_key] = -1.0
+
+    # Aggregate class-wise F1 scores
+    for i in range(5):
+        f1_key = f"f1_class_{i}"
+        f1_vals = []
+        f1_weights = []
+        for n, m in metrics:
+            val = m.get(f1_key, -1.0)
+            if val >= 0.0:
+                f1_vals.append(val)
+                f1_weights.append(n)
+        if sum(f1_weights) > 0:
+            aggregated_metrics[f1_key] = sum([w * v for w, v in zip(f1_weights, f1_vals)]) / sum(f1_weights)
+        else:
+            aggregated_metrics[f1_key] = -1.0
 
     return aggregated_metrics
 
@@ -77,6 +94,15 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
         self.latest_accuracy = 0.0
         self.latest_metrics = {}
         
+        # New MLOps sweep metrics tracking
+        self.peak_f1 = {i: 0.0 for i in range(5)}
+        self.history_records = []
+        self.fit_clients = 0
+        
+        # Calculate parameter size in bytes (float32 = 4 bytes)
+        dummy_model = CyberDefenseNet()
+        self.param_bytes = sum(p.numel() * 4 for p in dummy_model.parameters())
+
         # Security audit: enforce strict 0700 owner-only permissions on directories
         try:
             os.makedirs(self.checkpoint_dir, mode=0o700, exist_ok=True)
@@ -99,6 +125,36 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
             for k, v in metrics.items():
                 mlflow.log_metric(k, v, step=server_round)
 
+            # Estimate and log communication bytes (2 directions: server->client, client->server)
+            comm_bytes = 2 * self.param_bytes * self.fit_clients
+            mlflow.log_metric("communication_bytes", float(comm_bytes), step=server_round)
+
+            # Calculate and log BWT deltas, and keep peak F1 up to date
+            for i in range(5):
+                f1_key = f"f1_class_{i}"
+                f1_val = metrics.get(f1_key, -1.0)
+                if f1_val >= 0.0:
+                    # Update peak F1
+                    self.peak_f1[i] = max(self.peak_f1[i], f1_val)
+                    # BWT delta
+                    bwt_delta = f1_val - self.peak_f1[i]
+                    mlflow.log_metric(f"bwt_class_{i}", bwt_delta, step=server_round)
+                    metrics[f"bwt_class_{i}"] = bwt_delta
+                else:
+                    metrics[f"bwt_class_{i}"] = -1.0
+
+            # Record round details for history table
+            record = {
+                "round": int(server_round),
+                "loss": float(loss),
+                "accuracy": float(accuracy),
+                "communication_bytes": int(comm_bytes)
+            }
+            for i in range(5):
+                record[f"f1_class_{i}"] = float(metrics.get(f"f1_class_{i}", -1.0))
+                record[f"bwt_class_{i}"] = float(metrics.get(f"bwt_class_{i}", -1.0))
+            self.history_records.append(record)
+
             # Checkpoint best model
             if loss < self.best_loss:
                 self.best_loss = loss
@@ -113,6 +169,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
 
     @mlflow.trace(name="aggregate_fit")
     def aggregate_fit(self, server_round, results, failures):
+        self.fit_clients = len(results)
         aggregated = super().aggregate_fit(server_round, results, failures)
 
         # Save model checkpoint from aggregated parameters
@@ -236,6 +293,12 @@ def main():
                         help="MLops mode (experimental or production)")
     parser.add_argument("--production-strategy", default="resume", choices=["resume", "fresh"],
                         help="Production warm-start checkpoint strategy")
+    parser.add_argument("--parent-run-id", default="", help="MLflow parent run ID for sweep tracking")
+    parser.add_argument("--dataset-hash", default="", help="SHA-256 hash of the defender datasets")
+    parser.add_argument("--lr", type=float, default=0.01, help="Training learning rate")
+    parser.add_argument("--batch-size", type=int, default=32, help="Training batch size")
+    parser.add_argument("--ewc-lambda", type=float, default=0.4, help="EWC lambda")
+    parser.add_argument("--class-weights", default="12.0,3.0,3.0,15.0,1.0", help="Comma-separated class weights")
     args = parser.parse_args()
 
     # Performance optimization: enable SQLite Write-Ahead Logging
@@ -317,6 +380,13 @@ def main():
     print(f"[server] MLOps Mode: {args.mlops_mode} | Production Strategy: {args.production_strategy}")
 
     with mlflow.start_run(run_name="FL-CL-Orchestrated-Run") as run:
+        # Write run ID to a temporary file so orchestrator can retrieve it
+        try:
+            with open("/tmp/current_run_id.txt", "w") as f:
+                f.write(run.info.run_id)
+        except Exception as e:
+            print(f"[server] Warning: Could not write current run ID file: {e}")
+
         # Define run-specific checkpoint directory to isolate outputs
         run_checkpoint_dir = os.path.join(args.checkpoint_dir, run.info.run_id)
         
@@ -333,11 +403,23 @@ def main():
             evaluate_metrics_aggregation_fn=weighted_avg,
         )
 
+        # Link child run to parent run in MLflow if parent run ID is provided
+        if args.parent_run_id:
+            mlflow.set_tag("mlflow.parentRunId", args.parent_run_id)
+            print(f"[server] Linked child run to parent run ID: {args.parent_run_id}")
+
         # Performance optimization: batch log parameters and tags (reduces REST calls to 2)
         params = {
             "fl_rounds": args.rounds,
-            "min_clients": args.min_clients
+            "min_clients": args.min_clients,
+            "lr": args.lr,
+            "batch_size": args.batch_size,
+            "ewc_lambda": args.ewc_lambda,
+            "class_weights": args.class_weights
         }
+        if args.dataset_hash:
+            params["dataset_hash"] = args.dataset_hash
+            print(f"[server] Registered dataset hash parameter: {args.dataset_hash}")
         mlflow.log_params(params)
 
         tags = {
@@ -470,6 +552,11 @@ def main():
                 eval_df = pd.DataFrame(eval_data)
                 mlflow.log_table(data=eval_df, artifact_file="evaluation_metrics_summary.json")
                 print("[server] Logged evaluation metrics summary table to MLflow.")
+
+                if strategy.history_records:
+                    history_df = pd.DataFrame(strategy.history_records)
+                    mlflow.log_table(data=history_df, artifact_file="evaluation_history.json")
+                    print("[server] Logged evaluation history table to MLflow.")
             except Exception as table_err:
                 print(f"[server] Warning: Could not log evaluation table artifact: {table_err}")
 
@@ -541,24 +628,71 @@ def main():
                 
                 # Assign model version aliases mindfully (MLflow 3.x aliases replace deprecated stages)
                 if args.mlops_mode == "production":
-                    print(f"[server] MLOps Promotion: Assigning 'champion' alias to version {new_version}...")
-                    client.set_registered_model_alias(
-                        name=model_name,
-                        alias="champion",
-                        version=str(new_version)
-                    )
-                    # For backwards compatibility with older dashboard layouts, also set deprecated stage
+                    # Retrieve current champion metrics if any
+                    champ_accuracy = 0.0
+                    champ_loss = float("inf")
                     try:
-                        client.transition_model_version_stage(
-                            name=model_name,
-                            version=str(new_version),
-                            stage="Production",
-                            archive_existing_versions=True
-                        )
+                        current_champ = client.get_model_version_by_alias(model_name, "champion")
+                        # Read metrics from tags
+                        champ_accuracy = float(current_champ.tags.get("accuracy", 0.0))
+                        champ_loss = float(current_champ.tags.get("loss", float("inf")))
+                        print(f"[server] Current Champion Version: {current_champ.version} | Accuracy: {champ_accuracy*100:.2f}% | Loss: {champ_loss:.4f}")
                     except Exception:
-                        pass
+                        print("[server] No active champion model found in Model Registry.")
+
+                    # Calculate average BWT for candidate best metrics
+                    bwt_vals = []
+                    for i in range(5):
+                        bwt_val = strategy.best_metrics.get(f"bwt_class_{i}", -1.0)
+                        f1_val = strategy.best_metrics.get(f"f1_class_{i}", -1.0)
+                        if f1_val >= 0.0 and bwt_val != -1.0:
+                            bwt_vals.append(bwt_val)
+                    avg_bwt = sum(bwt_vals) / len(bwt_vals) if len(bwt_vals) > 0 else 0.0
+
+                    # Validation Gate Criteria:
+                    # 1. accuracy >= champion_accuracy - 0.005 (0.5% tolerance)
+                    # 2. loss <= champion_loss + 0.05
+                    # 3. average BWT >= -0.05
+                    candidate_acc = strategy.best_accuracy
+                    candidate_loss = strategy.best_loss
+                    
+                    acc_ok = candidate_acc >= (champ_accuracy - 0.005)
+                    loss_ok = candidate_loss <= (champ_loss + 0.05)
+                    bwt_ok = avg_bwt >= -0.05
+                    
+                    passed_gate = acc_ok and loss_ok and bwt_ok
+                    
+                    print(f"[server] Validation Gate Metrics Checklist:")
+                    print(f"  - Overall Accuracy: candidate={candidate_acc:.6f}, champion={champ_accuracy:.6f} -> {'PASS' if acc_ok else 'FAIL'}")
+                    print(f"  - Aggregated Loss: candidate={candidate_loss:.6f}, champion={champ_loss:.6f} -> {'PASS' if loss_ok else 'FAIL'}")
+                    print(f"  - Average BWT Delta: candidate={avg_bwt:.6f} (threshold >= -0.05) -> {'PASS' if bwt_ok else 'FAIL'}")
+
+                    if passed_gate:
+                        print(f"[server] MLOps Promotion: Validation GATE PASSED. Promoting version {new_version} to 'champion'...")
+                        client.set_registered_model_alias(
+                            name=model_name,
+                            alias="champion",
+                            version=str(new_version)
+                        )
+                        # For backwards compatibility with older dashboard layouts, also set deprecated stage
+                        try:
+                            client.transition_model_version_stage(
+                                name=model_name,
+                                version=str(new_version),
+                                stage="Production",
+                                archive_existing_versions=True
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        print(f"[server] MLOps Promotion: Validation GATE FAILED. Assigning 'challenger' alias to version {new_version}...")
+                        client.set_registered_model_alias(
+                            name=model_name,
+                            alias="challenger",
+                            version=str(new_version)
+                        )
                 else:
-                    print(f"[server] MLOps Promotion: Assigning 'challenger' alias to version {new_version}...")
+                    print(f"[server] MLOps Promotion (experimental mode): Assigning 'challenger' alias to version {new_version}...")
                     client.set_registered_model_alias(
                         name=model_name,
                         alias="challenger",

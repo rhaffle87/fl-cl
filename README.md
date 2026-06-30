@@ -12,7 +12,9 @@ fl-cl/
 ├── TECH_STACK.md                 ← Complete technology inventory
 │
 ├── configs/                      ← Experiment configurations
-│   └── experiment.yaml           ← Reproducible hyperparams, topology, notifications
+│   ├── experiment.yaml           ← Reproducible hyperparams, topology, notifications
+│   ├── sweep_grid.yaml           ← Hyperparameter sweep configuration grid
+│   └── sweep_verify.yaml         ← Fast hyperparameter sweep verification config
 │
 ├── docs/                         ← Research documentation
 │   ├── 00_research_paper.md      ← Full integrated paper (Chapters 1–9)
@@ -44,7 +46,8 @@ fl-cl/
 │   ├── traffic_gen/              ← Traffic Generator (VM 400)
 │   │   └── attack_flow.py        ← Offensive scenario simulator
 │   ├── notifications.py          ← Telegram webhook notifications
-│   └── orchestrate.py            ← Local workstation orchestrator
+│   ├── orchestrate.py            ← Local workstation orchestrator
+│   └── sweep.py                  ← Hyperparameter grid search controller
 │
 └── tools/                        ← Diagnostic & validation utilities
     ├── check_dataset.py          ← Inspect ramdisk flow label distribution
@@ -112,6 +115,23 @@ The orchestrator will automatically:
 7. Save model checkpoints, warm-start if resuming, and register the final best model using MLflow 3.x LoggedModel entities with appropriate Model Version Aliases
 8. Notify via Telegram upon completion or failure
 
+### 3. Execute Hyperparameter Sweep
+To systematically run a grid search over multiple hyperparameter combinations, execute the sweep controller:
+
+```bash
+# Run a quick sweep to verify the pipeline, database connectivity, and model promotion gates
+python src/sweep.py --config configs/sweep_verify.yaml
+
+# Run the complete hyperparameter grid search
+python src/sweep.py --config configs/sweep_grid.yaml
+```
+
+The sweep controller will:
+1. Iterate over every hyperparameter combination in the configuration file.
+2. Initialize a parent run in MLflow to record the search space.
+3. Nest each training run under the parent run (linking them via `parent-run-id`).
+4. Ensure standard output utilizes UTF-8 encoding on Windows to prevent console emoji errors.
+
 
 ---
 
@@ -120,6 +140,9 @@ The orchestrator will automatically:
 | Feature | Implementation |
 |:--------|:---------------|
 | **Experiment Config** | `configs/experiment.yaml` — all params in one YAML, logged as MLflow artifact |
+| **Hyperparameter Sweeps** | Grid search via `src/sweep.py` with parent-child run nesting in MLflow |
+| **Dataset Provenance** | SHA-256 client flow file checksum hashing, logged as parameters and nested `dataset_lineage.json` graph artifact |
+| **Automated Validation Gate** | Compares candidate models with registry `champion` models based on loss/accuracy tolerances and backward transfer (BWT) thresholds for automated registry promotion |
 | **Model Checkpointing** | Best model saved per round to `/opt/mlflow-artifacts/checkpoints/` |
 | **Model Registry** | MLflow 3.x LoggedModel entities registered to central Model Registry |
 | **Registry Governance** | Transitioned from deprecated stages to Model Version Aliases (`champion` for production, `challenger` for experimental models) |

@@ -527,3 +527,28 @@ python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.
 - **MLflow Dashboard:** `http://10.10.130.10:5000` → Experiment `FL-CL-CyberDefense`
 - **Auto-generated Report:** `exports/run_summary.md`
 - **Convergence Plots:** `exports/plots/class_*.png`
+
+---
+
+## 8. Advanced MLOps Features: Sweeps, Lineage, and Validation
+
+To transition from basic collaborative training to a highly robust enterprise deployment, the FCL framework integrates three production MLOps capabilities.
+
+### 8.1 Automated Hyperparameter Sweep Controller
+- **Purpose**: Systematically evaluates multiple config scenarios (e.g. searching over $\lambda_{\text{EWC}}$ to balance stability vs plasticity).
+- **Execution**: Run `python src/sweep.py --config configs/sweep_grid.yaml`.
+- **Implementation**: The sweep controller runs a grid search, launching `orchestrate.py` inside distinct runs nested under a parent MLflow experiment, ensuring complete logging and convergence evaluation across different configurations.
+
+### 8.2 Cryptographic Data Lineage Tracking
+- **Purpose**: Establishes immutable dataset provenance to guarantee training reproducibility and compliance audits.
+- **Execution**: The orchestrator automatically computes SHA-256 digests of the active CSV flows on client RAM disks prior to client execution.
+- **Lineage Registry**: The client-side digests are registered as MLflow parameters, and a merged graph checksum $\text{SHA-256}(\text{hash\_A} \mathbin{\Vert} \text{hash\_B})$ is registered alongside a structured `dataset_lineage.json` artifact containing system configurations, git commit SHAs, and timestamped statistics.
+
+### 8.3 Automated Registry Validation Gates
+- **Purpose**: Restricts automated Model Registry promotions to only candidate models that surpass the current registry `champion` without introducing regression.
+- **Gates Enforced**:
+  1. **Accuracy Threshold**: $\text{Acc}_{\text{candidate}} \ge \text{Acc}_{\text{champion}} - 0.005$
+  2. **Loss Threshold**: $\text{Loss}_{\text{candidate}} \le \text{Loss}_{\text{champion}} + 0.05$
+  3. **Forgetting Constraint**: Average Backward Transfer (BWT) delta $\ge -0.05$.
+- **Promotion Control**: If the candidate fails any check, the registry alias remains on the current champion. Only fully validated candidates atomically assume the `champion` alias.
+

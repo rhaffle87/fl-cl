@@ -154,6 +154,16 @@ def run_data_quality_check(defender_node: RemoteNode, dos_threshold: float = 200
         return {}
 
 
+def get_dataset_hash(node: RemoteNode) -> str:
+    """Compute a SHA-256 hash of the flow CSVs on the remote node's ramdisk."""
+    res = node.run_cmd("find /mnt/ramdisk/flows/ -name '*.csv' -type f -exec sha256sum {} + | sort | sha256sum")
+    out = res.stdout.strip()
+    if out:
+        return out.split()[0]
+    return "empty_or_unknown"
+
+
+
 def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name, rounds, lambda_ewc):
     """Dynamically imports and executes the metrics plotter, generating a run summary report."""
     print("\n=== Phase 8b: Generating Post-Training Plots and Reports ===")
@@ -259,6 +269,11 @@ def main():
     parser.add_argument("--config", default="configs/experiment.yaml", help="Experiment config file")
     parser.add_argument("--mlops-mode", default=None, choices=["experimental", "production"], help="MLOps mode (experimental or production)")
     parser.add_argument("--production-strategy", default=None, choices=["resume", "fresh"], help="Production strategy (resume or fresh)")
+    parser.add_argument("--lr", type=float, default=None, help="SGD learning rate (overrides config)")
+    parser.add_argument("--momentum", type=float, default=None, help="SGD momentum (overrides config)")
+    parser.add_argument("--batch-size", type=int, default=None, help="Batch size (overrides config)")
+    parser.add_argument("--class-weights", default=None, help="Comma-separated class weights (overrides config)")
+    parser.add_argument("--parent-run-id", default="", help="MLflow parent run ID for sweep tracking")
     args = parser.parse_args()
 
     # Load config — CLI args override YAML values
@@ -278,10 +293,17 @@ def main():
     rounds = args.rounds or get_config_value(config, "fl", "rounds", default=10)
     lambda_ewc = args.lambda_ewc or get_config_value(config, "cl", "ewc_lambda", default=0.4)
     duration = args.duration or get_config_value(config, "simulation", "attack_duration_seconds", default=30)
-    class_weights = get_config_value(config, "training", "class_weights", default=[12.0, 3.0, 3.0, 15.0, 1.0])
-    weights_str = ",".join(map(str, class_weights))
-    lr = get_config_value(config, "training", "lr", default=0.01)
-    momentum = get_config_value(config, "training", "momentum", default=0.9)
+    
+    if args.class_weights:
+        weights_str = args.class_weights
+    else:
+        class_weights = get_config_value(config, "training", "class_weights", default=[12.0, 3.0, 3.0, 15.0, 1.0])
+        weights_str = ",".join(map(str, class_weights))
+        
+    lr = args.lr or get_config_value(config, "training", "lr", default=0.01)
+    momentum = args.momentum or get_config_value(config, "training", "momentum", default=0.9)
+    batch_size = args.batch_size or get_config_value(config, "training", "batch_size", default=32)
+    
     experiment_name = get_config_value(config, "experiment", "name", default="FL-CL-Run")
     dos_threshold = get_config_value(config, "labeling", "dos_duration_threshold_ms", default=2000)
     mlops_mode = args.mlops_mode or get_config_value(config, "mlops", "mode", default="experimental")
@@ -431,10 +453,11 @@ def main():
             aggregator.run_cmd("/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --allowed-hosts '*' --cors-allowed-origins '*' --x-frame-options NONE --disable-security-middleware", background=True)
             time.sleep(3)
 
-        # Start FL server with config artifact logging
+        # Start FL server with config artifact logging and hyperparameter overrides
         config_arg = "--config-file ~/experiment.yaml" if config_path else ""
+        parent_run_arg = f"--parent-run-id {args.parent_run_id}" if args.parent_run_id else ""
         server_proc = aggregator.run_cmd(
-            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit}",
+            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit} --ewc-lambda {lambda_ewc} --lr {lr} --batch-size {batch_size} --class-weights {weights_str} {parent_run_arg}",
             background=True
         )
 
@@ -499,9 +522,51 @@ def main():
             else:
                 print(f"[{node_name}] [!] WARNING: Could not read label distribution")
 
+        print("\n=== Phase 6d: Computing Dataset Checksums for Provenance Lineage ===")
+        hash_a = get_dataset_hash(def_a)
+        hash_b = get_dataset_hash(def_b)
+        import hashlib
+        combined_hash_input = f"a:{hash_a}|b:{hash_b}"
+        dataset_hash = hashlib.sha256(combined_hash_input.encode('utf-8')).hexdigest()
+        print(f"[orchestrator] defender-a dataset hash: {hash_a}")
+        print(f"[orchestrator] defender-b dataset hash: {hash_b}")
+        print(f"[orchestrator] Combined dataset checksum: {dataset_hash}")
+
+        # Get the active MLflow run ID from the aggregator
+        run_id_res = aggregator.run_cmd("cat /tmp/current_run_id.txt 2>/dev/null")
+        active_run_id = run_id_res.stdout.strip()
+        if active_run_id:
+            print(f"[orchestrator] Active MLflow run ID: {active_run_id}")
+            local_script_path = "log_dataset_temp.py"
+            with open(local_script_path, "w") as sf:
+                sf.write(f"""import mlflow, json
+mlflow.set_tracking_uri('http://localhost:5000')
+client = mlflow.tracking.MlflowClient()
+client.log_param('{active_run_id}', 'dataset_hash', '{dataset_hash}')
+client.log_param('{active_run_id}', 'defender_a_hash', '{hash_a}')
+client.log_param('{active_run_id}', 'defender_b_hash', '{hash_b}')
+metadata = {{
+    "defender_a_dataset_hash": "{hash_a}",
+    "defender_b_dataset_hash": "{hash_b}",
+    "combined_dataset_hash": "{dataset_hash}"
+}}
+with open('/tmp/dataset_lineage.json', 'w') as f:
+    json.dump(metadata, f, indent=4)
+client.log_artifact('{active_run_id}', '/tmp/dataset_lineage.json')
+""")
+            aggregator.scp_file(local_script_path, "~/log_dataset.py")
+            aggregator.run_cmd("/opt/flower-env/bin/python3 ~/log_dataset.py")
+            try:
+                os.remove(local_script_path)
+            except Exception:
+                pass
+            print("[orchestrator] Registered dataset checksums & logged lineage artifact to MLflow run.")
+        else:
+            print("[orchestrator] Warning: Could not retrieve active MLflow run ID. Skipping logging dataset hashes.")
+
         print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
-        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold}", background=True)
-        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold}", background=True)
+        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size}", background=True)
+        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size}", background=True)
 
         stopped_early = False
         print("\n=== Phase 8: Monitoring Training Loop Convergence ===")

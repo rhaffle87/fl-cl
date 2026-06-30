@@ -54,4 +54,8 @@ scratch/
 # Local environment variables
 .env
 
+# Exported plots and reports
+exports/
+
+
 

@@ -621,3 +621,75 @@ print(f"Active Champion Version: {champion_meta.version} (Run ID: {champion_meta
 model_uri = f"models:/FL-CL-CyberDefense-Model@champion"
 loaded_model = mlflow.pytorch.load_model(model_uri)
 ```
+
+---
+
+## 7. Hyperparameter Sweep Controller
+
+To optimize FCL performance (e.g., EWC stability penalty $\lambda$, learning rate, class weights) without manual scheduling, the pipeline includes `src/sweep.py`.
+
+### 7.1 Sweep Configuration & Schema
+The controller accepts a sweep YAML config (e.g., `configs/sweep_grid.yaml` or `configs/sweep_verify.yaml`):
+
+```yaml
+experiment:
+  name: "FL-CL-Hyperparameter-Sweep"
+  mlops_mode: "production"
+  production_strategy: "fresh"
+
+grid:
+  cl:
+    ewc_lambda: [0.1, 0.25, 0.5, 0.8]
+  training:
+    lr: [0.005, 0.01, 0.02]
+```
+
+### 7.2 Parent-Child Nesting Architecture
+When running the sweep controller:
+1. **Parent Run Creation**: The controller creates a single parent run in MLflow named after the experiment (e.g., `Sweep: [Timestamp]`). This run is tagged with the parameter search space grid.
+2. **Child Runs Execution**: For every parameter combination, `sweep.py` invokes `src/orchestrate.py` passing `--parent-run-id` and the specific hyperparameter values.
+3. **Lineage linking**: The orchestrator propagates `parent_run_id` to the Flower aggregator server, which opens its MLflow run nested inside the parent run. This preserves complete experiment lineage for multi-dimensional sweeps.
+
+---
+
+## 8. Dataset Provenance & Hashing
+
+To ensure full reproducibility and detect dataset drift, the orchestrator automatically generates a lineage map of the client training data.
+
+### 8.1 SHA-256 Provenance Calculation
+Before starting the training loop, the orchestrator:
+1. SSHs to Defender A (`10.10.130.11`) and Defender B (`10.10.130.12`).
+2. Iterates over all flow CSV files in `/mnt/ramdisk/flows/` to calculate their individual SHA-256 hashes.
+3. Generates a combined, sorting-stable SHA-256 digest of the entire file collection for each client (e.g., `defender_a_hash`, `defender_b_hash`).
+   - Done remotely via: `find /mnt/ramdisk/flows/ -name '*.csv' -type f -exec sha256sum {} + | sort | sha256sum`
+
+### 8.2 Lineage Graph Logging
+1. These individual hashes are logged as MLflow parameters on the run: `defender_a_hash` and `defender_b_hash`.
+2. A combined run-level dataset provenance hash is calculated by hashing the concatenated client digests:
+   $$\text{combined\_hash} = \text{SHA-256}(\text{hash\_A} \mathbin{\Vert} \text{hash\_B})$$
+3. A JSON schema artifact `dataset_lineage.json` is generated and saved with the MLflow run. This file documents:
+   - Workstation git commit SHA-1
+   - Path to local CSVs on client nodes
+   - Individual client hashes
+   - Timestamp and sample counts per client node.
+
+---
+
+## 9. Automated Validation Gate & Promotion
+
+To enforce strict quality control in the automated MLOps pipeline, candidate models must pass the validation gate integrated into the server before being promoted to `champion`.
+
+### 9.1 Validation Gate Criteria
+The gate compares the candidate model's validation metrics against the current registry `champion` model (if one exists) using the following rules:
+
+1. **Overall Accuracy Tolerance**: The candidate overall accuracy must be greater than or equal to the champion overall accuracy minus a tolerance threshold (default: `0.005` or 0.5%):
+   $$\text{Acc}_{\text{candidate}} \ge \text{Acc}_{\text{champion}} - 0.005$$
+2. **Overall Loss Tolerance**: The validation loss must not exceed the champion loss by more than a tolerance threshold (default: `0.05`):
+   $$\text{Loss}_{\text{candidate}} \le \text{Loss}_{\text{champion}} + 0.05$$
+3. **Catastrophic Forgetting (BWT) Gate**: The validation gate enforces a minimum average Backward Transfer (BWT) delta constraint across all evaluated classes of at least `-0.05` (meaning average forgetting cannot exceed 5%):
+   $$\text{BWT}_{\text{average}} \ge -0.05$$
+
+### 9.2 Registry Promotion Control
+* **Pass**: If the candidate passes all gates, it is registered under the `FL-CL-CyberDefense-Model` registry name, and the `champion` alias is atomically shifted to the new version.
+* **Fail**: If any threshold is violated, the model version is still registered for audit purposes, but it is tagged as `failed_validation` and the `champion` alias remains on the previous stable version. A notification is issued.
+

@@ -21,7 +21,7 @@ from avalanche.training.supervised import EWC
 _GRAD_CLIP_MAX_NORM = 1.0
 
 
-def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=None, lr: float = 0.01, momentum: float = 0.9):
+def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=None, lr: float = 0.01, momentum: float = 0.9, batch_size: int = 32):
     """
     Create an EWC-equipped continual learner with gradient clipping.
 
@@ -33,6 +33,7 @@ def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=
         class_weights: List of 5 floats for class weights.
         lr:            Learning rate for the local SGD optimizer.
         momentum:      Momentum for the local SGD optimizer.
+        batch_size:    Batch size for training and evaluation.
 
     Returns:
         Avalanche EWC strategy object with train() and eval() methods.
@@ -61,9 +62,9 @@ def get_continual_learner(model, device, ewc_lambda: float = 0.4, class_weights=
         optimizer=optimizer,
         criterion=CrossEntropyLoss(weight=weights_tensor),
         ewc_lambda=ewc_lambda,
-        train_mb_size=32,
+        train_mb_size=batch_size,
         train_epochs=1,
-        eval_mb_size=32,
+        eval_mb_size=batch_size,
         device=device,
     )
 

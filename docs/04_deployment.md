@@ -564,6 +564,17 @@ python src/orchestrate.py --key ~/.ssh/id_ed25519 --config configs/experiment.ya
 python src/orchestrate.py --key ~/.ssh/id_ed25519 --rounds 100 --lambda-ewc 0.25 --duration 60 --mlops-mode experimental
 ```
 
+#### Step 8.2b: Hyperparameter Sweeps (Workstation)
+To systematically search over multiple combinations of parameters (e.g. `ewc_lambda` and `lr`), run the sweep controller:
+
+```powershell
+# Run a quick sweep to verify the pipeline and validation promotion gates:
+python src/sweep.py --config configs/sweep_verify.yaml
+
+# Run the full grid search:
+python src/sweep.py --config configs/sweep_grid.yaml
+```
+
 #### Step 8.3: Manual Verification & Health Check Commands
 
 **1. Confirm Direct L3 Reachability on the Flat Network:**
