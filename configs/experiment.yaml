@@ -80,7 +80,7 @@ topology:
 notifications:
   telegram:
     enabled: true
-    # bot_token and chat_id are loaded from environment variables (e.g. .env) instead of being hardcoded here.
+    # bot_token and chat_id are loaded from environment variables (e.g. .env).
 
 # ── Checkpointing ──────────────────────────────────────────
 checkpointing:
@@ -90,10 +90,14 @@ checkpointing:
 
 # ── MLOps Mode Configuration ────────────────────────────────
 mlops:
-  # Mode options: "experimental" (cold start) or "production" (warm start)
+  # Mode options:
+  # "experimental" (cold start)
+  # "production" (warm start)
   mode: "production"
 
-  # Production Strategy: "resume" (continue from latest checkpoint) or "fresh" (new start)
+  # Production Strategy:
+  # "resume" (continue from latest checkpoint)
+  # "fresh" (new start)
   production_strategy: "resume"
 
   # Model registry reference name in MLflow

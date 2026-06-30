@@ -42,6 +42,9 @@ id_rsa.pub
 checkpoints/
 *.pt
 
+# Local configuration overrides (containing local settings)
+configs/local_*.yaml
+
 # Dynamic target credentials (containing SSH password/metadata)
 runs/target_credentials.json
 

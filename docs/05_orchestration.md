@@ -538,8 +538,8 @@ To automate the review of final training metrics and assist in detecting catastr
 The pipeline uses a standardized `load_env()` recursive upward path search across all orchestration and utility scripts. The local `.env` file located at the project root is dynamically discovered and loaded regardless of the script's current working directory:
 ```env
 # Ollama AI Configuration
-OLLAMA_ENDPOINT="https://ollama-server.tail2ae479.ts.net"
-OLLAMA_KEY="d15ec28ba9641db36a78c7764539c4a68c7825c8215a1a9478ff535881728e78"
+OLLAMA_ENDPOINT="https://YOUR_OLLAMA_SERVER_HOSTNAME"
+OLLAMA_KEY="YOUR_OLLAMA_KEY"
 OLLAMA_MODEL="llama3.1:8b"
 ```
 
