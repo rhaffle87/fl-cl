@@ -534,8 +534,8 @@ When evaluating results inside the MLflow dashboard or CSV exports:
 
 To automate the review of final training metrics and assist in detecting catastrophic forgetting or tuning hyperparameters, the pipeline integrates a local Ollama-based LLM analyst.
 
-#### Configuration (`.env`)
-The local `.env` file at the project root configures the proxy parameters and target model:
+#### Configuration & Robust Resolution
+The pipeline uses a standardized `load_env()` recursive upward path search across all orchestration and utility scripts. The local `.env` file located at the project root is dynamically discovered and loaded regardless of the script's current working directory:
 ```env
 # Ollama AI Configuration
 OLLAMA_ENDPOINT="https://ollama-server.tail2ae479.ts.net"
@@ -546,8 +546,9 @@ OLLAMA_MODEL="qwen2.5-coder:1.5b-base"
 #### Automation & Upload Flow
 1. **Proxy Authentication**: The Ollama instance is protected by an Nginx reverse proxy requiring the custom `x-fcl-key` header.
 2. **Analysis Generation**: When the master orchestrator completes training, it triggers `tools/generate_llm_report.py`.
-3. **Optimized CPU Inference**: The script queries the Ollama server requesting a structured markdown evaluation of the training run. It specifies `num_thread: 4` and targets the lightweight `qwen2.5-coder:1.5b-base` model, ensuring fast sub-20-second generations on CPU-only infrastructure.
-4. **MLflow Artifact Registration**: The returned analysis is appended to the run's `run_summary.md` report, and then programmatically uploaded to the MLflow server via the tracking API under the active run ID.
+3. **Completion-style Prompting**: Because `qwen2.5-coder:1.5b-base` is a base model (non-instruct), the query is structured as a markdown completion prompt ending with `## 1. Executive Summary`. This guides the model to write structured markdown rather than autocompleting Python code.
+4. **Optimized CPU Inference**: The query specifies `num_thread: 4` and passes `"num_predict": 384` to limit generated tokens. This prevents CPU-bound inference hangs/timeouts and ensures clean, sub-10-second report generation.
+5. **MLflow Artifact Registration**: The returned analysis is appended to the run's `run_summary.md` report, and then programmatically uploaded to the MLflow server via the tracking API under the active run ID.
 
 ---
 

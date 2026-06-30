@@ -334,7 +334,7 @@ To close the MLOps loop, the pipeline triggers an automated post-training analys
 ```
 
 1. **Analytical Assessment**: The aggregator collects the training results (validation losses, final class-specific detection accuracies, and EWC backward transfer metrics).
-2. **CPU-Bound Inference**: The report engine interfaces with a local Ollama endpoint secured by an Nginx dual-key reverse proxy. The prompt is designed to run efficiently on CPU-only infrastructure, targeting the optimized `qwen2.5-coder:1.5b-base` model with controlled thread concurrency (`num_thread: 4`).
+2. **CPU-Bound Completion Inference**: The report engine interfaces with a local Ollama endpoint secured by an Nginx reverse proxy. To accommodate the base (non-instruct) model `qwen2.5-coder:1.5b-base`, the query is structured as a markdown completion prompt. It configures controlled thread concurrency (`num_thread: 4`) and a strict limit on generated tokens (`num_predict: 384`) to prevent timeouts and enforce high-quality, structured output.
 3. **Artifact Registration**: The engine appends the generated security threat report directly to the run's `run_summary.md` and uploads it to the active MLflow run tracking database as an artifact.
 
 ---
