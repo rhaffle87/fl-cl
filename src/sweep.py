@@ -86,7 +86,7 @@ def main():
         return
 
     # Set up MLflow
-    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://10.10.130.10:5000")
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
     mlflow.set_tracking_uri(tracking_uri)
     
     try:
