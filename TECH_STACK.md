@@ -126,7 +126,7 @@ These packages run inside VM 310 and VM 320.
 | **MLflow** | Centralized experiment tracking (loss, accuracy, BWT per round) | LXC 300 | 5000 |
 | **TensorBoard** | Weight distributions, gradient norms, activation statistics | VM 310, VM 320 | 6006 |
 | **Weights & Biases** | Cloud-hosted alternative for team collaboration | Any (cloud) | — |
-| **Ollama** | Local LLM inference engine for threat reports (`qwen2.5-coder:1.5b-base`) | LXC / Tailscale Node | 11435 |
+| **Ollama** | Local LLM inference engine for threat reports (`llama3.1:8b`) | LXC / Tailscale Node | 11435 |
 | **Nginx Reverse Proxy** | Dual-key authenticated endpoint proxying local Ollama APIs | Tailscale Node | 443 / 80 |
 
 

@@ -90,7 +90,12 @@ class RemoteNode:
         self.procs = []
 
     def _get_ssh_opts(self):
-        opts = ["-o", "StrictHostKeyChecking=no"]
+        opts = [
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=5",
+            "-o", "ServerAliveInterval=10",
+            "-o", "ServerAliveCountMax=3"
+        ]
         if self.key_path:
             opts += ["-i", self.key_path]
         return opts
@@ -258,7 +263,6 @@ def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name,
         except Exception as llm_err:
             print(f"[!] Warning: Local LLM reporting or artifact upload failed: {llm_err}")
 
-
     except ImportError as ie:
         print(f"[!] Warning: Could not run automated plotting because dependencies are missing: {ie}")
     except Exception as e:
@@ -281,6 +285,12 @@ def main():
     parser.add_argument("--batch-size", type=int, default=None, help="Batch size (overrides config)")
     parser.add_argument("--class-weights", default=None, help="Comma-separated class weights (overrides config)")
     parser.add_argument("--parent-run-id", default="", help="MLflow parent run ID for sweep tracking")
+    parser.add_argument("--cl-task-sequence", default=None, help="CL task sequence trained (comma-separated, overrides config)")
+    parser.add_argument("--cl-complexity-score", type=float, default=None, help="Sequence complexity score (overrides config)")
+    parser.add_argument("--comm-overhead-budget", type=int, default=None, help="Communication overhead budget in bytes (overrides config)")
+    parser.add_argument("--telegram-bot-token", default=None, help="Telegram bot token (overrides config)")
+    parser.add_argument("--telegram-chat-id", default=None, help="Telegram chat ID (overrides config)")
+    parser.add_argument("--telegram-enabled", action="store_true", help="Force enable Telegram notifications")
     args = parser.parse_args()
 
     # Load config — CLI args override YAML values
@@ -316,11 +326,15 @@ def main():
     mlops_mode = args.mlops_mode or get_config_value(config, "mlops", "mode", default="experimental")
     production_strategy = args.production_strategy or get_config_value(config, "mlops", "production_strategy", default="resume")
 
+    cl_task_sequence = args.cl_task_sequence or get_config_value(config, "cl", "task_sequence", default="")
+    cl_complexity_score = args.cl_complexity_score if args.cl_complexity_score is not None else get_config_value(config, "cl", "complexity_score", default=0.0)
+    comm_overhead_budget = args.comm_overhead_budget if args.comm_overhead_budget is not None else get_config_value(config, "cl", "comm_overhead_budget", default=200000000)
+
     # Set up Telegram notifications (prioritize environment variables for security)
-    tg_token = os.environ.get("TELEGRAM_BOT_TOKEN") or get_config_value(config, "notifications", "telegram", "bot_token", default="")
-    tg_chat_id = os.environ.get("TELEGRAM_CHAT_ID") or get_config_value(config, "notifications", "telegram", "chat_id", default="")
-    tg_enabled = get_config_value(config, "notifications", "telegram", "enabled", default=False)
-    if os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID"):
+    tg_token = os.environ.get("TELEGRAM_BOT_TOKEN") or args.telegram_bot_token or get_config_value(config, "notifications", "telegram", "bot_token", default="")
+    tg_chat_id = os.environ.get("TELEGRAM_CHAT_ID") or args.telegram_chat_id or get_config_value(config, "notifications", "telegram", "chat_id", default="")
+    tg_enabled = args.telegram_enabled or get_config_value(config, "notifications", "telegram", "enabled", default=False)
+    if tg_token and tg_chat_id:
         tg_enabled = True
     notifier = TelegramNotifier(bot_token=tg_token, chat_id=tg_chat_id, enabled=tg_enabled)
 
@@ -398,6 +412,7 @@ def main():
         # Aggregator files — model.py comes from defender/ (single source of truth)
         aggregator.scp_file("src/aggregator/server.py", "~/server.py")
         aggregator.scp_file("src/defender/model.py", "~/model.py")
+        aggregator.scp_file("src/notifications.py", "~/notifications.py")
 
         # Send experiment config to aggregator for MLflow artifact logging
         if config_path and os.path.exists(config_path):
@@ -463,8 +478,21 @@ def main():
         # Start FL server with config artifact logging and hyperparameter overrides
         config_arg = "--config-file ~/experiment.yaml" if config_path else ""
         parent_run_arg = f"--parent-run-id {args.parent_run_id}" if args.parent_run_id else ""
+        
+        cl_args = ""
+        if cl_task_sequence:
+            cl_args += f" --cl-task-sequence '{cl_task_sequence}'"
+        cl_args += f" --cl-complexity-score {cl_complexity_score}"
+        cl_args += f" --comm-overhead-budget {comm_overhead_budget}"
+        if tg_token:
+            cl_args += f" --telegram-bot-token '{tg_token}'"
+        if tg_chat_id:
+            cl_args += f" --telegram-chat-id '{tg_chat_id}'"
+        if tg_enabled:
+            cl_args += " --telegram-enabled"
+
         server_proc = aggregator.run_cmd(
-            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit} --ewc-lambda {lambda_ewc} --lr {lr} --batch-size {batch_size} --class-weights {weights_str} {parent_run_arg}",
+            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit} --ewc-lambda {lambda_ewc} --lr {lr} --batch-size {batch_size} --class-weights {weights_str} {parent_run_arg}{cl_args}",
             background=True
         )
 

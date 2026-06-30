@@ -26,7 +26,12 @@ class TelegramNotifier:
     def __init__(self, bot_token: str, chat_id: str, enabled: bool = True):
         self.bot_token = bot_token
         self.chat_id = chat_id
-        self.enabled = enabled and bool(bot_token) and bool(chat_id)
+        
+        # Disable notifications if placeholder values are used
+        if not bot_token or not chat_id or "YOUR_" in str(bot_token) or "YOUR_" in str(chat_id):
+            self.enabled = False
+        else:
+            self.enabled = enabled
 
     def send(self, message: str, parse_mode: str = "HTML") -> bool:
         """Send a message to the configured Telegram chat.
@@ -159,6 +164,70 @@ class TelegramNotifier:
             f"💥 <b>Failure Diagnostics & Stacktrace:</b>\n"
             f"<pre>{error_esc}</pre>\n\n"
             f"📅 <b>Failed At:</b> <code>{time_esc}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        )
+        return self.send(msg, parse_mode="HTML")
+
+    def notify_promotion(self, model_name: str, version: int, metrics: dict, rationale: str):
+        """Notify that a model has been promoted to Champion."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        model_esc = escape_html(model_name)
+        ver_esc = escape_html(str(version))
+        rat_esc = escape_html(rationale)
+        time_esc = escape_html(timestamp)
+        
+        msg = (
+            f"🏆 <b>[Model Governance] Champion Model Promoted</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>🔹 Model:</b> <code>{model_esc}</code>\n"
+            f"<b>🔹 New Version:</b> <code>v{ver_esc}</code>\n"
+            f"<b>🔹 Alias:</b> <code>champion</code> (Active in Production)\n"
+            f"<b>🔹 Timestamp:</b> <code>{time_esc}</code>\n\n"
+            f"📊 <b>Gated Promotion Metrics:</b>\n"
+        )
+        for key, val in metrics.items():
+            key_esc = escape_html(key)
+            try:
+                val_esc = escape_html(f"{float(val):.4f}")
+            except (ValueError, TypeError):
+                val_esc = escape_html(str(val))
+            msg += f"• <b>{key_esc}:</b> <code>{val_esc}</code>\n"
+            
+        msg += (
+            f"\n📝 <b>Promotion Rationale:</b>\n"
+            f"<pre>{rat_esc}</pre>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        )
+        return self.send(msg, parse_mode="HTML")
+
+    def notify_promotion_failure(self, model_name: str, candidate_version: int, metrics: dict, failure_reason: str):
+        """Notify that a model promotion gate failed."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        model_esc = escape_html(model_name)
+        ver_esc = escape_html(str(candidate_version))
+        reason_esc = escape_html(failure_reason)
+        time_esc = escape_html(timestamp)
+        
+        msg = (
+            f"⚠️ <b>[Model Governance] Promotion Gate Failed</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>🔹 Model:</b> <code>{model_esc}</code>\n"
+            f"<b>🔹 Candidate Version:</b> <code>v{ver_esc}</code>\n"
+            f"<b>🔹 Action:</b> <code>Retaining Incumbent Champion</code>\n"
+            f"<b>🔹 Timestamp:</b> <code>{time_esc}</code>\n\n"
+            f"📊 <b>Gated Candidate Metrics:</b>\n"
+        )
+        for key, val in metrics.items():
+            key_esc = escape_html(key)
+            try:
+                val_esc = escape_html(f"{float(val):.4f}")
+            except (ValueError, TypeError):
+                val_esc = escape_html(str(val))
+            msg += f"• <b>{key_esc}:</b> <code>{val_esc}</code>\n"
+            
+        msg += (
+            f"\n❌ <b>Failure Reason:</b>\n"
+            f"<pre>{reason_esc}</pre>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         )
         return self.send(msg, parse_mode="HTML")

@@ -196,10 +196,11 @@ import mlflow
 class CyberDefenseClient(fl.client.NumPyClient):
     """Flower client wrapping the Avalanche CL training loop."""
 
-    def __init__(self, net, cl_strategy, flows_dir, dos_threshold_ms=2000):
+    def __init__(self, net, cl_strategy, flows_dir, client_id="A", dos_threshold_ms=2000):
         self.net = net
         self.cl = cl_strategy
         self.flows_dir = flows_dir
+        self.client_id = client_id
         self.dos_threshold_ms = dos_threshold_ms
 
     def get_parameters(self, config):
@@ -242,7 +243,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
             clean_params.append(t.numpy())
         # Return at least 1 so FedAvg aggregate_inplace never divides by zero
         # when all clients have an empty ramdisk (e.g. extractor not ready yet).
-        return clean_params, max(num_samples, 1), {}
+        return clean_params, max(num_samples, 1), {"client_id": self.client_id}
 
     @mlflow.trace(name="client_evaluate")
     def evaluate(self, parameters, config):
@@ -306,11 +307,12 @@ class CyberDefenseClient(fl.client.NumPyClient):
 
             metrics = {
                 "accuracy": accuracy,
+                "client_id": self.client_id,
                 **class_metrics
             }
             return avg_loss, total, metrics
         except FileNotFoundError:
-            return 0.0, 0, {"accuracy": 0.0}
+            return 0.0, 0, {"accuracy": 0.0, "client_id": self.client_id}
 
 
 def main():
@@ -352,7 +354,13 @@ def main():
 
     fl.client.start_numpy_client(
         server_address=args.server,
-        client=CyberDefenseClient(net, cl, args.flows_dir, dos_threshold_ms=args.dos_threshold_ms),
+        client=CyberDefenseClient(
+            net,
+            cl,
+            args.flows_dir,
+            client_id=args.client_id,
+            dos_threshold_ms=args.dos_threshold_ms
+        ),
     )
 
 

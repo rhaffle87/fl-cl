@@ -77,7 +77,7 @@ SSH_KEY_PATH="C:\Users\Username\.ssh\id_ed25519"
 # Ollama AI Reporting Configuration
 OLLAMA_ENDPOINT="https://ollama-server.tail2ae479.ts.net"
 OLLAMA_KEY="d15ec28ba9641db36a78c7764539c4a68c7825c8215a1a9478ff535881728e78"
-OLLAMA_MODEL="qwen2.5-coder:1.5b-base"
+OLLAMA_MODEL="llama3.1:8b"
 ```
 
 
@@ -142,7 +142,7 @@ The sweep controller will:
 | **Experiment Config** | `configs/experiment.yaml` — all params in one YAML, logged as MLflow artifact |
 | **Hyperparameter Sweeps** | Grid search via `src/sweep.py` with parent-child run nesting in MLflow |
 | **Dataset Provenance** | SHA-256 client flow file checksum hashing, logged as parameters and nested `dataset_lineage.json` graph artifact |
-| **Automated Validation Gate** | Compares candidate models with registry `champion` models based on loss/accuracy tolerances and backward transfer (BWT) thresholds for automated registry promotion |
+| **Automated Validation Gate** | Validates candidate models against per-class F1 thresholds, BWT forgetting check, and communication overhead budget for automated registry promotion |
 | **Model Checkpointing** | Best model saved per round to `/opt/mlflow-artifacts/checkpoints/` |
 | **Model Registry** | MLflow 3.x LoggedModel entities registered to central Model Registry |
 | **Registry Governance** | Transitioned from deprecated stages to Model Version Aliases (`champion` for production, `challenger` for experimental models) |
@@ -150,7 +150,7 @@ The sweep controller will:
 | **Programmatic Tags & Notes** | Run tagged with MLOps parameters, git commit, parent versions, and structured markdown summaries in `mlflow.note.content` |
 | **TorchScript Export** | Production model exported for deployment validation |
 | **Data Quality Gate** | Pre-training label distribution check on both defenders |
-| **Model Validation** | `tools/validate_model.py` — per-class accuracy thresholds |
+| **Model Validation** | `tools/validate_model.py` — per-class F1 score thresholds |
 | **Class-Weighted Loss** | Per-class weights `[8.0, 20.0, 3.0, 15.0, 10.0]` for imbalanced data |
 | **Experiment Tracking** | MLflow at `http://10.10.130.10:5000` with git hash tagging, parameters, and metrics tracking |
 | **Notifications** | Telegram bot for start/complete/fail alerts |

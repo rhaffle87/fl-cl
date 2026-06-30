@@ -362,7 +362,7 @@ Once training completes (all rounds finished), the server executes the final pip
 5. **Enforce Version Aliases**: Using `MlflowClient`, the new version is registered and promoted to:
    - **`champion`** (in `production` mode), replacing any old champion.
    - **`challenger`** (in `experimental` mode).
-6. **Local LLM Post-Run Analysis**: The orchestrator triggers `tools/generate_llm_report.py`, querying a local CPU-bound Ollama service (`qwen2.5-coder:1.5b-base`) via an Nginx authentication proxy. The query uses a completion-style prompt structure and a strict `num_predict: 384` token cap to generate a structured markdown threat analysis without CPU hangs or timeouts. The resulting report is appended to `run_summary.md` and registered in MLflow under the current run as an experiment artifact.
+6. **Local LLM Post-Run Analysis**: The orchestrator triggers `tools/generate_llm_report.py`, querying a local CPU-bound Ollama service (`llama3.1:8b`) via an Nginx authentication proxy. The query uses an instruct-style prompt structure and a strict `"num_predict": 512` token cap to generate a structured markdown threat analysis without CPU hangs or timeouts. The resulting report is appended to `run_summary.md` and registered in MLflow under the current run as an experiment artifact.
 
 ---
 
@@ -544,11 +544,19 @@ To transition from basic collaborative training to a highly robust enterprise de
 - **Execution**: The orchestrator automatically computes SHA-256 digests of the active CSV flows on client RAM disks prior to client execution.
 - **Lineage Registry**: The client-side digests are registered as MLflow parameters, and a merged graph checksum $\text{SHA-256}(\text{hash\_A} \mathbin{\Vert} \text{hash\_B})$ is registered alongside a structured `dataset_lineage.json` artifact containing system configurations, git commit SHAs, and timestamped statistics.
 
-### 8.3 Automated Registry Validation Gates
-- **Purpose**: Restricts automated Model Registry promotions to only candidate models that surpass the current registry `champion` without introducing regression.
+### 8.3 Automated Registry Governance & Validation Gates
+- **Purpose**: Restricts automated Model Registry promotions to only candidate models that satisfy strict continual learning performance and communication constraints.
 - **Gates Enforced**:
-  1. **Accuracy Threshold**: $\text{Acc}_{\text{candidate}} \ge \text{Acc}_{\text{champion}} - 0.005$
-  2. **Loss Threshold**: $\text{Loss}_{\text{candidate}} \le \text{Loss}_{\text{champion}} + 0.05$
-  3. **Forgetting Constraint**: Average Backward Transfer (BWT) delta $\ge -0.05$.
-- **Promotion Control**: If the candidate fails any check, the registry alias remains on the current champion. Only fully validated candidates atomically assume the `champion` alias.
+  1. **Per-Class F1 Thresholds**:
+     - Class 0 (Normal) $\ge 0.50$
+     - Class 1 (Botnet) $\ge 0.60$
+     - Class 2 (Exfiltration) $\ge 0.70$
+     - Class 3 (BruteForce) $\ge 0.50$
+     - Class 4 (DoS) $\ge 0.70$
+  2. **No Forgetting Regression**: Per-class Backward Transfer (BWT) $\ge 0.0$ (ensuring no forgetting regression for any individual class).
+  3. **Communication Budget**: Total communication overhead $\le$ budget (default: 200,000,000 bytes).
+- **Promotion Control**: If the candidate fails any check, the registry alias remains on the current `champion`, and the failure reason is registered as an MLflow run tag. If all checks pass, the model is atomically promoted to `champion`, exported as a TorchScript model artifact, and `mlflow.note.content` is updated.
+- **Real-Time Telegram Alerts**: Triggers real-time alerts with detailed HTML formatting for successful promotions or failure details (specifically listing which class F1, BWT, or communication budget was violated).
+- **First-Class CL Metadata**: Registered models are annotated with task sequence attributes (`cl_task_sequence`, `cl_complexity_score`) for lineage auditability.
+- **L2 Client Weight Drift Monitoring**: During aggregation, the server computes L2 parameter drift between each client and the global model, monitoring client divergence and detecting anomalies using a 3-sigma rule logged directly to MLflow.
 

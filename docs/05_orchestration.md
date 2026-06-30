@@ -87,7 +87,7 @@ fl-cl/
     ├── enable_wal.py      # Enable WAL mode on MLflow SQLite database
     ├── local_train.py     # Local training diagnostic tool with confusion matrix
     ├── plot_metrics.py    # Post-training convergence plot generator (per-class)
-    └── validate_model.py  # Model validation gate (asserts minimum per-class accuracy)
+    └── validate_model.py  # Model validation gate (asserts minimum per-class F1 score)
 ```
 
 > The model definition is centralized in `src/defender/model.py`. The orchestrator copies this single source of truth to the aggregator container and all defender VMs during initialization.
@@ -540,14 +540,14 @@ The pipeline uses a standardized `load_env()` recursive upward path search acros
 # Ollama AI Configuration
 OLLAMA_ENDPOINT="https://ollama-server.tail2ae479.ts.net"
 OLLAMA_KEY="d15ec28ba9641db36a78c7764539c4a68c7825c8215a1a9478ff535881728e78"
-OLLAMA_MODEL="qwen2.5-coder:1.5b-base"
+OLLAMA_MODEL="llama3.1:8b"
 ```
 
 #### Automation & Upload Flow
 1. **Proxy Authentication**: The Ollama instance is protected by an Nginx reverse proxy requiring the custom `x-fcl-key` header.
 2. **Analysis Generation**: When the master orchestrator completes training, it triggers `tools/generate_llm_report.py`.
-3. **Completion-style Prompting**: Because `qwen2.5-coder:1.5b-base` is a base model (non-instruct), the query is structured as a markdown completion prompt ending with `## 1. Executive Summary`. This guides the model to write structured markdown rather than autocompleting Python code.
-4. **Optimized CPU Inference**: The query specifies `num_thread: 4` and passes `"num_predict": 384` to limit generated tokens. This prevents CPU-bound inference hangs/timeouts and ensures clean, sub-10-second report generation.
+3. **Instruct-style Prompting**: Because `llama3.1:8b` is an instruct-tuned model, the prompt is structured as a direct instructional request. This guides the model to produce a professional MLOps analysis report with structured sections without needing completion-style scaffolding.
+4. **Optimized CPU Inference**: The query specifies `num_thread: 4` and passes `"num_predict": 512` to limit generated tokens. This prevents CPU-bound inference hangs/timeouts and ensures clean, sub-15-second report generation.
 5. **MLflow Artifact Registration**: The returned analysis is appended to the run's `run_summary.md` report, and then programmatically uploaded to the MLflow server via the tracking API under the active run ID.
 
 ---
@@ -678,19 +678,29 @@ Before starting the training loop, the orchestrator:
 
 ## 9. Automated Validation Gate & Promotion
 
-To enforce strict quality control in the automated MLOps pipeline, candidate models must pass the validation gate integrated into the server before being promoted to `champion`.
+To enforce strict quality control in the automated MLOps pipeline, candidate models must satisfy rigorous continual learning validation gates in `server.py` before being promoted to `champion`.
 
 ### 9.1 Validation Gate Criteria
-The gate compares the candidate model's validation metrics against the current registry `champion` model (if one exists) using the following rules:
+The gate checks the candidate model's validation metrics using three key dimensions:
 
-1. **Overall Accuracy Tolerance**: The candidate overall accuracy must be greater than or equal to the champion overall accuracy minus a tolerance threshold (default: `0.005` or 0.5%):
-   $$\text{Acc}_{\text{candidate}} \ge \text{Acc}_{\text{champion}} - 0.005$$
-2. **Overall Loss Tolerance**: The validation loss must not exceed the champion loss by more than a tolerance threshold (default: `0.05`):
-   $$\text{Loss}_{\text{candidate}} \le \text{Loss}_{\text{champion}} + 0.05$$
-3. **Catastrophic Forgetting (BWT) Gate**: The validation gate enforces a minimum average Backward Transfer (BWT) delta constraint across all evaluated classes of at least `-0.05` (meaning average forgetting cannot exceed 5%):
-   $$\text{BWT}_{\text{average}} \ge -0.05$$
+1. **Per-Class F1 Gating**: Rather than naive accuracy, the model must surpass specific F1 thresholds on all classes:
+   - Class 0 (Normal): $\text{F1} \ge 0.50$
+   - Class 1 (Botnet): $\text{F1} \ge 0.60$
+   - Class 2 (Exfiltration): $\text{F1} \ge 0.70$
+   - Class 3 (BruteForce): $\text{F1} \ge 0.50$
+   - Class 4 (DoS): $\text{F1} \ge 0.70$
+2. **Backward Transfer (BWT) Forgetting Gate**: To prevent catastrophic forgetting, the Backward Transfer (BWT) for each individual class must not regress:
+   $$\text{BWT}_{\text{class}\_i} \ge 0.0 \quad \text{for all } i \in [0, 4] \text{ where evaluation data exists}$$
+3. **Communication Overhead Budget**: The total network bytes exchanged during training rounds must be within the defined budget (default: 200,000,000 bytes):
+   $$\text{Bytes}_{\text{total}} \le \text{Budget}$$
 
-### 9.2 Registry Promotion Control
-* **Pass**: If the candidate passes all gates, it is registered under the `CyberDefenseNet` registry name, and the `champion` alias is atomically shifted to the new version.
-* **Fail**: If any threshold is violated, the model version is still registered for audit purposes, but it is tagged as `failed_validation` and the `champion` alias remains on the previous stable version. A notification is issued.
+### 9.2 Registry Promotion & Notifications Control
+* **Pass**: If the candidate satisfies all gates:
+  - It is promoted to the **`champion`** alias in the MLflow Model Registry.
+  - The model is exported as a TorchScript artifact `CyberDefenseNet.pt`.
+  - A successful promotion Telegram notification is sent with the task sequence and final metrics.
+* **Fail**: If any threshold is violated:
+  - The model remains registered but retains the **`challenger`** alias.
+  - The specific reasons for rejection are tagged on the MLflow run (`rejection_reason`).
+  - An HTML-formatted Telegram alert is dispatched detailing the exact class or parameter that caused the failure.
 

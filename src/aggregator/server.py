@@ -30,6 +30,7 @@ import mlflow.artifacts
 import torch
 
 from model import CyberDefenseNet
+from notifications import TelegramNotifier
 
 
 @mlflow.trace(name="weighted_avg")
@@ -76,6 +77,15 @@ def weighted_avg(metrics):
             aggregated_metrics[f1_key] = -1.0
 
     return aggregated_metrics
+
+
+def calculate_l2_drift(client_params, global_params):
+    """Calculates the L2 norm distance between client weight tensors and global weight tensors."""
+    import numpy as np
+    total_sq_dist = 0.0
+    for c_arr, g_arr in zip(client_params, global_params):
+        total_sq_dist += np.sum((c_arr - g_arr) ** 2)
+    return float(np.sqrt(total_sq_dist))
 
 
 class MLflowFedAvg(fl.server.strategy.FedAvg):
@@ -176,6 +186,51 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
         if aggregated is not None:
             parameters, config = aggregated
             ndarrays = fl.common.parameters_to_ndarrays(parameters)
+
+            # Calculate client weight drift and monitor divergence (B3)
+            import numpy as np
+            for client_proxy, fit_res in results:
+                client_id = fit_res.metrics.get("client_id", "unknown")
+                if client_id == "unknown":
+                    client_id = str(client_proxy.cid)
+
+                client_ndarrays = fl.common.parameters_to_ndarrays(fit_res.parameters)
+                drift = calculate_l2_drift(client_ndarrays, ndarrays)
+
+                metric_name = f"client_{client_id}_weight_drift"
+                mlflow.log_metric(metric_name, drift, step=server_round)
+                print(f"[server] Client {client_id} weight drift at round {server_round}: {drift:.6f}")
+
+                if not hasattr(self, 'drift_history'):
+                    self.drift_history = {}
+                if client_id not in self.drift_history:
+                    self.drift_history[client_id] = []
+
+                # Anomaly check: 3-sigma warning and fixed limit warning
+                history = self.drift_history[client_id]
+                is_anomaly = False
+                warning_reason = ""
+
+                fixed_limit = 5.0
+                if drift > fixed_limit:
+                    is_anomaly = True
+                    warning_reason = f"Drift {drift:.4f} exceeded fixed limit of {fixed_limit}"
+
+                if len(history) >= 3:
+                    mean_val = np.mean(history)
+                    std_val = np.std(history)
+                    if std_val > 1e-4:
+                        z_score = (drift - mean_val) / std_val
+                        if z_score > 3.0:
+                            is_anomaly = True
+                            warning_reason = f"Drift {drift:.4f} exceeded 3σ threshold (z-score: {z_score:.2f}, mean: {mean_val:.4f}, std: {std_val:.4f})"
+
+                history.append(drift)
+
+                if is_anomaly:
+                    warning_tag_key = f"warning_round_{server_round}_client_{client_id}_anomaly"
+                    mlflow.set_tag(warning_tag_key, warning_reason)
+                    print(f"[server] ANOMALY WARNING: {warning_reason}")
 
             # Security + stability guard: sanitize NaN/Inf values before checkpointing
             sanitized_arrays = []
@@ -299,7 +354,42 @@ def main():
     parser.add_argument("--batch-size", type=int, default=32, help="Training batch size")
     parser.add_argument("--ewc-lambda", type=float, default=0.4, help="EWC lambda")
     parser.add_argument("--class-weights", default="12.0,3.0,3.0,15.0,1.0", help="Comma-separated class weights")
+    
+    # Task sequence & Governance parameters
+    parser.add_argument("--cl-task-sequence", default="", help="CL task sequence trained (comma-separated)")
+    parser.add_argument("--cl-complexity-score", type=float, default=0.0, help="Sequence complexity score")
+    parser.add_argument("--comm-overhead-budget", type=int, default=200000000, help="Communication overhead budget in bytes")
+    parser.add_argument("--telegram-bot-token", default="", help="Telegram bot token for alerts")
+    parser.add_argument("--telegram-chat-id", default="", help="Telegram chat ID for alerts")
+    parser.add_argument("--telegram-enabled", action="store_true", help="Force enable Telegram notifications")
     args = parser.parse_args()
+
+    # Instantiate notifier with optional YAML config fallback
+    tg_token = args.telegram_bot_token
+    tg_chat_id = args.telegram_chat_id
+    tg_enabled = args.telegram_enabled
+
+    if args.config_file and os.path.exists(args.config_file):
+        try:
+            import yaml
+            with open(args.config_file, "r") as f:
+                config = yaml.safe_load(f)
+            if isinstance(config, dict) and "notifications" in config:
+                tg_conf = config["notifications"].get("telegram", {})
+                if isinstance(tg_conf, dict):
+                    if not tg_token:
+                        tg_token = tg_conf.get("bot_token", "")
+                    if not tg_chat_id:
+                        tg_chat_id = tg_conf.get("chat_id", "")
+                    if not tg_enabled:
+                        tg_enabled = tg_conf.get("enabled", False)
+        except Exception as e:
+            print(f"[server] Warning: Could not load telegram config from file: {e}")
+
+    if tg_token and tg_chat_id:
+        tg_enabled = True
+
+    notifier = TelegramNotifier(bot_token=tg_token, chat_id=tg_chat_id, enabled=bool(tg_enabled))
 
     # Performance optimization: enable SQLite Write-Ahead Logging
     enable_sqlite_wal()
@@ -420,6 +510,10 @@ def main():
         if args.dataset_hash:
             params["dataset_hash"] = args.dataset_hash
             print(f"[server] Registered dataset hash parameter: {args.dataset_hash}")
+        if args.cl_task_sequence:
+            params["cl_task_sequence"] = args.cl_task_sequence
+        if args.cl_complexity_score > 0.0:
+            params["cl_complexity_score"] = args.cl_complexity_score
         mlflow.log_params(params)
 
         tags = {
@@ -432,6 +526,10 @@ def main():
             tags["resumed_from_run_id"] = resumed_from_run_id
         if resumed_from_version:
             tags["resumed_from_version"] = str(resumed_from_version)
+        if args.cl_task_sequence:
+            tags["cl_task_sequence"] = args.cl_task_sequence
+        if args.cl_complexity_score > 0.0:
+            tags["cl_complexity_score"] = str(args.cl_complexity_score)
         mlflow.set_tags(tags)
 
         # Construct initial run description (notes) with rich markdown information
@@ -445,6 +543,10 @@ def main():
         )
         if resumed_from_run_id:
             run_desc += f"- **Resumed From Run ID**: `{resumed_from_run_id}` (Version `{resumed_from_version}`)\n"
+        if args.cl_task_sequence:
+            run_desc += f"- **CL Task Sequence**: `{args.cl_task_sequence}`\n"
+        if args.cl_complexity_score > 0.0:
+            run_desc += f"- **CL Complexity Score**: `{args.cl_complexity_score:.2f}`\n"
         
         mlflow.set_tag("mlflow.note.content", run_desc)
 
@@ -594,6 +696,8 @@ def main():
                     f"Production Strategy: {args.production_strategy if args.mlops_mode == 'production' else 'N/A'}\n"
                     f"Git Commit: {get_git_hash(args.git_commit)}\n"
                     f"FL Rounds: {args.rounds}\n"
+                    f"CL Task Sequence: {args.cl_task_sequence or 'N/A'}\n"
+                    f"CL Complexity Score: {args.cl_complexity_score:.2f}\n"
                     f"Evaluation Metrics at Best Round {strategy.best_round}:\n"
                     f"  - Overall Accuracy: {strategy.best_accuracy*100:.2f}%\n"
                     f"  - Aggregated Loss: {strategy.best_loss:.4f}\n"
@@ -616,6 +720,10 @@ def main():
                 client.set_model_version_tag(model_name, str(new_version), "accuracy", f"{strategy.best_accuracy:.6f}")
                 client.set_model_version_tag(model_name, str(new_version), "loss", f"{strategy.best_loss:.6f}")
                 client.set_model_version_tag(model_name, str(new_version), "fl_rounds", str(args.rounds))
+                if args.cl_task_sequence:
+                    client.set_model_version_tag(model_name, str(new_version), "cl_task_sequence", args.cl_task_sequence)
+                if args.cl_complexity_score > 0.0:
+                    client.set_model_version_tag(model_name, str(new_version), "cl_complexity_score", str(args.cl_complexity_score))
                 
                 class_3_acc = strategy.best_metrics.get("accuracy_class_3")
                 if class_3_acc is not None:
@@ -640,40 +748,94 @@ def main():
                     except Exception:
                         print("[server] No active champion model found in Model Registry.")
 
-                    # Calculate average BWT for candidate best metrics
-                    bwt_vals = []
+                    # Calculate total communication bytes
+                    total_comm_bytes = sum(record["communication_bytes"] for record in strategy.history_records)
+
+                    # Validation Gate Criteria (B1):
+                    # 1. Per-class F1 >= threshold
+                    f1_thresholds = {
+                        0: 0.50,  # Normal
+                        1: 0.60,  # Botnet
+                        2: 0.70,  # DNS Exfiltration
+                        3: 0.50,  # SSH Brute Force
+                        4: 0.70,  # DoS
+                    }
+                    f1_ok = True
+                    f1_details = []
+                    for i in range(5):
+                        f1_val = strategy.best_metrics.get(f"f1_class_{i}", -1.0)
+                        thresh = f1_thresholds[i]
+                        if f1_val >= 0.0:
+                            passed = f1_val >= thresh
+                            f1_details.append(f"Class {i} F1: {f1_val:.4f} (req >= {thresh}) -> {'PASS' if passed else 'FAIL'}")
+                            if not passed:
+                                f1_ok = False
+                        else:
+                            f1_details.append(f"Class {i} F1: N/A -> SKIP")
+
+                    # 2. BWT >= 0 (no forgetting regression)
+                    bwt_ok = True
+                    bwt_details = []
                     for i in range(5):
                         bwt_val = strategy.best_metrics.get(f"bwt_class_{i}", -1.0)
                         f1_val = strategy.best_metrics.get(f"f1_class_{i}", -1.0)
                         if f1_val >= 0.0 and bwt_val != -1.0:
-                            bwt_vals.append(bwt_val)
-                    avg_bwt = sum(bwt_vals) / len(bwt_vals) if len(bwt_vals) > 0 else 0.0
+                            # Allow a tiny float precision tolerance
+                            passed = bwt_val >= -1e-5
+                            bwt_details.append(f"Class {i} BWT: {bwt_val:.4f} (req >= 0.0) -> {'PASS' if passed else 'FAIL'}")
+                            if not passed:
+                                bwt_ok = False
+                        else:
+                            bwt_details.append(f"Class {i} BWT: N/A -> SKIP")
 
-                    # Validation Gate Criteria:
-                    # 1. accuracy >= champion_accuracy - 0.005 (0.5% tolerance)
-                    # 2. loss <= champion_loss + 0.05
-                    # 3. average BWT >= -0.05
-                    candidate_acc = strategy.best_accuracy
-                    candidate_loss = strategy.best_loss
-                    
-                    acc_ok = candidate_acc >= (champ_accuracy - 0.005)
-                    loss_ok = candidate_loss <= (champ_loss + 0.05)
-                    bwt_ok = avg_bwt >= -0.05
-                    
-                    passed_gate = acc_ok and loss_ok and bwt_ok
-                    
-                    print(f"[server] Validation Gate Metrics Checklist:")
-                    print(f"  - Overall Accuracy: candidate={candidate_acc:.6f}, champion={champ_accuracy:.6f} -> {'PASS' if acc_ok else 'FAIL'}")
-                    print(f"  - Aggregated Loss: candidate={candidate_loss:.6f}, champion={champ_loss:.6f} -> {'PASS' if loss_ok else 'FAIL'}")
-                    print(f"  - Average BWT Delta: candidate={avg_bwt:.6f} (threshold >= -0.05) -> {'PASS' if bwt_ok else 'FAIL'}")
+                    # 3. Communication overhead <= budget
+                    comm_ok = total_comm_bytes <= args.comm_overhead_budget
+                    comm_detail = f"Total Comm Bytes: {total_comm_bytes} (budget <= {args.comm_overhead_budget}) -> {'PASS' if comm_ok else 'FAIL'}"
+
+                    passed_gate = f1_ok and bwt_ok and comm_ok
+
+                    # Prepare metrics dictionary for Telegram notification
+                    promo_metrics = {
+                        "accuracy": strategy.best_accuracy,
+                        "loss": strategy.best_loss,
+                        "total_comm_bytes": total_comm_bytes
+                    }
+                    for i in range(5):
+                        f1_val = strategy.best_metrics.get(f"f1_class_{i}", -1.0)
+                        if f1_val >= 0.0:
+                            promo_metrics[f"f1_class_{i}"] = f1_val
+                        bwt_val = strategy.best_metrics.get(f"bwt_class_{i}", -1.0)
+                        if bwt_val != -1.0:
+                            promo_metrics[f"bwt_class_{i}"] = bwt_val
+
+                    print(f"[server] Validation Gate Checklist:")
+                    for detail in f1_details + bwt_details + [comm_detail]:
+                        print(f"  - {detail}")
 
                     if passed_gate:
+                        rationale = (
+                            f"Model Candidate v{new_version} passed all validation gates:\n"
+                            f"- F1 thresholds met: Yes\n"
+                            f"- BWT forgetting regression check (BWT >= 0): Yes\n"
+                            f"- Comm overhead ({total_comm_bytes} bytes) within budget ({args.comm_overhead_budget} bytes): Yes\n"
+                            f"- Overall accuracy: {strategy.best_accuracy:.4f} (incumbent champion was {champ_accuracy:.4f})\n"
+                            f"- Aggregated loss: {strategy.best_loss:.4f} (incumbent champion was {champ_loss:.4f})\n"
+                            f"CL Sequence: {args.cl_task_sequence or 'N/A'}\n"
+                            f"Complexity Score: {args.cl_complexity_score:.2f}"
+                        )
                         print(f"[server] MLOps Promotion: Validation GATE PASSED. Promoting version {new_version} to 'champion'...")
                         client.set_registered_model_alias(
                             name=model_name,
                             alias="champion",
                             version=str(new_version)
                         )
+                        # Also update the model version's description with the promotion rationale
+                        client.update_model_version(
+                            name=model_name,
+                            version=str(new_version),
+                            description=version_desc + "\n\n🏆 PROMOTION RATIONALE:\n" + rationale
+                        )
+
                         # For backwards compatibility with older dashboard layouts, also set deprecated stage
                         try:
                             client.transition_model_version_stage(
@@ -684,13 +846,45 @@ def main():
                             )
                         except Exception:
                             pass
+
+                        # Send Telegram success notification
+                        try:
+                            notifier.notify_promotion(
+                                model_name=model_name,
+                                version=new_version,
+                                metrics=promo_metrics,
+                                rationale=rationale
+                            )
+                        except Exception as e:
+                            print(f"[server] Telegram promotion notification failed: {e}")
                     else:
-                        print(f"[server] MLOps Promotion: Validation GATE FAILED. Assigning 'challenger' alias to version {new_version}...")
+                        failure_reason = ""
+                        if not f1_ok:
+                            failure_reason += "One or more class F1 scores failed to meet threshold. "
+                        if not bwt_ok:
+                            failure_reason += "Negative BWT forgetting regression detected. "
+                        if not comm_ok:
+                            failure_reason += f"Communication bytes ({total_comm_bytes}) exceeded budget limit ({args.comm_overhead_budget}). "
+
+                        print(f"[server] MLOps Promotion: Validation GATE FAILED ({failure_reason}). Assigning 'challenger' alias...")
                         client.set_registered_model_alias(
                             name=model_name,
                             alias="challenger",
                             version=str(new_version)
                         )
+                        # Log failure reason as a tag on the run
+                        mlflow.set_tag("promotion_failure_reason", failure_reason)
+
+                        # Send Telegram failure notification
+                        try:
+                            notifier.notify_promotion_failure(
+                                model_name=model_name,
+                                candidate_version=new_version,
+                                metrics=promo_metrics,
+                                failure_reason=failure_reason
+                            )
+                        except Exception as e:
+                            print(f"[server] Telegram failure notification failed: {e}")
                 else:
                     print(f"[server] MLOps Promotion (experimental mode): Assigning 'challenger' alias to version {new_version}...")
                     client.set_registered_model_alias(

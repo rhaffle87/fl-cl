@@ -21,6 +21,9 @@ fl:
 cl:
   strategy: "EWC"
   ewc_lambda: 0.4
+  task_sequence: "benign,ssh,slowloris,dns_exfil,botnet"
+  complexity_score: 1.4
+  comm_overhead_budget: 200000000 # 200MB in bytes
 
 # ── Model Architecture ──────────────────────────────────────
 model:

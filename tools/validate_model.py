@@ -23,12 +23,12 @@ import client
 
 LABEL_NAMES = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: "DoS"}
 
-# Minimum acceptable per-class accuracy for deployment
-MIN_THRESHOLDS = {
-    0: 0.50,  # Normal  — small sample, lower bar
+# Minimum acceptable per-class F1 score for deployment
+MIN_F1_THRESHOLDS = {
+    0: 0.50,  # Normal
     1: 0.60,  # Botnet
     2: 0.70,  # Exfiltration
-    3: 0.50,  # BruteForce — small sample, lower bar
+    3: 0.50,  # BruteForce
     4: 0.70,  # DoS
 }
 
@@ -80,21 +80,30 @@ def main():
     # Per-class validation
     passed = True
     print(f"\nPer-class Validation:")
-    print(f"  {'Class':>15s}  {'Accuracy':>8s}  {'Threshold':>9s}  {'Status':>6s}  {'Samples':>7s}")
-    print(f"  {'─'*15}  {'─'*8}  {'─'*9}  {'─'*6}  {'─'*7}")
+    print(f"  {'Class':>15s}  {'Accuracy':>8s}  {'F1 Score':>8s}  {'Threshold':>9s}  {'Status':>6s}  {'Samples':>7s}")
+    print(f"  {'─'*15}  {'─'*8}  {'─'*8}  {'─'*9}  {'─'*6}  {'─'*7}")
 
     for label in range(5):
         mask = np.array(all_targets) == label
         n_samples = mask.sum()
         if n_samples > 0:
             acc = (np.array(all_preds)[mask] == label).sum() / n_samples
-            threshold = MIN_THRESHOLDS[label]
-            status = "PASS" if acc >= threshold else "FAIL"
+            
+            # Calculate F1 score
+            tp = ((np.array(all_preds) == label) & (np.array(all_targets) == label)).sum()
+            fp = ((np.array(all_preds) == label) & (np.array(all_targets) != label)).sum()
+            fn = ((np.array(all_preds) != label) & (np.array(all_targets) == label)).sum()
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+            
+            threshold = MIN_F1_THRESHOLDS[label]
+            status = "PASS" if f1 >= threshold else "FAIL"
             if status == "FAIL":
                 passed = False
-            print(f"  {LABEL_NAMES[label]:>15s}  {acc:>8.4f}  {threshold:>9.2f}  {status:>6s}  {n_samples:>7d}")
+            print(f"  {LABEL_NAMES[label]:>15s}  {acc:>8.4f}  {f1:>8.4f}  {threshold:>9.2f}  {status:>6s}  {n_samples:>7d}")
         else:
-            print(f"  {LABEL_NAMES[label]:>15s}  {'N/A':>8s}  {MIN_THRESHOLDS[label]:>9.2f}  {'SKIP':>6s}  {0:>7d}")
+            print(f"  {LABEL_NAMES[label]:>15s}  {'N/A':>8s}  {'N/A':>8s}  {MIN_F1_THRESHOLDS[label]:>9.2f}  {'SKIP':>6s}  {0:>7d}")
 
     # Confusion matrix
     print("\nConfusion Matrix:")

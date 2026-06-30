@@ -34,7 +34,7 @@ def generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds):
     """Queries the local LLM model via the Tailscale Ollama proxy."""
     endpoint = os.getenv("OLLAMA_ENDPOINT")
     key = os.getenv("OLLAMA_KEY")
-    model = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:1.5b-base")
+    model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 
     if not endpoint or not key:
         print("[!] Warning: OLLAMA_ENDPOINT or OLLAMA_KEY is not set in .env. Skipping LLM report generation.")
@@ -54,18 +54,18 @@ def generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds):
         except (ValueError, TypeError):
             formatted_metrics[k] = v
 
-    prompt = f"""# FL-CL Security MLOps Evaluation Report
-- **MLflow Run ID**: {run_id}
-- **Total Rounds**: {rounds}
-- **Continual Learning Strategy**: Avalanche Elastic Weight Consolidation (EWC)
-- **EWC Lambda**: {lambda_ewc}
+    prompt = f"""You are a senior security MLOps expert. Analyze the following training run metrics for a Federated Continual Learning (FCL) intrusion detection system.
+Provide an executive summary, threat model performance analysis, and actionable MLOps recommendations.
 
-## Final Aggregated Training Metrics
-```json
+Input Configuration & Metrics:
+- MLflow Run ID: {run_id}
+- Total Rounds: {rounds}
+- Continual Learning Strategy: Avalanche Elastic Weight Consolidation (EWC)
+- EWC Lambda: {lambda_ewc}
+- Final Aggregated Metrics:
 {json.dumps(formatted_metrics, indent=2)}
-```
 
-## 1. Executive Summary
+Please write your evaluation report. Start directly with the section header "## 1. Executive Summary" and proceed with analysis. Do not include markdown code block syntax wrapping the entire output. Be concise, professional, and highlight any catastrophic forgetting (BWT) or accuracy issues if present.
 """
 
     payload = {
@@ -74,8 +74,8 @@ def generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds):
         "stream": False,
         "options": {
             "num_thread": 4,
-            "temperature": 0.2,
-            "num_predict": 384
+            "temperature": 0.3,
+            "num_predict": 512
         }
     }
 
@@ -106,7 +106,7 @@ def append_and_upload_report(run_dir, run_id, final_metrics, lambda_ewc, rounds,
         return False
 
     # Get model name again for heading reference
-    model = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:1.5b-base")
+    model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
     print(f"[*] Appending local AI analysis ({model}) to {summary_path}...")
     try:
         with open(summary_path, "a") as f:
@@ -117,7 +117,6 @@ def append_and_upload_report(run_dir, run_id, final_metrics, lambda_ewc, rounds,
             f.write(f"- **Total Rounds**: {rounds}\n")
             f.write(f"- **Continual Learning Strategy**: Avalanche Elastic Weight Consolidation (EWC)\n")
             f.write(f"- **EWC Lambda**: {lambda_ewc}\n\n")
-            f.write("## 1. Executive Summary\n")
             f.write(analysis)
             f.write("\n")
     except Exception as e:

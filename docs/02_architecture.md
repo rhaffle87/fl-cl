@@ -327,14 +327,14 @@ if __name__ == "__main__":
 To close the MLOps loop, the pipeline triggers an automated post-training analysis workflow upon completion:
 
 ```
-[ orchestrate.py ] ──► [ generate_llm_report.py ] ──► Nginx Proxy ──► [ Ollama (qwen2.5-coder:1.5b) ]
+[ orchestrate.py ] ──► [ generate_llm_report.py ] ──► Nginx Proxy ──► [ Ollama (llama3.1:8b) ]
                                                             │
                                                             ▼ (markdown report)
                                                      [ MLflow Runs / Artifacts ]
 ```
 
 1. **Analytical Assessment**: The aggregator collects the training results (validation losses, final class-specific detection accuracies, and EWC backward transfer metrics).
-2. **CPU-Bound Completion Inference**: The report engine interfaces with a local Ollama endpoint secured by an Nginx reverse proxy. To accommodate the base (non-instruct) model `qwen2.5-coder:1.5b-base`, the query is structured as a markdown completion prompt. It configures controlled thread concurrency (`num_thread: 4`) and a strict limit on generated tokens (`num_predict: 384`) to prevent timeouts and enforce high-quality, structured output.
+2. **CPU-Bound Instruct Inference**: The report engine interfaces with a local Ollama endpoint secured by an Nginx reverse proxy. It queries the instruct-capable `llama3.1:8b` model using a highly structured prompt to produce an executive summary and actionable recommendations. It configures controlled thread concurrency (`num_thread: 4`) and a strict limit on generated tokens (`num_predict: 512`) to prevent timeouts and enforce high-quality, structured output.
 3. **Artifact Registration**: The engine appends the generated security threat report directly to the run's `run_summary.md` and uploads it to the active MLflow run tracking database as an artifact.
 
 ---
