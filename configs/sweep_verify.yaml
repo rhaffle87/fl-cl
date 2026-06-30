@@ -1,0 +1,13 @@
+# ─────────────────────────────────────────────────────────────
+# FL-CL Sweep Verification Config (Single Fast Run)
+# ─────────────────────────────────────────────────────────────
+experiment:
+  name: "FCL-Sweep-Verification"
+  description: "Fast integration test of hyperparameter sweep controller, parent-child linking, and dataset lineage"
+
+sweep:
+  parameters:
+    cl.ewc_lambda: [0.4]
+    training.lr: [0.01]
+    training.batch_size: [32]
+    fl.rounds: [1]

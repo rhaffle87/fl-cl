@@ -295,14 +295,23 @@ def main():
 
     # Load config — CLI args override YAML values
     config = {}
-    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", args.config)
+    config_file = args.config
+    
+    # Automatically fallback to local override configuration if available
+    if config_file == "configs/experiment.yaml":
+        local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "configs/local_experiment.yaml")
+        if os.path.exists(local_path):
+            config_file = "configs/local_experiment.yaml"
+            print(f"[orchestrator] Using local configuration override: {config_file}")
+
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", config_file)
     if os.path.exists(config_path):
         config = load_config(config_path)
         print(f"[*] Loaded config: {config_path}")
-    elif os.path.exists(args.config):
-        config = load_config(args.config)
-        config_path = args.config
-        print(f"[*] Loaded config: {args.config}")
+    elif os.path.exists(config_file):
+        config = load_config(config_file)
+        config_path = config_file
+        print(f"[*] Loaded config: {config_file}")
     else:
         print(f"[!] Config not found at {args.config}. Using CLI defaults.")
         config_path = None

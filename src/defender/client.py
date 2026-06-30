@@ -60,7 +60,7 @@ except ImportError:
     pass
 
 
-def assign_label(row, dos_threshold_ms=2000):
+def assign_label(row, dos_threshold_ms=2000, traffic_gen_ip=None):
     """
     Dynamically assign threat labels to flows based on source/destination IP and port fields:
         0: Normal (benign traffic)
@@ -82,7 +82,9 @@ def assign_label(row, dos_threshold_ms=2000):
     except (ValueError, TypeError):
         dst_port = 0
 
-    traffic_gen_ip = "10.10.140.10"
+    if traffic_gen_ip is None:
+        traffic_gen_ip = os.environ.get("TRAFFIC_GEN_IP", "10.10.140.10")
+
     is_from_traffic_gen = (src_ip == traffic_gen_ip)
     is_to_traffic_gen = (dst_ip == traffic_gen_ip)
 
@@ -107,7 +109,7 @@ def assign_label(row, dos_threshold_ms=2000):
     return 0  # Normal
 
 
-def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: float = 2000):
+def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: float = 2000, traffic_gen_ip: str = None):
     """
     Load all CSV flow files from the RAM disk and convert to PyTorch tensors.
     """
@@ -152,7 +154,7 @@ def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: 
         X = X[:, :32]
 
     # Assign labels dynamically based on IP and port fields
-    df["label"] = df.apply(assign_label, axis=1, dos_threshold_ms=dos_threshold_ms)
+    df["label"] = df.apply(assign_label, axis=1, dos_threshold_ms=dos_threshold_ms, traffic_gen_ip=traffic_gen_ip)
     y = df["label"].values.astype(np.int64)
 
     return torch.tensor(X), torch.tensor(y)
@@ -196,12 +198,13 @@ import mlflow
 class CyberDefenseClient(fl.client.NumPyClient):
     """Flower client wrapping the Avalanche CL training loop."""
 
-    def __init__(self, net, cl_strategy, flows_dir, client_id="A", dos_threshold_ms=2000):
+    def __init__(self, net, cl_strategy, flows_dir, client_id="A", dos_threshold_ms=2000, traffic_gen_ip=None):
         self.net = net
         self.cl = cl_strategy
         self.flows_dir = flows_dir
         self.client_id = client_id
         self.dos_threshold_ms = dos_threshold_ms
+        self.traffic_gen_ip = traffic_gen_ip
 
     def get_parameters(self, config):
         return [v.cpu().numpy() for _, v in self.net.state_dict().items()]
@@ -225,7 +228,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
         self.set_parameters(parameters)
         num_samples = 0
         try:
-            X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms)
+            X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms, traffic_gen_ip=self.traffic_gen_ip)
             num_samples = len(X)
             experience = get_experience(X, y)
             self.cl.train(experience)
@@ -249,7 +252,7 @@ class CyberDefenseClient(fl.client.NumPyClient):
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
         try:
-            X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms)
+            X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms, traffic_gen_ip=self.traffic_gen_ip)
             dataset = TensorDataset(X, y)
             dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
 
@@ -326,6 +329,7 @@ def main():
     parser.add_argument("--momentum", type=float, default=0.9, help="SGD momentum")
     parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
     parser.add_argument("--batch-size", type=int, default=32, help="Local training batch size")
+    parser.add_argument("--traffic-gen-ip", default=os.environ.get("TRAFFIC_GEN_IP", "10.10.140.10"), help="Traffic Generator IP address")
     args = parser.parse_args()
 
     # Set up MLflow
@@ -338,6 +342,7 @@ def main():
     print(f"[client-{args.client_id}] Flows:  {args.flows_dir}")
     print(f"[client-{args.client_id}] SGD lr: {args.lr} | momentum: {args.momentum} | batch_size: {args.batch_size}")
     print(f"[client-{args.client_id}] DoS duration threshold: {args.dos_threshold_ms} ms")
+    print(f"[client-{args.client_id}] Traffic Gen IP: {args.traffic_gen_ip}")
 
     net = CyberDefenseNet().to(device)
     
@@ -359,7 +364,8 @@ def main():
             cl,
             args.flows_dir,
             client_id=args.client_id,
-            dos_threshold_ms=args.dos_threshold_ms
+            dos_threshold_ms=args.dos_threshold_ms,
+            traffic_gen_ip=args.traffic_gen_ip
         ),
     )
 

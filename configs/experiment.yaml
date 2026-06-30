@@ -1,9 +1,9 @@
 # ─────────────────────────────────────────────────────────────
-# FL-CL Experiment Configuration Template
+# FL-CL Experiment Configuration
 # ─────────────────────────────────────────────────────────────
 # This file defines all tunable parameters for a single FL-CL
-# experiment run. Copy this to configs/experiment.yaml and fill
-# in details (like Telegram keys) for your local environment.
+# experiment run.  The orchestrator loads this YAML and logs it
+# as an MLflow artifact so every run is fully reproducible.
 # ─────────────────────────────────────────────────────────────
 
 experiment:
@@ -20,7 +20,7 @@ fl:
 # ── Continual Learning (EWC) ────────────────────────────────
 cl:
   strategy: "EWC"
-  ewc_lambda: 0.4
+  ewc_lambda: 0.1
   task_sequence: "benign,ssh,slowloris,dns_exfil,botnet"
   complexity_score: 1.4
   comm_overhead_budget: 200000000 # 200MB in bytes
@@ -35,11 +35,11 @@ model:
 # ── Training Hyperparameters ────────────────────────────────
 training:
   optimizer: "SGD"
-  lr: 0.01
+  lr: 0.005
   momentum: 0.9
   batch_size: 32
   epochs_per_round: 1
-  class_weights: [10.0, 3.0, 3.0, 8.0, 1.0]
+  class_weights: [2.0, 150.0, 3.0, 7.0, 18.0]
 
 # ── Feature Engineering ─────────────────────────────────────
 features:
@@ -57,7 +57,7 @@ features:
 
 # ── Traffic Simulation ──────────────────────────────────────
 simulation:
-  attack_duration_seconds: 30
+  attack_duration_seconds: 90
   stages:
     - mode: benign
     - mode: ssh
@@ -79,7 +79,7 @@ topology:
 # ── Notifications ───────────────────────────────────────────
 notifications:
   telegram:
-    enabled: false
+    enabled: true
     # bot_token and chat_id are loaded from environment variables (e.g. .env) instead of being hardcoded here.
 
 # ── Checkpointing ──────────────────────────────────────────
@@ -91,8 +91,8 @@ checkpointing:
 # ── MLOps Mode Configuration ────────────────────────────────
 mlops:
   # Mode options: "experimental" (cold start) or "production" (warm start)
-  mode: "experimental"
-  
+  mode: "production"
+
   # Production Strategy: "resume" (continue from latest checkpoint) or "fresh" (new start)
   production_strategy: "resume"
 
@@ -102,4 +102,3 @@ mlops:
 # ── Labeling Configuration ──────────────────────────────────
 labeling:
   dos_duration_threshold_ms: 2000
-

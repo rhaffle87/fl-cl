@@ -364,10 +364,10 @@ def main():
     parser.add_argument("--telegram-enabled", action="store_true", help="Force enable Telegram notifications")
     args = parser.parse_args()
 
-    # Instantiate notifier with optional YAML config fallback
-    tg_token = args.telegram_bot_token
-    tg_chat_id = args.telegram_chat_id
-    tg_enabled = args.telegram_enabled
+    # Instantiate notifier with optional YAML config fallback, prioritizing environment variables
+    tg_token = args.telegram_bot_token or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    tg_chat_id = args.telegram_chat_id or os.environ.get("TELEGRAM_CHAT_ID", "")
+    tg_enabled = args.telegram_enabled or (os.environ.get("TELEGRAM_ENABLED", "").lower() in ("true", "1"))
 
     if args.config_file and os.path.exists(args.config_file):
         try:
