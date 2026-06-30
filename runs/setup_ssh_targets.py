@@ -68,9 +68,9 @@ def main():
     config = load_config(args.config)
     topology = config.get("topology", {})
 
-    traffic_gen = topology.get("traffic_gen", "10.10.140.10")
-    target_a = topology.get("target_a", "10.10.110.15")
-    target_b = topology.get("target_b", "10.10.120.15")
+    traffic_gen = topology.get("traffic_gen", os.environ.get("TRAFFIC_GEN_HOST", "localhost"))
+    target_a = topology.get("target_a", os.environ.get("TARGET_A_HOST", "localhost"))
+    target_b = topology.get("target_b", os.environ.get("TARGET_B_HOST", "localhost"))
 
     selected_password = "spring2014" # Default fallback password (present in fasttrack.txt)
 
