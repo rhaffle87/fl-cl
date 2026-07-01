@@ -667,7 +667,7 @@ Before starting the training loop, the orchestrator:
 ### 8.2 Lineage Graph Logging
 1. These individual hashes are logged as MLflow parameters on the run: `defender_a_hash` and `defender_b_hash`.
 2. A combined run-level dataset provenance hash is calculated by hashing the concatenated client digests:
-   $$\text{combined\_hash} = \text{SHA-256}(\text{hash\_A} \mathbin{\Vert} \text{hash\_B})$$
+   $$\text{combined}_{\text{hash}} = \text{SHA-256}(\text{hash}_{\text{A}} \mathbin{\Vert} \text{hash}_{\text{B}})$$
 3. A JSON schema artifact `dataset_lineage.json` is generated and saved with the MLflow run. This file documents:
    - Workstation git commit SHA-1
    - Path to local CSVs on client nodes
@@ -690,7 +690,7 @@ The gate checks the candidate model's validation metrics using three key dimensi
    - Class 3 (BruteForce): $\text{F1} \ge 0.50$
    - Class 4 (DoS): $\text{F1} \ge 0.70$
 2. **Backward Transfer (BWT) Forgetting Gate**: To prevent catastrophic forgetting, the Backward Transfer (BWT) for each individual class must not regress:
-   $$\text{BWT}_{\text{class}\_i} \ge 0.0 \quad \text{for all } i \in [0, 4] \text{ where evaluation data exists}$$
+   $$\text{BWT}_{\text{class}_i} \ge 0.0 \quad \text{for all } i \in [0, 4] \text{ where evaluation data exists}$$
 3. **Communication Overhead Budget**: The total network bytes exchanged during training rounds must be within the defined budget (default: 200,000,000 bytes):
    $$\text{Bytes}_{\text{total}} \le \text{Budget}$$
 

@@ -420,15 +420,16 @@ def get_continual_learner(model, device, ewc_lambda=0.25, class_weights=None):
 
 Federated coordination uses the **Flower** framework. Local parameter updates are aggregated at the central Aggregator Node (`LXC 300`) using the Federated Averaging (`FedAvg`) aggregation algorithm.
 
+```mermaid
+graph TD
+    Aggregator["FL Aggregator (LXC 300)"]
+    DefenderA["Defender A"]
+    DefenderB["Defender B"]
+
+    Aggregator <-->|gRPC / TLS| DefenderA
+    Aggregator <-->|gRPC / TLS| DefenderB
 ```
-       [FL Aggregator (LXC 300)]
-             ▲          ▲
-             │          │
-    (gRPC / TLS)      (gRPC / TLS)
-             │          │
-             ▼          ▼
-       [Defender A]   [Defender B]
-```
+
 
 #### Step 6.1: Run the Flower Server (`server.py` on LXC 300)
 The server runs on the Aggregator node. It manages the training lifecycle by orchestrating rounds, collecting client parameter changes, and executing global evaluations. It subclasses the Flower `FedAvg` strategy (`MLflowFedAvg`) to integrate MLflow tracking, evaluation tables, dataset linkages, and model versioning alias promotion.
