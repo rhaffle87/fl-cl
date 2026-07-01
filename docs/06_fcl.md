@@ -26,25 +26,26 @@ Traditional machine learning assumes that all training data is available in one 
 flowchart TD
     subgraph OrgA["Organization A (VM 310 — Defender A)"]
         TA["Target A1<br>10.10.110.15"] -->|Port Mirror<br>via tc rules| EA["NFStream Extractor<br>(ens19 → /mnt/ramdisk/flows/)"]
-        EA --> CA["Flower Client A<br>client.py"]
-        CA --> EWCA["EWC Strategy<br>cl_strategy.py"]
+        EA --> CA["Flower Client A<br>client.py<br>(+ DP / Poisoning simulation)"]
+        CA --> EWCA["Continual Learner<br>(EWC / GEM / Naive)"]
         EWCA --> NETA["Local CyberDefenseNet"]
     end
 
     subgraph OrgB["Organization B (VM 320 — Defender B)"]
         TB["Target B1<br>10.10.120.15"] -->|Port Mirror<br>via tc rules| EB["NFStream Extractor<br>(ens19 → /mnt/ramdisk/flows/)"]
-        EB --> CB["Flower Client B<br>client.py"]
-        CB --> EWCB["EWC Strategy<br>cl_strategy.py"]
+        EB --> CB["Flower Client B<br>client.py<br>(+ DP / Poisoning simulation)"]
+        CB --> EWCB["Continual Learner<br>(EWC / GEM / Naive)"]
         EWCB --> NETB["Local CyberDefenseNet"]
     end
 
     subgraph Aggregator["FL Aggregator (LXC 300 — 10.10.130.10)"]
         FS["Flower Server<br>server.py"]
-        FA["FedAvg<br>Weighted Averaging"]
+        RA["Byzantine-Robust Aggregation<br>(FedAvg / FedMedian / TrimmedMean / Krum)"]
+        SG["NaN/Inf Sanitization Guard"]
         GM["Global CyberDefenseNet"]
         ML["MLflow Tracker"]
-        FS --> FA --> GM
-        FA --> ML
+        FS --> RA --> SG --> GM
+        SG --> ML
     end
 
     subgraph TrafficGen["Traffic Generator (VM 400 — 10.10.140.10)"]
@@ -256,33 +257,55 @@ This returns a list of NumPy arrays representing:
 
 ---
 
-### 3.5 Step 5 — Global Model Aggregation (FedAvg)
+### 3.5 Step 5 — Global Model Aggregation & Robust Security Guards
 
 **Where:** FL Aggregator (LXC 300, `10.10.130.10`)
 **Script:** [`src/aggregator/server.py`](../src/aggregator/server.py) → `MLflowFedAvg` strategy
 
-The aggregator receives weight updates from both clients and combines them using the **Federated Averaging (FedAvg)** algorithm:
+The aggregator receives weight updates from connected clients and combines them using the selected **Aggregation Strategy** (defaulting to baseline `FedAvg`).
 
-$$\theta_{\text{global}} = \sum_{c=1}^{C} \frac{N_c}{N_{\text{total}}} \cdot \theta_c$$
+#### Aggregation Strategies
+*   **Federated Averaging (FedAvg)**:
+    Computes a weighted average based on client training set sizes:
+    $$\theta_{\text{global}} = \sum_{c=1}^{C} \frac{N_c}{N_{\text{total}}} \cdot \theta_c$$
+*   **Federated Coordinate-wise Median (FedMedian)**:
+    Computes the median independently for each coordinate across client weight updates:
+    $$\theta_{\text{global}, i} = \text{median}(\{\theta_{c, i}\}_{c=1}^{C})$$
+    Highly effective at neutralizing extreme model poisoning or arbitrary weight replacements.
+*   **Coordinate-wise Trimmed Mean (TrimmedMean)**:
+    Sorts parameters coordinate-wise and trims a fraction $\beta$ of values from each tail before computing the mean:
+    $$\theta_{\text{global}, i} = \frac{1}{C - 2k} \sum_{c=k+1}^{C-k} \theta_{(c), i}$$
+    Where $k = \lfloor \beta \cdot C \rfloor$, and $\theta_{(c), i}$ represents sorted coordinate updates.
+*   **Krum (Consensus Client Selection)**:
+    Selects a single representative client update that minimizes the sum of squared distances to its $C - f - 2$ nearest updates (where $f$ is the assumed number of Byzantine attackers):
+    $$c^* = \arg\min_{c} \sum_{c' \in \mathcal{N}_c} \|\theta_c - \theta_{c'}\|^2$$
+    Guarantees that the chosen client update lies within the convex hull of clean updates.
 
-Where:
-- $\theta_c$ is the weight update from client $c$
-- $N_c$ is the number of training samples client $c$ used
-- $N_{\text{total}} = \sum N_c$ is the total samples across all clients
+#### NaN/Inf Sanitization Guard
+To prevent Byzantine clients from crashing the training cycle using NaN/Inf weight injection (model collapse attack), the server sanitizes all aggregated parameters:
+```python
+# Replace NaN and Inf parameters with 0.0 prior to model assembly and serialization
+clean_ndarrays = []
+for arr in ndarrays:
+    clean_arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+    clean_ndarrays.append(clean_arr)
+```
 
-**In plain English:** If Defender A trained on 3,000 flows and Defender B trained on 1,500 flows, the aggregated model weights Defender A's contribution twice as heavily. This ensures clients with more data have proportionally more influence.
-
-The aggregation happens in `aggregate_fit()`:
+The aggregation and checkpointing happens in `aggregate_fit()`:
 
 ```python
 def aggregate_fit(self, server_round, results, failures):
+    # Triggers robust aggregation strategy on results
     aggregated = super().aggregate_fit(server_round, results, failures)
 
     if aggregated is not None:
         parameters, config = aggregated
         ndarrays = fl.common.parameters_to_ndarrays(parameters)
 
-        # Reconstruct the global model from aggregated parameters
+        # Apply NaN/Inf sanitization
+        ndarrays = [np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0) for arr in ndarrays]
+
+        # Reconstruct the global model from sanitized parameters
         model = CyberDefenseNet()
         state_dict = OrderedDict(
             {k: torch.tensor(v) for k, v in zip(model.state_dict().keys(), ndarrays)}
@@ -444,19 +467,34 @@ sequenceDiagram
 
 All tunable parameters are centralized in [`configs/experiment.yaml`](../configs/experiment.yaml):
 
-### Federated Learning Parameters
+### Federated Learning & Aggregation Parameters
 
 | Parameter | Config Path | Default | Effect |
 |:----------|:-----------|:--------|:-------|
 | FL Rounds | `fl.rounds` | 100 | More rounds = longer training, better convergence |
 | Min Clients | `fl.min_clients` | 2 | Wait for at least N clients per round |
+| Aggregation Strategy | `fl.strategy` | `FedAvg` | Dynamic selection of `FedAvg`, `FedMedian`, `TrimmedMean`, or `Krum` |
+| Trimmed Mean Beta | `fl.trimmed_mean_beta` | `0.2` | Tail trimming fraction for TrimmedMean strategy |
 
 ### Continual Learning Parameters
 
 | Parameter | Config Path | Default | Effect |
 |:----------|:-----------|:--------|:-------|
-| EWC Lambda | `cl.ewc_lambda` | 0.25 | Higher = more stability (less forgetting), lower = more plasticity |
-| Strategy | `cl.strategy` | EWC | Currently only EWC is implemented |
+| Strategy | `cl.strategy` | `EWC` | Dynamic selection of `EWC`, `GEM`, or `Naive` |
+| EWC Lambda | `cl.ewc_lambda` | 0.25 | Penalty scale for deviation from older parameters (EWC specific) |
+| Patterns Per Experience | `cl.patterns_per_exp` | 256 | Replay buffer pattern limit (GEM specific) |
+| Memory Strength | `cl.memory_strength` | 0.5 | Strength of memory constraint (GEM specific) |
+
+### Security & Privacy Parameters
+
+| Parameter | Config Path | Default | Effect |
+|:----------|:-----------|:--------|:-------|
+| Poison Enabled | `security.poison_enabled` | `false` | Simulated adversarial label poisoning on client side |
+| Poison Rate | `security.poison_rate` | `0.2` | Fraction of dataset targets poisoned |
+| Poison Client IDs | `security.poison_client_ids` | `"1"` | String containing client IDs targeted for poisoning |
+| DP Enabled | `security.dp_enabled` | `false` | Enable client-side differential privacy (DP-SGD) via Opacus |
+| DP Noise Multiplier | `security.dp_noise_multiplier` | `1.0` | Noise parameter added to training gradients |
+| DP Max Grad Norm | `security.dp_max_grad_norm` | `1.0` | Maximum L2 clipping norm bound for gradients |
 
 ### Training Parameters
 
@@ -478,9 +516,13 @@ Class 3 (BruteForce) accuracy dropping after new attacks?
   → Increase ewc_lambda (e.g., 0.3 → 0.5) for more stability
   → This trades off plasticity for new attack learning
 
-Overall accuracy plateauing?
-  → Increase fl.rounds (e.g., 100 → 200)
-  → Decrease ewc_lambda to allow more adaptation
+Byzantine/Poisoned client corrupting the global model?
+  → Change fl.strategy to FedMedian or TrimmedMean
+  → Adjust fl.trimmed_mean_beta to account for the expected fraction of malicious clients
+
+Training gradients exploding or crashing with NaN?
+  → Double check that the Gradient Safety clip_grad_norm_ is active (cl_strategy.py automatically clips at 1.0)
+  → The server's NaN/Inf Sanitization Guard will intercept anomalies and replace them with zero.
 ```
 
 ---
@@ -560,3 +602,11 @@ To transition from basic collaborative training to a highly robust enterprise de
 - **First-Class CL Metadata**: Registered models are annotated with task sequence attributes (`cl_task_sequence`, `cl_complexity_score`) for lineage auditability.
 - **L2 Client Weight Drift Monitoring**: During aggregation, the server computes L2 parameter drift between each client and the global model, monitoring client divergence and detecting anomalies using a 3-sigma rule logged directly to MLflow.
 
+### 8.4 Byzantine-Robust Aggregation & Privacy Guarantees (Theme E)
+- **Objective**: Protect the collaborative model from malicious poisoning attacks, guarantee privacy against membership inference via differential privacy, and ensure computational safety against exploding/NaN parameters.
+- **Robust Aggregation**:
+  - **FedMedian**: Computes the coordinate-wise median, preventing single-client extreme updates from influencing the global model.
+  - **TrimmedMean**: Trims configured tails from sorted parameters coordinate-wise to compute a clean average, neutralizing bounded attackers.
+  - **Krum**: Restricts updates to a single consensus client that minimizes distance to neighboring updates.
+- **Client-Side Differential Privacy (DP-SGD)**: Optionally wraps PyTorch data loaders and model parameters with **Opacus** at the client, enforcing strict differential privacy bounds via noise injection and per-sample gradient clipping.
+- **NaN/Inf Sanitization**: Aggregator scans updates for invalid parameters (`NaN` or `Inf`), replacing them with `0.0` to preserve training loop continuity.

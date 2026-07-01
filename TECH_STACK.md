@@ -61,6 +61,7 @@ These packages run inside VM 310 and VM 320.
 | **PyTorch** | 2.x | Deep learning framework (CyberDefenseNet MLP) | `pip install torch --index-url .../cpu` |
 | **Avalanche** | 0.5+ | Continual Learning library (EWC strategy) | `pip install avalanche-lib` |
 | **Flower (flwr)** | 1.x | Federated Learning client | `pip install flwr` |
+| **Opacus** | 1.x | Client-side Differential Privacy (DP-SGD) | `pip install opacus` |
 | **NFStream** | 6.x | Encrypted traffic feature extraction (JA3, flow stats) | `pip install nfstream` |
 | **scikit-learn** | 1.x | StandardScaler, metrics (F1, precision, recall) | `pip install scikit-learn` |
 | **pandas** | 2.x | DataFrame operations for flow records | `pip install pandas` |

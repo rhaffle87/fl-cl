@@ -148,33 +148,29 @@ abc123,def456,example.com,SSL.TLS,42,8192,...,10.10.140.10,10.10.110.15,54321,80
 
 ---
 
-### 3.3 `src/defender/cl_strategy.py` — Elastic Weight Consolidation (EWC)
+### 3.3 `src/defender/cl_strategy.py` — Continual Learning Strategies & Gradient Safety
 
 **Deployed to:** Defender A (VM 310), Defender B (VM 320)
 
-This module creates an Avalanche EWC strategy object that wraps the `CyberDefenseNet` model. Key configuration:
+This module instantiates the continual learning strategies and wraps the optimizer with gradient safety hooks.
 
-| Parameter | Value | Purpose |
-|:----------|:------|:--------|
-| `optimizer` | SGD (lr=0.01, momentum=0.9) | Stochastic gradient descent for local weight updates |
-| `criterion` | CrossEntropyLoss | Standard multi-class classification loss |
-| `ewc_lambda` | 0.25 (configurable via YAML) | Regularization strength balancing plasticity vs. stability |
-| `class_weights` | `[8.0, 20.0, 3.0, 15.0, 10.0]` | Per-class loss weights to boost underperforming threat classes |
-| `train_mb_size` | 32 | Mini-batch size during local training |
-| `train_epochs` | 1 | Single epoch per federated round to limit drift |
+#### Dynamic Strategy Factory Pattern
+The factory `get_continual_learner` resolves the following strategies dynamically:
+*   **Naive**: Standard SGD baseline strategy used to measure catastrophic forgetting.
+*   **EWC (Elastic Weight Consolidation)**: Imposes a quadratic penalty on weights deviating from historical parameters, weighted by the diagonal Fisher information matrix (`ewc_lambda`).
+*   **GEM (Gradient Episodic Memory)**: Rehearsal-based strategy that restricts weight updates using an episodic buffer to prevent task loss (`patterns_per_exp`, `memory_strength`).
 
-**How EWC prevents catastrophic forgetting:**
-1. After training on Task A (e.g., BruteForce detection), EWC computes a **Fisher Information Matrix** — identifying which neural network weights are most important for Task A.
-2. When Task B arrives (e.g., DoS detection), EWC adds a penalty term to the loss function that discourages large changes to Task-A-critical weights.
-3. The `ewc_lambda` parameter controls penalty strength. Higher values = more stability (better retention of old tasks), lower values = more plasticity (faster adaptation to new threats).
+#### Gradient Safety Hook
+All strategies are protected with a custom optimizer wrapper that executes gradient clipping:
+- **`torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)`** is executed prior to every step, preventing exploding/NaN gradients.
 
 ---
 
-### 3.4 `src/defender/client.py` — Federated Learning Client with CL Integration
+### 3.4 `src/defender/client.py` — Federated Learning Client with Security Extensions
 
 **Deployed to:** Defender A (VM 310), Defender B (VM 320)
 
-This is the core bridge between Flower (Federated Learning) and Avalanche (Continual Learning). It implements the `CyberDefenseClient` class that Flower calls during each round.
+This is the core bridge between Flower (Federated Learning) and Avalanche (Continual Learning). It implements the `CyberDefenseClient` class that Flower calls during each round, extended with privacy and data poisoning simulations.
 
 #### Data Loading Pipeline (`load_ramdisk_flows`)
 1. Reads all CSV files from `/mnt/ramdisk/flows/`
@@ -193,29 +189,34 @@ Instead of pre-labeled datasets, this function inspects raw flow metadata to ass
 | Traffic involves port 53 from Traffic Gen IP | `2` (Exfiltration) |
 | All other traffic | `0` (Normal) |
 
+#### Client-Side Security Extensions
+1. **Data Poisoning Simulation**: If `--poison-enabled` is active and the client's ID matches `--poison-client-ids`, a fraction of label samples defined by `--poison-rate` are poisoned (e.g. flipping Normal class `0` labels to DoS class `4`) to simulate a Byzantine adversarial participant.
+2. **Differential Privacy (DP-SGD)**: If `--dp-enabled` is active, client-side differential privacy is enabled during training using **Opacus**. This adds calculated noise (`--dp-noise-multiplier`) and clips per-sample gradients (`--dp-max-grad-norm`) to guarantee mathematical privacy.
+
 #### Per-Round Flower Client Lifecycle
 For each federated round, Flower calls these methods in sequence:
 
 1. **`set_parameters()`** — Receives the global model weights from the aggregator and loads them into the local `CyberDefenseNet`.
-2. **`fit()`** — Loads fresh flow CSVs from ramdisk, wraps them into an Avalanche experience, and calls `self.cl.train(experience)` to run one epoch of EWC-regularized training. Returns updated weights and sample count.
-3. **`evaluate()`** — Runs a PyTorch evaluation loop over the same flow data. Computes:
-   - Overall accuracy and loss
-   - Per-class accuracy for all 5 threat categories
-   - Returns metrics dictionary to the server for aggregation
+2. **`fit()`** — Loads fresh flow CSVs from ramdisk, runs poisoning simulation, wraps dataset into an Avalanche experience, and calls `self.cl.train(experience)` to run EWC/GEM training (with optional DP-SGD). Returns updated weights and sample count.
+3. **`evaluate()`** — Runs a PyTorch evaluation loop over the same flow data. Computes overall accuracy/loss and per-class metrics.
 
 ---
 
-### 3.5 `src/aggregator/server.py` — Federated Aggregator with MLflow Logging
+### 3.5 `src/aggregator/server.py` — Byzantine-Robust Aggregator
 
 **Deployed to:** FL Aggregator (LXC 300)
 
-Runs the Flower gRPC server and implements a custom `MLflowFedAvg` strategy.
+Runs the Flower gRPC server and implements a custom `MLflowFedAvg` strategy supporting robust aggregation strategies.
 
-#### Custom Strategy: `MLflowFedAvg`
-Inherits from Flower's built-in `FedAvg` (Federated Averaging). After each evaluation round:
-1. Calls `super().aggregate_evaluate()` to compute weighted-average metrics across all clients
-2. Logs the aggregated `loss` to MLflow with the round number as the step
-3. Logs every metric key (including `accuracy`, `accuracy_class_0` through `accuracy_class_4`) to MLflow
+#### Robust Aggregation Strategy Options
+The aggregator supports four strategies via the `--aggregation-strategy` CLI argument:
+*   **FedAvg (Weighted Average)**: The baseline strategy calculating the standard weighted average of client updates.
+*   **FedMedian (Coordinate-wise Median)**: Takes the coordinate-wise median of weight arrays across all clients, blocking extreme malicious model replacements.
+*   **TrimmedMean (Coordinate-wise Trimmed Mean)**: Trims the smallest and largest $k$ parameters along each coordinate before calculating the mean, where $k = \lfloor \beta \cdot N \rfloor$. Configure $\beta$ using `--trimmed-mean-beta`.
+*   **Krum (Consensus Client Selection)**: Selects a single client's update that minimizes the sum of squared Euclidean distances to its $N - f - 2$ nearest neighbors.
+
+#### NaN/Inf Sanitization Guard
+During aggregation, weights are scanned prior to checkpointing. Any NaN/Inf values are automatically replaced with zero to prevent corruption from propagating, and warning tags are logged directly to MLflow.
 
 #### Weighted Class-Wise Aggregation (`weighted_avg`)
 When clients report different dataset sizes, naive averaging would be misleading. This function:
@@ -225,10 +226,9 @@ When clients report different dataset sizes, naive averaging would be misleading
 
 #### Server Startup
 ```bash
-/opt/flower-env/bin/python3 server.py --rounds 100 --min-clients 2 --mlflow-uri http://localhost:5000
+/opt/flower-env/bin/python3 server.py --rounds 100 --min-clients 2 --mlflow-uri http://localhost:5000 --aggregation-strategy FedMedian
 ```
-- Waits for at least 2 clients (Defender A + Defender B) before starting each round
-- Opens an MLflow experiment called `FL-CL-CyberDefense`
+- Waits for at least 2 clients before starting each round
 - Binds to `0.0.0.0:8080` for gRPC client connections
 
 ---
@@ -320,6 +320,14 @@ python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.
 | `--duration` | 60 | Duration (seconds) of each attack stage (overrides config) |
 | `--mlops-mode` | `experimental` | MLOps Mode (`experimental` or `production`). Configures model version naming, registration behavior, and dashboard tagging. |
 | `--production-strategy` | `resume` | Action strategy for `production` mode: `resume` (warm-start from the existing `champion` model version) or `fresh` (cold-start a new model version). |
+| `--aggregation-strategy` | `FedAvg` | Aggregation strategy for global weight updates (`FedAvg`, `FedMedian`, `TrimmedMean`, `Krum`). |
+| `--trimmed-mean-beta` | `0.2` | Fraction of client updates to trim from each tail in `TrimmedMean` (range `0.0` to `0.5`). |
+| `--poison-enabled` | `False` | Enable label poisoning simulation on client nodes. |
+| `--poison-rate` | `0.2` | Fraction of labels to flip/poison on selected clients. |
+| `--poison-client-ids` | `1` | Comma-separated list of client IDs to perform poison simulation (e.g. `1` or `1,2`). |
+| `--dp-enabled` | `False` | Enable client-side differential privacy (DP-SGD) using Opacus. |
+| `--dp-noise-multiplier` | `1.0` | Noise scale added to gradients for DP-SGD. |
+| `--dp-max-grad-norm` | `1.0` | Clip norm value for per-sample gradients in DP-SGD. |
 
 > [!TIP]
 > **Security Best Practice**: To avoid storing sensitive credentials in plain-text inside `configs/experiment.yaml`, you can either create a `.env` file at the root of the repository or export them as environment variables on your workstation before running the orchestrator:

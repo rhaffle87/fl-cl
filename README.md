@@ -135,11 +135,16 @@ The sweep controller will:
 
 ---
 
-## MLOps Features
+## MLOps & Security Features
 
 | Feature | Implementation |
 |:--------|:---------------|
 | **Experiment Config** | `configs/experiment.yaml` — all params in one YAML, logged as MLflow artifact |
+| **Byzantine Robustness** | Aggregator strategy supports `FedMedian`, `TrimmedMean`, and `Krum` coordinate-wise and distance-based filtering |
+| **Differential Privacy** | Client-side DP-SGD via **Opacus** wrapping optimizer, tracking privacy budget metrics ($\epsilon, \delta$) |
+| **Adversarial Poisoning** | Simulated label-flipping attacks on configured clients via `--poison-enabled` and `--poison-rate` |
+| **NaN/Inf Sanitization** | Aggregator guard sanitizes NaN/Inf updates to `0.0` before global model assembly |
+| **Gradient Safety** | Custom optimizer wrapper enforces gradient clipping limit of `1.0` during client backpropagation |
 | **Hyperparameter Sweeps** | Grid search via `src/sweep.py` with parent-child run nesting in MLflow |
 | **Dataset Provenance** | SHA-256 client flow file checksum hashing, logged as parameters and nested `dataset_lineage.json` graph artifact |
 | **Automated Validation Gate** | Validates candidate models against per-class F1 thresholds, BWT forgetting check, and communication overhead budget for automated registry promotion |
