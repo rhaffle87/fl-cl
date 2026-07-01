@@ -79,6 +79,19 @@ def get_config_value(config: dict, *keys, default=None):
     return current if current is not None else default
 
 
+def safe_print(text):
+    """Prints text safely bypassing Windows CP1252/Unicode encoding constraints."""
+    import sys
+    try:
+        enc = sys.stdout.encoding or "utf-8"
+        print(str(text).encode(enc, errors="replace").decode(enc))
+    except Exception:
+        try:
+            print(str(text).encode("ascii", errors="ignore").decode())
+        except Exception:
+            pass
+
+
 # ─── Remote Node ─────────────────────────────────────────────────────────────
 
 class RemoteNode:
@@ -125,13 +138,13 @@ class RemoteNode:
         else:
             ssh_cmd = ["ssh", "-n"] + opts + [f"{self.username}@{self.ip}", command]
             print(f"[{self.name}] Running: {command}")
-            return subprocess.run(ssh_cmd, capture_output=True, text=True)
+            return subprocess.run(ssh_cmd, capture_output=True, text=True, encoding="utf-8")
 
     def scp_file(self, local_path, remote_path):
         opts = self._get_ssh_opts()
         scp_cmd = ["scp"] + opts + [local_path, f"{self.username}@{self.ip}:{remote_path}"]
         print(f"[{self.name}] Transferring {local_path} -> {remote_path}")
-        return subprocess.run(scp_cmd, capture_output=True, text=True)
+        return subprocess.run(scp_cmd, capture_output=True, text=True, encoding="utf-8")
 
     def cleanup(self, kill_mlflow=False):
         opts = self._get_ssh_opts()
@@ -176,7 +189,7 @@ def get_dataset_hash(node: RemoteNode) -> str:
 
 
 
-def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name, rounds, lambda_ewc):
+def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name, rounds, lambda_ewc, cl_strategy="EWC", gem_patterns=256, gem_memory_strength=0.5):
     """Dynamically imports and executes the metrics plotter, generating a run summary report."""
     print("\n=== Phase 8b: Generating Post-Training Plots and Reports ===")
     try:
@@ -222,7 +235,12 @@ def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name,
             f.write(f"# FL-CL Experiment Run Summary: {experiment_name}\n\n")
             f.write(f"- **MLflow Run ID**: `{run_id}`\n")
             f.write(f"- **Total FL Rounds**: `{rounds}`\n")
-            f.write(f"- **Continual Learning (EWC) Lambda**: `{lambda_ewc}`\n")
+            f.write(f"- **Continual Learning Strategy**: `{cl_strategy}`\n")
+            if cl_strategy.upper() == "EWC":
+                f.write(f"- **EWC Lambda**: `{lambda_ewc}`\n")
+            elif cl_strategy.upper() == "GEM":
+                f.write(f"- **GEM Patterns Per Exp**: `{gem_patterns}`\n")
+                f.write(f"- **GEM Memory Strength**: `{gem_memory_strength}`\n")
             f.write(f"- **Generated At**: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
 
             f.write("## Final Metrics Summary\n")
@@ -258,7 +276,10 @@ def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name,
                 final_metrics=final_metrics,
                 lambda_ewc=lambda_ewc,
                 rounds=rounds,
-                aggregator_ip=aggregator_ip
+                aggregator_ip=aggregator_ip,
+                cl_strategy=cl_strategy,
+                gem_patterns=gem_patterns,
+                gem_memory_strength=gem_memory_strength
             )
         except Exception as llm_err:
             print(f"[!] Warning: Local LLM reporting or artifact upload failed: {llm_err}")
@@ -285,12 +306,27 @@ def main():
     parser.add_argument("--batch-size", type=int, default=None, help="Batch size (overrides config)")
     parser.add_argument("--class-weights", default=None, help="Comma-separated class weights (overrides config)")
     parser.add_argument("--parent-run-id", default="", help="MLflow parent run ID for sweep tracking")
+    parser.add_argument("--cl-strategy", default=None, help="CL strategy: EWC, GEM, Naive")
+    parser.add_argument("--gem-patterns", type=int, default=None, help="GEM patterns per experience")
+    parser.add_argument("--gem-memory-strength", type=float, default=None, help="GEM memory strength")
     parser.add_argument("--cl-task-sequence", default=None, help="CL task sequence trained (comma-separated, overrides config)")
     parser.add_argument("--cl-complexity-score", type=float, default=None, help="Sequence complexity score (overrides config)")
     parser.add_argument("--comm-overhead-budget", type=int, default=None, help="Communication overhead budget in bytes (overrides config)")
     parser.add_argument("--telegram-bot-token", default=None, help="Telegram bot token (overrides config)")
     parser.add_argument("--telegram-chat-id", default=None, help="Telegram chat ID (overrides config)")
     parser.add_argument("--telegram-enabled", action="store_true", help="Force enable Telegram notifications")
+    
+    # Theme E Security & Privacy parameters
+    parser.add_argument("--poison-enabled", type=str, default=None, help="Enable label poisoning (true/false)")
+    parser.add_argument("--poison-client-ids", default=None, help="Comma-separated client IDs to poison (e.g. A)")
+    parser.add_argument("--poison-rate", type=float, default=None, help="Poison rate")
+    parser.add_argument("--poison-from-class", type=int, default=None, help="Source class for poisoning")
+    parser.add_argument("--poison-to-class", type=int, default=None, help="Target class for poisoning")
+    parser.add_argument("--dp-enabled", type=str, default=None, help="Enable client Differential Privacy (true/false)")
+    parser.add_argument("--dp-noise-multiplier", type=float, default=None, help="DP noise multiplier")
+    parser.add_argument("--dp-max-grad-norm", type=float, default=None, help="DP max gradient norm")
+    parser.add_argument("--aggregation-strategy", default=None, choices=["FedAvg", "FedMedian", "Krum", "TrimmedMean"], help="Robust aggregation strategy")
+    parser.add_argument("--trimmed-mean-beta", type=float, default=None, help="Trimmed mean beta")
     args = parser.parse_args()
 
     # Load config — CLI args override YAML values
@@ -317,7 +353,10 @@ def main():
         config_path = None
 
     rounds = args.rounds or get_config_value(config, "fl", "rounds", default=10)
+    cl_strategy = args.cl_strategy or get_config_value(config, "cl", "strategy", default="EWC")
     lambda_ewc = args.lambda_ewc or get_config_value(config, "cl", "ewc_lambda", default=0.4)
+    gem_patterns = args.gem_patterns or get_config_value(config, "cl", "gem_patterns_per_exp", default=256)
+    gem_memory_strength = args.gem_memory_strength or get_config_value(config, "cl", "gem_memory_strength", default=0.5)
     duration = args.duration or get_config_value(config, "simulation", "attack_duration_seconds", default=30)
     
     if args.class_weights:
@@ -344,6 +383,32 @@ def main():
     gate_action = get_config_value(config, "data_quality", "gate_action", default="abort")
     baseline_stats_path = get_config_value(config, "data_quality", "baseline_stats_path", default="configs/baseline_feature_stats.json")
     baseline_class_dist = get_config_value(config, "data_quality", "baseline_class_distribution", default="2000,10,200,50,100")
+
+    # Theme E Security & Privacy Configs
+    if args.poison_enabled is not None:
+        poison_enabled = args.poison_enabled.lower() in ("true", "1")
+    else:
+        poison_enabled = get_config_value(config, "security", "poison_enabled", default=False)
+
+    if args.poison_client_ids is not None:
+        poison_client_ids = [cid.strip() for cid in args.poison_client_ids.split(",") if cid.strip()]
+    else:
+        poison_client_ids = get_config_value(config, "security", "poison_client_ids", default=[])
+
+    poison_rate = args.poison_rate if args.poison_rate is not None else get_config_value(config, "security", "poison_rate", default=0.2)
+    poison_from_class = args.poison_from_class if args.poison_from_class is not None else get_config_value(config, "security", "poison_from_class", default=0)
+    poison_to_class = args.poison_to_class if args.poison_to_class is not None else get_config_value(config, "security", "poison_to_class", default=4)
+
+    if args.dp_enabled is not None:
+        dp_enabled = args.dp_enabled.lower() in ("true", "1")
+    else:
+        dp_enabled = get_config_value(config, "security", "dp_enabled", default=False)
+
+    dp_noise_multiplier = args.dp_noise_multiplier if args.dp_noise_multiplier is not None else get_config_value(config, "security", "dp_noise_multiplier", default=0.1)
+    dp_max_grad_norm = args.dp_max_grad_norm if args.dp_max_grad_norm is not None else get_config_value(config, "security", "dp_max_grad_norm", default=1.0)
+
+    aggregation_strategy = args.aggregation_strategy or get_config_value(config, "security", "aggregation_strategy", default="FedAvg")
+    trimmed_mean_beta = args.trimmed_mean_beta if args.trimmed_mean_beta is not None else get_config_value(config, "security", "trimmed_mean_beta", default=0.1)
 
     # Set up Telegram notifications (prioritize environment variables for security)
     tg_token = os.environ.get("TELEGRAM_BOT_TOKEN") or args.telegram_bot_token or get_config_value(config, "notifications", "telegram", "bot_token", default="")
@@ -402,7 +467,7 @@ def main():
     notifier.notify_start(
         experiment_name=experiment_name,
         rounds=rounds,
-        config_summary=f"EWC lambda={lambda_ewc}, Duration={duration}s",
+        config_summary=f"Strategy={cl_strategy} (lambda={lambda_ewc} if EWC, patterns={gem_patterns} if GEM), Duration={duration}s",
         mlops_mode=mlops_mode,
         git_commit=git_commit
     )
@@ -501,7 +566,7 @@ def main():
         config_arg = "--config-file ~/experiment.yaml" if config_path else ""
         parent_run_arg = f"--parent-run-id {args.parent_run_id}" if args.parent_run_id else ""
         
-        cl_args = ""
+        cl_args = f" --cl-strategy '{cl_strategy}' --gem-patterns {gem_patterns} --gem-memory-strength {gem_memory_strength}"
         if cl_task_sequence:
             cl_args += f" --cl-task-sequence '{cl_task_sequence}'"
         cl_args += f" --cl-complexity-score {cl_complexity_score}"
@@ -513,8 +578,11 @@ def main():
         if tg_enabled:
             cl_args += " --telegram-enabled"
 
+        # Theme E Server args
+        server_sec_args = f" --aggregation-strategy '{aggregation_strategy}' --trimmed-mean-beta {trimmed_mean_beta}"
+
         server_proc = aggregator.run_cmd(
-            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit} --ewc-lambda {lambda_ewc} --lr {lr} --batch-size {batch_size} --class-weights {weights_str} {parent_run_arg}{cl_args}",
+            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit} --ewc-lambda {lambda_ewc} --lr {lr} --batch-size {batch_size} --class-weights {weights_str} {parent_run_arg}{cl_args}{server_sec_args}",
             background=True
         )
 
@@ -589,17 +657,19 @@ def main():
                         print(f"[{node_name}] Jensen-Shannon Divergence: {jsd_val:.4f} (Threshold: {jsd_threshold})")
                     
                     if status == "FAIL":
-                        print(f"[{node_name}] ⚠️ DATA QUALITY GATE FAILED: JSD {jsd_val:.4f} exceeds threshold {jsd_threshold}")
+                        print(f"[{node_name}] [FAIL] DATA QUALITY GATE FAILED: JSD {jsd_val:.4f} exceeds threshold {jsd_threshold}")
                         quality_gate_failed = True
                     else:
-                        print(f"[{node_name}] ✅ DATA QUALITY GATE PASSED")
+                        print(f"[{node_name}] [PASS] DATA QUALITY GATE PASSED")
                 else:
                     print(f"[{node_name}] [!] WARNING: Empty response from data quality check")
                     quality_gate_failed = True
             except Exception as e:
                 print(f"[{node_name}] [!] Error parsing data quality gate output: {e}")
-                print(f"[{node_name}] stdout: {result.stdout}")
-                print(f"[{node_name}] stderr: {result.stderr}")
+                print(f"[{node_name}] stdout:")
+                safe_print(result.stdout)
+                print(f"[{node_name}] stderr:")
+                safe_print(result.stderr)
                 quality_gate_failed = True
 
         if quality_gate_failed:
@@ -663,15 +733,30 @@ client.log_artifact('{active_run_id}', '/tmp/dataset_lineage.json')
             cmd = f"~/fl-cl-env/bin/python3 ~/check_features.py --baseline-json ~/baseline_stats.json {mlflow_args}"
             print(f"[{node_name}] Running feature drift diagnosis...")
             feat_res = node.run_cmd(cmd)
-            print(feat_res.stdout)
+            safe_print(feat_res.stdout)
             if feat_res.stderr:
-                print(f"[{node_name}] stderr:\n{feat_res.stderr}")
+                print(f"[{node_name}] stderr:")
+                safe_print(feat_res.stderr)
             if feat_res.returncode == 2:
-                print(f"[{node_name}] ⚠️ FEATURE DRIFT WARNING: Significant statistical skew observed in features.")
+                print(f"[{node_name}] [WARNING] FEATURE DRIFT WARNING: Significant statistical skew observed in features.")
 
         print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
-        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}", background=True)
-        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}", background=True)
+        # Security arguments logic for client A
+        client_a_sec_args = ""
+        if poison_enabled and "A" in poison_client_ids:
+            client_a_sec_args += f" --poison-enabled --poison-rate {poison_rate} --poison-from {poison_from_class} --poison-to {poison_to_class}"
+        if dp_enabled:
+            client_a_sec_args += f" --dp-enabled --dp-noise-multiplier {dp_noise_multiplier} --dp-max-grad-norm {dp_max_grad_norm}"
+
+        # Security arguments logic for client B
+        client_b_sec_args = ""
+        if poison_enabled and "B" in poison_client_ids:
+            client_b_sec_args += f" --poison-enabled --poison-rate {poison_rate} --poison-from {poison_from_class} --poison-to {poison_to_class}"
+        if dp_enabled:
+            client_b_sec_args += f" --dp-enabled --dp-noise-multiplier {dp_noise_multiplier} --dp-max-grad-norm {dp_max_grad_norm}"
+
+        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --cl-strategy '{cl_strategy}' --ewc-lambda {lambda_ewc} --gem-patterns {gem_patterns} --gem-memory-strength {gem_memory_strength} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}{client_a_sec_args}", background=True)
+        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --cl-strategy '{cl_strategy}' --ewc-lambda {lambda_ewc} --gem-patterns {gem_patterns} --gem-memory-strength {gem_memory_strength} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}{client_b_sec_args}", background=True)
 
         stopped_early = False
         print("\n=== Phase 8: Monitoring Training Loop Convergence ===")
@@ -748,7 +833,10 @@ client.log_artifact('{active_run_id}', '/tmp/dataset_lineage.json')
             aggregator_ip=aggregator.ip,
             experiment_name=exp_name_modified,
             rounds=rounds,
-            lambda_ewc=lambda_ewc
+            lambda_ewc=lambda_ewc,
+            cl_strategy=cl_strategy,
+            gem_patterns=gem_patterns,
+            gem_memory_strength=gem_memory_strength
         )
 
     except KeyboardInterrupt:

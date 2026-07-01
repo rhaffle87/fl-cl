@@ -249,7 +249,9 @@ def jensen_shannon_divergence(p, q):
 class CyberDefenseClient(NumPyClientClass):
     """Flower client wrapping the Avalanche CL training loop."""
 
-    def __init__(self, net, cl_strategy, flows_dir, client_id="A", dos_threshold_ms=2000, traffic_gen_ip=None, baseline=None, js_threshold=0.6):
+    def __init__(self, net, cl_strategy, flows_dir, client_id="A", dos_threshold_ms=2000, traffic_gen_ip=None, baseline=None, js_threshold=0.6,
+                 poison_enabled=False, poison_rate=0.0, poison_from=0, poison_to=4,
+                 dp_enabled=False, dp_noise_multiplier=0.1, dp_max_grad_norm=1.0):
         self.net = net
         self.cl = cl_strategy
         self.flows_dir = flows_dir
@@ -257,6 +259,15 @@ class CyberDefenseClient(NumPyClientClass):
         self.dos_threshold_ms = dos_threshold_ms
         self.traffic_gen_ip = traffic_gen_ip
         self.js_threshold = js_threshold
+        
+        self.poison_enabled = poison_enabled
+        self.poison_rate = poison_rate
+        self.poison_from = poison_from
+        self.poison_to = poison_to
+        
+        self.dp_enabled = dp_enabled
+        self.dp_noise_multiplier = dp_noise_multiplier
+        self.dp_max_grad_norm = dp_max_grad_norm
         
         self.baseline_dist = None
         if baseline:
@@ -295,6 +306,18 @@ class CyberDefenseClient(NumPyClientClass):
         try:
             X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms, traffic_gen_ip=self.traffic_gen_ip)
             num_samples = len(X)
+            
+            # Simulate Data Poisoning Attack (E1)
+            if self.poison_enabled and num_samples > 0:
+                y_np = y.cpu().numpy()
+                indices = np.where(y_np == self.poison_from)[0]
+                if len(indices) > 0:
+                    num_to_poison = int(np.round(self.poison_rate * len(indices)))
+                    if num_to_poison > 0:
+                        poison_indices = np.random.choice(indices, size=num_to_poison, replace=False)
+                        y_np[poison_indices] = self.poison_to
+                        y = torch.tensor(y_np, dtype=torch.int64)
+                        print(f"[client-{self.client_id}] POISON: Flipped {num_to_poison} labels from {self.poison_from} to {self.poison_to}")
             
             # Check for JSD Label Shift
             if self.baseline_dist is not None and num_samples > 0:
@@ -414,7 +437,10 @@ def main():
     parser.add_argument("--server", default="10.10.130.10:8080", help="Aggregator address")
     parser.add_argument("--client-id", default="A", help="Client identifier (A or B)")
     parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory")
+    parser.add_argument("--cl-strategy", default="EWC", help="Continual Learning strategy (EWC, GEM, Naive)")
     parser.add_argument("--ewc-lambda", type=float, default=0.4, help="EWC regularization strength")
+    parser.add_argument("--gem-patterns", type=int, default=256, help="GEM patterns per experience")
+    parser.add_argument("--gem-memory-strength", type=float, default=0.5, help="GEM memory strength")
     parser.add_argument("--class-weights", default="12.0,3.0,3.0,15.0,1.0", help="Comma-separated class weights")
     parser.add_argument("--lr", type=float, default=0.01, help="SGD learning rate")
     parser.add_argument("--momentum", type=float, default=0.9, help="SGD momentum")
@@ -423,6 +449,16 @@ def main():
     parser.add_argument("--traffic-gen-ip", default=os.environ.get("TRAFFIC_GEN_IP", "10.10.140.10"), help="Traffic Generator IP address")
     parser.add_argument("--baseline", default=None, help="Comma-separated baseline distribution (e.g. 2,150,3,7,18)")
     parser.add_argument("--js-threshold", type=float, default=0.6, help="JSD threshold for rejecting batch")
+    
+    # Security parameters
+    parser.add_argument("--poison-enabled", action="store_true", help="Enable label poisoning attack simulation")
+    parser.add_argument("--poison-rate", type=float, default=0.0, help="Fraction of labels to poison")
+    parser.add_argument("--poison-from", type=int, default=0, help="Source class for label poisoning")
+    parser.add_argument("--poison-to", type=int, default=4, help="Target class for label poisoning")
+    
+    parser.add_argument("--dp-enabled", action="store_true", help="Enable client-level Differential Privacy (DP-SGD)")
+    parser.add_argument("--dp-noise-multiplier", type=float, default=0.1, help="Noise multiplier for DP-SGD")
+    parser.add_argument("--dp-max-grad-norm", type=float, default=1.0, help="Gradient clip threshold for DP-SGD")
     args = parser.parse_args()
 
     # Set up MLflow
@@ -433,9 +469,19 @@ def main():
     print(f"[client-{args.client_id}] Device: {device}")
     print(f"[client-{args.client_id}] Server: {args.server}")
     print(f"[client-{args.client_id}] Flows:  {args.flows_dir}")
+    print(f"[client-{args.client_id}] CL Strategy: {args.cl_strategy}")
+    if args.cl_strategy.upper() == "EWC":
+        print(f"[client-{args.client_id}] EWC Lambda: {args.ewc_lambda}")
+    elif args.cl_strategy.upper() == "GEM":
+        print(f"[client-{args.client_id}] GEM Patterns: {args.gem_patterns} | Memory Strength: {args.gem_memory_strength}")
     print(f"[client-{args.client_id}] SGD lr: {args.lr} | momentum: {args.momentum} | batch_size: {args.batch_size}")
     print(f"[client-{args.client_id}] DoS duration threshold: {args.dos_threshold_ms} ms")
     print(f"[client-{args.client_id}] Traffic Gen IP: {args.traffic_gen_ip}")
+    
+    if args.poison_enabled:
+        print(f"[client-{args.client_id}] POISON ENABLED: Flipping {args.poison_rate * 100}% of class {args.poison_from} to {args.poison_to}")
+    if args.dp_enabled:
+        print(f"[client-{args.client_id}] DP ENABLED: Noise Multiplier={args.dp_noise_multiplier} | Max Grad Norm={args.dp_max_grad_norm}")
 
     net = CyberDefenseNet().to(device)
     
@@ -444,11 +490,17 @@ def main():
     cl = get_continual_learner(
         net, 
         device, 
+        strategy_name=args.cl_strategy,
         ewc_lambda=args.ewc_lambda, 
+        patterns_per_exp=args.gem_patterns,
+        memory_strength=args.gem_memory_strength,
         class_weights=weights,
         lr=args.lr,
         momentum=args.momentum,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
+        dp_enabled=args.dp_enabled,
+        dp_noise_multiplier=args.dp_noise_multiplier,
+        dp_max_grad_norm=args.dp_max_grad_norm
     )
 
     fl.client.start_numpy_client(
@@ -461,7 +513,14 @@ def main():
             dos_threshold_ms=args.dos_threshold_ms,
             traffic_gen_ip=args.traffic_gen_ip,
             baseline=args.baseline,
-            js_threshold=args.js_threshold
+            js_threshold=args.js_threshold,
+            poison_enabled=args.poison_enabled,
+            poison_rate=args.poison_rate,
+            poison_from=args.poison_from,
+            poison_to=args.poison_to,
+            dp_enabled=args.dp_enabled,
+            dp_noise_multiplier=args.dp_noise_multiplier,
+            dp_max_grad_norm=args.dp_max_grad_norm
         ),
     )
 

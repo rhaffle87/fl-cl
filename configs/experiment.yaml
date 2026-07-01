@@ -21,9 +21,29 @@ fl:
 cl:
   strategy: "EWC"
   ewc_lambda: 0.1
+  gem_patterns_per_exp: 256
+  gem_memory_strength: 0.5
   task_sequence: "benign,ssh,slowloris,dns_exfil,botnet"
   complexity_score: 1.4
   comm_overhead_budget: 200000000 # 200MB in bytes
+
+# ── Security, Privacy & Byzantine Robustness ─────────────────
+security:
+  # 1. Data Poisoning Simulation
+  poison_enabled: false
+  poison_client_ids: ["A"]       # List of clients to poison
+  poison_rate: 0.2              # Fraction of training samples poisoned
+  poison_from_class: 0          # Class to poison (0: Normal)
+  poison_to_class: 4            # Class to target (4: DoS)
+
+  # 2. Client-level Differential Privacy (DP-SGD)
+  dp_enabled: false
+  dp_noise_multiplier: 0.1      # Standard deviation factor
+  dp_max_grad_norm: 1.0         # Gradient clip norm
+
+  # 3. Robust Aggregation
+  aggregation_strategy: "FedAvg" # Options: "FedAvg", "FedMedian", "Krum", "TrimmedMean"
+  trimmed_mean_beta: 0.1         # Percentage of outliers to trim (if TrimmedMean active)
 
 # ── Model Architecture ──────────────────────────────────────
 model:

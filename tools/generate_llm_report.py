@@ -30,7 +30,7 @@ def load_env(env_name: str = ".env"):
 # Load local environment variables
 load_env()
 
-def generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds):
+def generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds, cl_strategy="EWC", gem_patterns=256, gem_memory_strength=0.5):
     """Queries the local LLM model via the Tailscale Ollama proxy."""
     endpoint = os.getenv("OLLAMA_ENDPOINT")
     key = os.getenv("OLLAMA_KEY")
@@ -54,14 +54,22 @@ def generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds):
         except (ValueError, TypeError):
             formatted_metrics[k] = v
 
+    if cl_strategy.upper() == "EWC":
+        strategy_details = f"Avalanche EWC (Lambda: {lambda_ewc})"
+    elif cl_strategy.upper() == "GEM":
+        strategy_details = f"Avalanche GEM (Patterns: {gem_patterns}, Memory Strength: {gem_memory_strength})"
+    elif cl_strategy.upper() == "NAIVE":
+        strategy_details = "Avalanche Naive SGD Baseline"
+    else:
+        strategy_details = f"Avalanche {cl_strategy}"
+
     prompt = f"""You are a senior security MLOps expert. Analyze the following training run metrics for a Federated Continual Learning (FCL) intrusion detection system.
 Provide an executive summary, threat model performance analysis, and actionable MLOps recommendations.
 
 Input Configuration & Metrics:
 - MLflow Run ID: {run_id}
 - Total Rounds: {rounds}
-- Continual Learning Strategy: Avalanche Elastic Weight Consolidation (EWC)
-- EWC Lambda: {lambda_ewc}
+- Continual Learning Strategy: {strategy_details}
 - Final Aggregated Metrics:
 {json.dumps(formatted_metrics, indent=2)}
 
@@ -93,14 +101,14 @@ Please write your evaluation report. Start directly with the section header "## 
         print(f"[!] Warning: Failed to query Ollama proxy: {e}")
         return None
 
-def append_and_upload_report(run_dir, run_id, final_metrics, lambda_ewc, rounds, aggregator_ip):
+def append_and_upload_report(run_dir, run_id, final_metrics, lambda_ewc, rounds, aggregator_ip, cl_strategy="EWC", gem_patterns=256, gem_memory_strength=0.5):
     """Generates the LLM report, appends it to run_summary.md, and uploads to MLflow."""
     summary_path = os.path.join(run_dir, "run_summary.md")
     if not os.path.exists(summary_path):
         print(f"[!] Warning: Run summary file '{summary_path}' not found. Cannot append LLM analysis.")
         return False
 
-    analysis = generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds)
+    analysis = generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds, cl_strategy, gem_patterns, gem_memory_strength)
     if not analysis:
         print("[!] LLM analysis generation skipped or failed. Run summary remains unchanged.")
         return False
@@ -109,14 +117,22 @@ def append_and_upload_report(run_dir, run_id, final_metrics, lambda_ewc, rounds,
     model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
     print(f"[*] Appending local AI analysis ({model}) to {summary_path}...")
     try:
+        if cl_strategy.upper() == "EWC":
+            strategy_details_md = f"- **Continual Learning Strategy**: Avalanche Elastic Weight Consolidation (EWC)\n- **EWC Lambda**: {lambda_ewc}\n"
+        elif cl_strategy.upper() == "GEM":
+            strategy_details_md = f"- **Continual Learning Strategy**: Avalanche Gradient Episodic Memory (GEM)\n- **GEM Rehearsal Buffer Patterns**: {gem_patterns}\n- **GEM Memory Strength**: {gem_memory_strength}\n"
+        elif cl_strategy.upper() == "NAIVE":
+            strategy_details_md = f"- **Continual Learning Strategy**: Avalanche Naive SGD Baseline\n"
+        else:
+            strategy_details_md = f"- **Continual Learning Strategy**: Avalanche {cl_strategy}\n"
+
         with open(summary_path, "a") as f:
             f.write("\n---\n\n")
             f.write(f"## Local AI Threat Analysis ({model})\n\n")
             f.write("# FL-CL Security MLOps Evaluation Report\n")
             f.write(f"- **MLflow Run ID**: {run_id}\n")
             f.write(f"- **Total Rounds**: {rounds}\n")
-            f.write(f"- **Continual Learning Strategy**: Avalanche Elastic Weight Consolidation (EWC)\n")
-            f.write(f"- **EWC Lambda**: {lambda_ewc}\n\n")
+            f.write(strategy_details_md + "\n")
             f.write(analysis)
             f.write("\n")
     except Exception as e:
@@ -146,6 +162,9 @@ if __name__ == "__main__":
     parser.add_argument("--run-id", required=True, help="Active MLflow Run ID")
     parser.add_argument("--metrics-json", required=True, help="JSON string representing final metrics dictionary")
     parser.add_argument("--lambda-ewc", type=float, default=0.1, help="EWC lambda configuration")
+    parser.add_argument("--cl-strategy", default="EWC", help="Continual Learning Strategy")
+    parser.add_argument("--gem-patterns", type=int, default=256, help="GEM patterns per exp")
+    parser.add_argument("--gem-memory-strength", type=float, default=0.5, help="GEM memory strength")
     parser.add_argument("--rounds", type=int, default=100, help="Total training rounds")
     parser.add_argument("--ip", default="10.10.130.10", help="Aggregator IP address")
     args = parser.parse_args()
@@ -162,6 +181,9 @@ if __name__ == "__main__":
         final_metrics=metrics,
         lambda_ewc=args.lambda_ewc,
         rounds=args.rounds,
-        aggregator_ip=args.ip
+        aggregator_ip=args.ip,
+        cl_strategy=args.cl_strategy,
+        gem_patterns=args.gem_patterns,
+        gem_memory_strength=args.gem_memory_strength
     )
     sys.exit(0 if success else 1)

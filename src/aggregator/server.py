@@ -28,6 +28,7 @@ import flwr as fl
 import mlflow
 import mlflow.artifacts
 import torch
+import numpy as np
 
 from model import CyberDefenseNet
 from notifications import TelegramNotifier
@@ -92,10 +93,13 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
     """Custom FedAvg strategy with MLflow logging, checkpointing, and TorchScript export."""
 
     def __init__(self, checkpoint_dir: str = "/opt/mlflow-artifacts/checkpoints",
-                 export_torchscript: bool = True, **kwargs):
+                 export_torchscript: bool = True, aggregation_strategy: str = "FedAvg",
+                 trimmed_mean_beta: float = 0.1, **kwargs):
         super().__init__(**kwargs)
         self.checkpoint_dir = checkpoint_dir
         self.export_torchscript = export_torchscript
+        self.aggregation_strategy = aggregation_strategy
+        self.trimmed_mean_beta = trimmed_mean_beta
         self.best_loss = float("inf")
         self.best_round = 0
         self.best_accuracy = 0.0
@@ -180,15 +184,78 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
     @mlflow.trace(name="aggregate_fit")
     def aggregate_fit(self, server_round, results, failures):
         self.fit_clients = len(results)
-        aggregated = super().aggregate_fit(server_round, results, failures)
+        if not results:
+            return None
+
+        # Extract weights and number of samples
+        weights_results = [
+            (fl.common.parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples)
+            for _, fit_res in results
+        ]
+
+        # Robust Aggregation Logic (E3)
+        if self.aggregation_strategy == "FedMedian":
+            # Coordinate-wise median
+            weights_list = [w for w, _ in weights_results]
+            ndarrays = []
+            for layer_idx in range(len(weights_list[0])):
+                stacked = np.stack([w[layer_idx] for w in weights_list], axis=0)
+                ndarrays.append(np.median(stacked, axis=0))
+            aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
+            print(f"[server] Aggregated fit via FedMedian strategy")
+        elif self.aggregation_strategy == "TrimmedMean":
+            # Coordinate-wise trimmed mean
+            weights_list = [w for w, _ in weights_results]
+            n = len(weights_list)
+            k = int(np.floor(self.trimmed_mean_beta * n))
+            ndarrays = []
+            for layer_idx in range(len(weights_list[0])):
+                stacked = np.stack([w[layer_idx] for w in weights_list], axis=0)
+                sorted_stacked = np.sort(stacked, axis=0)
+                if k > 0 and 2 * k < n:
+                    trimmed = sorted_stacked[k:-k]
+                else:
+                    trimmed = sorted_stacked
+                ndarrays.append(np.mean(trimmed, axis=0))
+            aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
+            print(f"[server] Aggregated fit via TrimmedMean strategy (beta={self.trimmed_mean_beta}, trimmed {k} outlier clients)")
+        elif self.aggregation_strategy == "Krum":
+            # Krum selection
+            weights_list = [w for w, _ in weights_results]
+            n = len(weights_list)
+            # Standard Krum requires n >= 2f + 3. Assume f = max(0, int((n - 3) / 2))
+            f = max(0, int((n - 3) / 2))
+            
+            flat_weights = [np.concatenate([arr.flatten() for arr in w]) for w in weights_list]
+            
+            distances = np.zeros((n, n))
+            for i in range(n):
+                for j in range(n):
+                    if i != j:
+                        distances[i, j] = np.linalg.norm(flat_weights[i] - flat_weights[j])
+            
+            scores = []
+            for i in range(n):
+                sorted_dists = np.sort(distances[i])
+                num_neighbors = max(1, n - f - 1)
+                scores.append(np.sum(sorted_dists[1:num_neighbors]))
+            
+            best_idx = int(np.argmin(scores))
+            ndarrays = weights_list[best_idx]
+            aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
+            print(f"[server] Aggregated fit via Krum strategy: Selected client index {best_idx} with score {scores[best_idx]:.6f}")
+        else:
+            # Default to standard FedAvg (weighted average)
+            aggregated = super().aggregate_fit(server_round, results, failures)
+            if aggregated is not None:
+                parameters, config = aggregated
+                ndarrays = fl.common.parameters_to_ndarrays(parameters)
+            else:
+                return None
 
         # Save model checkpoint from aggregated parameters
         if aggregated is not None:
-            parameters, config = aggregated
-            ndarrays = fl.common.parameters_to_ndarrays(parameters)
-
             # Calculate client weight drift and monitor divergence (B3)
-            import numpy as np
             total_rejections = 0
             for client_proxy, fit_res in results:
                 client_id = fit_res.metrics.get("client_id", "unknown")
@@ -248,7 +315,6 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
             sanitized_arrays = []
             total_nan = 0
             for arr in ndarrays:
-                import numpy as np
                 nan_count = np.isnan(arr).sum() + np.isinf(arr).sum()
                 if nan_count > 0:
                     total_nan += int(nan_count)
@@ -364,7 +430,10 @@ def main():
     parser.add_argument("--dataset-hash", default="", help="SHA-256 hash of the defender datasets")
     parser.add_argument("--lr", type=float, default=0.01, help="Training learning rate")
     parser.add_argument("--batch-size", type=int, default=32, help="Training batch size")
+    parser.add_argument("--cl-strategy", default="EWC", help="Continual Learning strategy (EWC, GEM, Naive)")
     parser.add_argument("--ewc-lambda", type=float, default=0.4, help="EWC lambda")
+    parser.add_argument("--gem-patterns", type=int, default=256, help="GEM patterns per experience")
+    parser.add_argument("--gem-memory-strength", type=float, default=0.5, help="GEM memory strength")
     parser.add_argument("--class-weights", default="12.0,3.0,3.0,15.0,1.0", help="Comma-separated class weights")
     
     # Task sequence & Governance parameters
@@ -374,6 +443,11 @@ def main():
     parser.add_argument("--telegram-bot-token", default="", help="Telegram bot token for alerts")
     parser.add_argument("--telegram-chat-id", default="", help="Telegram chat ID for alerts")
     parser.add_argument("--telegram-enabled", action="store_true", help="Force enable Telegram notifications")
+    
+    # Robust Aggregation parameters
+    parser.add_argument("--aggregation-strategy", default="FedAvg", choices=["FedAvg", "FedMedian", "Krum", "TrimmedMean"],
+                        help="FL aggregation strategy to use")
+    parser.add_argument("--trimmed-mean-beta", type=float, default=0.1, help="Beta parameter for TrimmedMean strategy")
     args = parser.parse_args()
 
     # Instantiate notifier with optional YAML config fallback, prioritizing environment variables
@@ -496,6 +570,8 @@ def main():
         strategy = MLflowFedAvg(
             checkpoint_dir=run_checkpoint_dir,
             export_torchscript=True,
+            aggregation_strategy=args.aggregation_strategy,
+            trimmed_mean_beta=args.trimmed_mean_beta,
             initial_parameters=initial_parameters,
             fraction_fit=1.0,
             fraction_evaluate=1.0,
@@ -516,9 +592,16 @@ def main():
             "min_clients": args.min_clients,
             "lr": args.lr,
             "batch_size": args.batch_size,
-            "ewc_lambda": args.ewc_lambda,
-            "class_weights": args.class_weights
+            "cl_strategy": args.cl_strategy,
+            "class_weights": args.class_weights,
+            "aggregation_strategy": args.aggregation_strategy,
+            "trimmed_mean_beta": args.trimmed_mean_beta,
         }
+        if args.cl_strategy.upper() == "EWC":
+            params["ewc_lambda"] = args.ewc_lambda
+        elif args.cl_strategy.upper() == "GEM":
+            params["gem_patterns"] = args.gem_patterns
+            params["gem_memory_strength"] = args.gem_memory_strength
         if args.dataset_hash:
             params["dataset_hash"] = args.dataset_hash
             print(f"[server] Registered dataset hash parameter: {args.dataset_hash}")
@@ -700,7 +783,7 @@ def main():
                 client.set_registered_model_tag(model_name, "framework", "PyTorch")
                 client.set_registered_model_tag(model_name, "input_dim", "32")
                 client.set_registered_model_tag(model_name, "classes", "0: Normal, 1: Botnet, 2: DNS Exfiltration, 3: SSH Brute Force, 4: DoS")
-                client.set_registered_model_tag(model_name, "cl_strategy", "EWC")
+                client.set_registered_model_tag(model_name, "cl_strategy", args.cl_strategy)
                 
                 # Construct detailed model version description
                 version_desc = (

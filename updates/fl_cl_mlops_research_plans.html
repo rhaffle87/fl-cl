@@ -877,11 +877,11 @@
           </div>
         </div>
 
-        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
           <div class="row-meta">
             <div class="title-row">
-              <span class="badge badge-status badge-planned">Planned</span>
-              <span>D2 · CL strategy comparison: EWC vs. GEM vs. PackNet</span>
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>D2 · CL strategy comparison: EWC vs. GEM vs. Naive baseline</span>
             </div>
             <div class="tag-container">
               <span class="badge badge-diff med">Medium</span>
@@ -890,11 +890,11 @@
             </div>
           </div>
           <div class="body">
-            <p>The repository uses EWC exclusively. This plan aims to integrate and compare alternative continual learning strategies using Avalanche interfaces.</p>
+            <p>The repository fully supports dynamic continual learning strategy selection (EWC, GEM, and Naive SGD baseline) via the cl_strategy factory pattern.</p>
             <ul>
-              <li><strong>GEM:</strong> Gradient Episodic Memory restricts weight updates to prevent task loss, requiring rehearsal memory buffers.</li>
-              <li><strong>PackNet:</strong> Parameter pruning locks specific network pathways for completed tasks.</li>
-              <li><strong>Metrics:</strong> Compare final BWT, training duration, and peak classification F1 scores.</li>
+              <li><strong>GEM:</strong> Gradient Episodic Memory restricts weight updates to prevent task loss using rehearsal memory buffers.</li>
+              <li><strong>Naive:</strong> Standard SGD training baseline acts as a control to measure forgetting.</li>
+              <li><strong>Configuration:</strong> Dynamically parameterized via configs and CLI options. Results are logged with per-class BWT and F1 metrics in MLflow.</li>
             </ul>
             <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('How do I swap EWC for GEM in the fl-cl Avalanche CL strategy without changing the Flower client interface?')">Show me how to swap &nearr;</button>
           </div>
@@ -929,10 +929,10 @@
         <div class="section-header">E — Security, privacy & robustness</div>
         <div class="section-desc">Poisoning simulations, differential privacy, and robust aggregation.</div>
         
-        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
           <div class="row-meta">
             <div class="title-row">
-              <span class="badge badge-status badge-planned">Planned</span>
+              <span class="badge badge-status badge-completed">Completed</span>
               <span>E1 · Data poisoning attack simulation and detection</span>
             </div>
             <div class="tag-container">
@@ -952,10 +952,10 @@
           </div>
         </div>
 
-        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
           <div class="row-meta">
             <div class="title-row">
-              <span class="badge badge-status badge-planned">Planned</span>
+              <span class="badge badge-status badge-completed">Completed</span>
               <span>E2 · Differential privacy noise injection at client level</span>
             </div>
             <div class="tag-container">
@@ -975,10 +975,10 @@
           </div>
         </div>
 
-        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
           <div class="row-meta">
             <div class="title-row">
-              <span class="badge badge-status badge-planned">Planned</span>
+              <span class="badge badge-status badge-completed">Completed</span>
               <span>E3 · Byzantine-robust aggregation: FedAvg vs. Krum vs. Median</span>
             </div>
             <div class="tag-container">
