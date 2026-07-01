@@ -86,20 +86,24 @@ This allows the model to learn new threats while preserving its competence on pr
 The three pillars compose naturally. Each defender node runs an ETA pipeline that extracts metadata features from its local encrypted traffic. These features feed into a PyTorch model wrapped by an Avalanche CL strategy (EWC), which trains locally on each new batch of flows without forgetting older attack signatures. Periodically, the locally updated model weights are transmitted via gRPC to a central Flower aggregator, which merges them with weights from other organizations and redistributes the improved global model.
 
 ```
-  [ Encrypted Packets ] ──► [ NFStream ETA ] ──► [ Feature Vectors ]
-                                                          │
-                                                          ▼
-                                                  ┌───────────────┐
-                                                  │  PyTorch MLP  │
-                                                  └───────┬───────┘
-                                                          │
-                                                  ┌───────▼───────┐
-                                                  │ Avalanche EWC │ ◄── Local CL
-                                                  └───────┬───────┘
-                                                          │
-                                                  ┌───────▼───────┐
-                                                  │ Flower Client │ ──► gRPC to Aggregator
-                                                  └───────────────┘
+graph TD
+    %% Horizontal top flow
+    A["[ Encrypted Packets ]"] --> B["[ NFStream ETA ]"]
+    B --> C["[ Feature Vectors ]"]
+
+    %% Vertical down flow
+    C --> D["PyTorch MLP"]
+    D --> E["Avalanche EWC"]
+    E --> F["Flower Client"]
+
+    %% Side annotations
+    G["Local CL"] --> E
+    F --> H["gRPC to Aggregator"]
+
+    %% Styling to mimic the dashed look and layout
+    style D stroke-dasharray: 5 5
+    style E stroke-dasharray: 5 5
+    style F stroke-dasharray: 5 5
 ```
 
 This integration is the core contribution: CL prevents each node from forgetting locally, while FL prevents each organization from being blind globally.
@@ -231,14 +235,28 @@ To feed the ETA pipeline, every packet to and from a target VM must be copied to
 Each defender VM has two network interfaces: `net0` on `vmbr0` (management/internet) and `net1` on `vmbr1` (capture). The target VM's `net0` on `vmbr1` is the mirror source. On the hypervisor, these map to TAP interfaces named `tap<VMID>i<NET_INDEX>`:
 
 ```
-  ┌───────────────────────── Proxmox Host ─────────────────────────┐
-  │                                                                │
-  │   Target VM 311 (target-a1)         Defender VM 310            │
-  │   net0 → tap311i0                   net1 → tap310i1            │
-  │       │                                  ▲                     │
-  │       └──────── tc mirror (ingress) ─────┘                     │
-  │       └──────── tc mirror (egress)  ─────┘                     │
-  └────────────────────────────────────────────────────────────────┘
+graph TD
+    subgraph Proxmox_Host ["Proxmox Host"]
+        %% VM Definitions
+        subgraph Target_VM ["Target VM 311 (target-a1)"]
+            style Target_VM fill:none,stroke:#fff,stroke-dasharray: 5 5
+            T_Net["net0 ➔ tap311i0"]
+         Downs
+        end
+
+        subgraph Defender_VM ["Defender VM 310"]
+            style Defender_VM fill:none,stroke:#fff,stroke-dasharray: 5 5
+            D_Net["net1 ➔ tap310i1"]
+        end
+
+        %% Traffic Mirroring Connections
+        T_Net -->|tc mirror ingress| D_Net
+        T_Net -->|tc mirror egress| D_Net
+    end
+
+    %% Global Styles
+    style Proxmox_Host fill:#1a1a1a,stroke:#fff,stroke-width:2px,color:#fff
+    classDef default fill:#2d2d2d,stroke:#fff,color:#fff
 ```
 
 The mirroring commands configure both ingress and egress duplication:
@@ -355,18 +373,35 @@ for flow in streamer:
 
 The complete feature pipeline:
 ```
-Raw Packets (ens19) ──► NFStreamer ──► Flow Records (CSV)
-                                            │
-                         ┌──────────────────┴──────────────────┐
-                         ▼                                     ▼
-              TLS Handshake Features              Statistical Flow Features
-              · JA3/JA4 fingerprints              · Packet counts/sizes
-              · JA3S/JA4S fingerprints            · Duration, inter-arrival
-              · SNI domain                         · Byte ratios, entropy
-                         │                                     │
-                         └──────────────┬──────────────────────┘
-                                        ▼
-                              Scaling & Encoding ──► PyTorch Tensor
+graph TD
+    %% Define Nodes
+    A[Raw Packets ens19] -->|NFStreamer| B(Flow Records CSV)
+    
+    %% Split into features
+    B --> C[TLS Handshake Features]
+    B --> D[Statistical Flow Features]
+    
+    %% Feature details using markdown formatting
+    subgraph TLS_Features [ ]
+        style TLS_Features fill:none,stroke:none
+        C --- C1["• JA3/JA4 fingerprints<br>• JA3S/JA4S fingerprints<br>• SNI domain"]
+    end
+
+    subgraph Stat_Features [ ]
+        style Stat_Features fill:none,stroke:none
+        D --- D1["• Packet counts/sizes<br>• Duration, inter-arrival<br>• Byte ratios, entropy"]
+    end
+    
+    %% Merge back
+    C1 --> E[Scaling & Encoding]
+    D1 --> E
+    
+    E -->|PyTorch Tensor| F([Output])
+
+    %% Styling to keep it clean and dark-mode friendly
+    classDef default fill:#2d2d2d,stroke:#fff,stroke-width:1px,color:#fff;
+    classDef transparent fill:none,stroke:none,color:#fff;
+    class C1,D1 transparent;
 ```
 
 ### 5.3 I/O Optimization: RAM Disk Buffering
@@ -392,27 +427,27 @@ This completes the data pipeline. The output—scaled, encoded feature vectors s
 This chapter presents the software layer that consumes the feature vectors produced by the data pipeline (Chapter 5) and orchestrates the hybrid FL-CL training loop. The architecture comprises four components: a PyTorch neural network, an Avalanche CL strategy wrapping that network, a Flower client exposing the CL-equipped model to federated aggregation, and a Flower server performing the global weight merge.
 
 ```
-         +-------------------------------------------------+
-         |             Central FL Aggregator               |
-         |           (Flower Server – LXC 300)             |
-         +------------------------+------------------------+
-                                  | gRPC Weight Sync
-              +-------------------+-------------------+
-              |                                       |
-    +---------v---------+                   +---------v---------+
-    |  Defender Node A  |                   |  Defender Node B  |
-    | (Flower Client)   |                   | (Flower Client)   |
-    +---------+---------+                   +---------+---------+
-              |                                       |
-    +---------v---------+                   +---------v---------+
-    | Avalanche EWC     |                   | Avalanche EWC     |
-    | (CL Strategy)     |                   | (CL Strategy)     |
-    +---------+---------+                   +---------+---------+
-              |                                       |
-    +---------v---------+                   +---------v---------+
-    | NFStream Pipeline |                   | NFStream Pipeline |
-    | (Chapter 5)       |                   | (Chapter 5)       |
-    +-------------------+                   +-------------------+
+graph TD
+    %% Top Server Node
+    Server["Central FL Aggregator<br>(Flower Server - LXC 300)"]
+
+    %% Central sync line split
+    Server -->|gRPC Weight Sync| SplitNode(( ))
+    style SplitNode fill:none,stroke:none
+
+    %% Left Branch (Defender Node A)
+    SplitNode --> NodeA["Defender Node A<br>(Flower Client)"]
+    NodeA --> EWC_A["Avalanche EWC<br>(CL Strategy)"]
+    EWC_A --> PipeA["NFStream Pipeline<br>(Chapter 5)"]
+
+    %% Right Branch (Defender Node B)
+    SplitNode --> NodeB["Defender Node B<br>(Flower Client)"]
+    NodeB --> EWC_B["Avalanche EWC<br>(CL Strategy)"]
+    EWC_B --> PipeB["NFStream Pipeline<br>(Chapter 5)"]
+
+    %% Styling to mimic the dashed visual architecture
+    classDef boxStyle fill:#1a1a1a,stroke:#fff,stroke-dasharray: 5 5,color:#fff;
+    class Server,NodeA,EWC_A,PipeA,NodeB,EWC_B,PipeB boxStyle;
 ```
 
 ### 6.1 Neural Network (`model.py`)
