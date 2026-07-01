@@ -28,6 +28,12 @@ jobs:
           # Automatically trust the aggregator host keys
           ssh-keyscan -H 10.10.130.10 >> ~/.ssh/known_hosts || true
 
+      - name: Synchronize Code to Aggregator
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 root@10.10.130.10 "mkdir -p /root/fl-cl/tools /root/fl-cl/src"
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 -r tools/* root@10.10.130.10:/root/fl-cl/tools/
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 -r src/* root@10.10.130.10:/root/fl-cl/src/
+
       - name: Run Promotion Gate
         run: |
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 root@10.10.130.10 "python3 /root/fl-cl/tools/ci_cd_promote.py"
