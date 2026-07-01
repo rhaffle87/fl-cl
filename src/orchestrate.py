@@ -339,6 +339,12 @@ def main():
     cl_complexity_score = args.cl_complexity_score if args.cl_complexity_score is not None else get_config_value(config, "cl", "complexity_score", default=0.0)
     comm_overhead_budget = args.comm_overhead_budget if args.comm_overhead_budget is not None else get_config_value(config, "cl", "comm_overhead_budget", default=200000000)
 
+    # Theme C Configs
+    jsd_threshold = get_config_value(config, "data_quality", "jsd_threshold", default=0.6)
+    gate_action = get_config_value(config, "data_quality", "gate_action", default="abort")
+    baseline_stats_path = get_config_value(config, "data_quality", "baseline_stats_path", default="configs/baseline_feature_stats.json")
+    baseline_class_dist = get_config_value(config, "data_quality", "baseline_class_distribution", default="2000,10,200,50,100")
+
     # Set up Telegram notifications (prioritize environment variables for security)
     tg_token = os.environ.get("TELEGRAM_BOT_TOKEN") or args.telegram_bot_token or get_config_value(config, "notifications", "telegram", "bot_token", default="")
     tg_chat_id = os.environ.get("TELEGRAM_CHAT_ID") or args.telegram_chat_id or get_config_value(config, "notifications", "telegram", "chat_id", default="")
@@ -433,6 +439,7 @@ def main():
         def_a.scp_file("src/defender/model.py", "~/model.py")
         def_a.scp_file("src/defender/extractor.py", "~/extractor.py")
         def_a.scp_file("tools/check_dataset.py", "~/check_dataset.py")
+        def_a.scp_file("tools/check_features.py", "~/check_features.py")
 
         # Defender B files
         def_b.scp_file("src/defender/client.py", "~/client.py")
@@ -440,6 +447,12 @@ def main():
         def_b.scp_file("src/defender/model.py", "~/model.py")
         def_b.scp_file("src/defender/extractor.py", "~/extractor.py")
         def_b.scp_file("tools/check_dataset.py", "~/check_dataset.py")
+        def_b.scp_file("tools/check_features.py", "~/check_features.py")
+
+        # Sync baseline stats for data quality drift checking
+        if baseline_stats_path and os.path.exists(baseline_stats_path):
+            def_a.scp_file(baseline_stats_path, "~/baseline_stats.json")
+            def_b.scp_file(baseline_stats_path, "~/baseline_stats.json")
 
         # Traffic Generator files
         traffic_gen.scp_file("src/traffic_gen/attack_flow.py", "~/attack_flow.py")
@@ -550,21 +563,54 @@ def main():
             print("[!] WARNING: Ramdisk still empty after 120s. Clients will train on empty data this round.")
 
         print("\n=== Phase 6c: Data Quality Gate ===")
+        quality_gate_failed = False
         for node_name, node in [("defender-a", def_a), ("defender-b", def_b)]:
-            label_counts = run_data_quality_check(node, dos_threshold=dos_threshold)
-            if label_counts:
-                label_names = {0: "Normal", 1: "Botnet", 2: "Exfil", 3: "SSH-BF", 4: "DoS"}
-                total = sum(label_counts.values())
-                print(f"[{node_name}] Flow distribution ({total} total):")
-                for label in range(5):
-                    count = label_counts.get(label, 0)
-                    name = label_names.get(label, "?")
-                    print(f"  Class {label} ({name:>7s}): {count}")
-                missing = [label_names[i] for i in range(5) if label_counts.get(i, 0) == 0]
-                if missing:
-                    print(f"[{node_name}] [!] WARNING: Missing classes: {', '.join(missing)}")
+            # Run check_dataset.py with --baseline and --js-threshold to calculate JSD drift
+            cmd = f"~/fl-cl-env/bin/python3 ~/check_dataset.py --json --dos-threshold-ms {dos_threshold} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}"
+            result = node.run_cmd(cmd)
+            try:
+                import json
+                output = result.stdout.strip()
+                if output:
+                    res_dict = json.loads(output)
+                    label_counts = res_dict.get("counts", {})
+                    jsd_val = res_dict.get("js_divergence")
+                    status = res_dict.get("status", "PASS")
+
+                    label_names = {0: "Normal", 1: "Botnet", 2: "Exfil", 3: "SSH-BF", 4: "DoS"}
+                    total = sum(label_counts.values()) if label_counts else 0
+                    print(f"[{node_name}] Flow distribution ({total} total):")
+                    for label in range(5):
+                        count = label_counts.get(str(label), label_counts.get(label, 0))
+                        name = label_names.get(label, "?")
+                        print(f"  Class {label} ({name:>7s}): {count}")
+                    
+                    if jsd_val is not None:
+                        print(f"[{node_name}] Jensen-Shannon Divergence: {jsd_val:.4f} (Threshold: {jsd_threshold})")
+                    
+                    if status == "FAIL":
+                        print(f"[{node_name}] ⚠️ DATA QUALITY GATE FAILED: JSD {jsd_val:.4f} exceeds threshold {jsd_threshold}")
+                        quality_gate_failed = True
+                    else:
+                        print(f"[{node_name}] ✅ DATA QUALITY GATE PASSED")
+                else:
+                    print(f"[{node_name}] [!] WARNING: Empty response from data quality check")
+                    quality_gate_failed = True
+            except Exception as e:
+                print(f"[{node_name}] [!] Error parsing data quality gate output: {e}")
+                print(f"[{node_name}] stdout: {result.stdout}")
+                print(f"[{node_name}] stderr: {result.stderr}")
+                quality_gate_failed = True
+
+        if quality_gate_failed:
+            if gate_action == "abort":
+                print(f"\n[!] CRITICAL: Data quality gate failed on pre-flight check. (Action: abort). Halting training pipeline.")
+                notifier.notify_failure(experiment_name, "Data quality gate failed on pre-flight check (Action: abort)")
+                for node in nodes:
+                    node.cleanup(kill_mlflow=False)
+                sys.exit(2)
             else:
-                print(f"[{node_name}] [!] WARNING: Could not read label distribution")
+                print(f"\n[!] WARNING: Data quality gate failed, but gate_action is set to '{gate_action}'. Proceeding with warnings.")
 
         print("\n=== Phase 6d: Computing Dataset Checksums for Provenance Lineage ===")
         hash_a = get_dataset_hash(def_a)
@@ -608,9 +654,24 @@ client.log_artifact('{active_run_id}', '/tmp/dataset_lineage.json')
         else:
             print("[orchestrator] Warning: Could not retrieve active MLflow run ID. Skipping logging dataset hashes.")
 
+        # Phase 6e: Run per-class feature drift diagnostics
+        print("\n=== Phase 6e: Per-Class Feature Drift Diagnostic ===")
+        for node_name, node in [("defender-a", def_a), ("defender-b", def_b)]:
+            mlflow_args = ""
+            if active_run_id:
+                mlflow_args = f"--mlflow --run-id {active_run_id} --mlflow-uri http://{aggregator.ip}:5000"
+            cmd = f"~/fl-cl-env/bin/python3 ~/check_features.py --baseline-json ~/baseline_stats.json {mlflow_args}"
+            print(f"[{node_name}] Running feature drift diagnosis...")
+            feat_res = node.run_cmd(cmd)
+            print(feat_res.stdout)
+            if feat_res.stderr:
+                print(f"[{node_name}] stderr:\n{feat_res.stderr}")
+            if feat_res.returncode == 2:
+                print(f"[{node_name}] ⚠️ FEATURE DRIFT WARNING: Significant statistical skew observed in features.")
+
         print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
-        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size}", background=True)
-        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size}", background=True)
+        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}", background=True)
+        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --ewc-lambda {lambda_ewc} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}", background=True)
 
         stopped_early = False
         print("\n=== Phase 8: Monitoring Training Loop Convergence ===")

@@ -189,10 +189,20 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
 
             # Calculate client weight drift and monitor divergence (B3)
             import numpy as np
+            total_rejections = 0
             for client_proxy, fit_res in results:
                 client_id = fit_res.metrics.get("client_id", "unknown")
                 if client_id == "unknown":
                     client_id = str(client_proxy.cid)
+
+                # Data Quality checks (Theme C)
+                dataset_rejected = float(fit_res.metrics.get("dataset_rejected", 0.0))
+                dataset_jsd = float(fit_res.metrics.get("dataset_jsd", 0.0))
+                mlflow.log_metric(f"client_{client_id}_dataset_rejected", dataset_rejected, step=server_round)
+                mlflow.log_metric(f"client_{client_id}_dataset_jsd", dataset_jsd, step=server_round)
+                if dataset_rejected > 0.0:
+                    total_rejections += 1
+                    print(f"[server] WARNING: Client {client_id} dataset rejected due to data quality gate violation! (JSD: {dataset_jsd:.4f})")
 
                 client_ndarrays = fl.common.parameters_to_ndarrays(fit_res.parameters)
                 drift = calculate_l2_drift(client_ndarrays, ndarrays)
@@ -231,6 +241,8 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                     warning_tag_key = f"warning_round_{server_round}_client_{client_id}_anomaly"
                     mlflow.set_tag(warning_tag_key, warning_reason)
                     print(f"[server] ANOMALY WARNING: {warning_reason}")
+
+            mlflow.log_metric("dataset_rejections_count", float(total_rejections), step=server_round)
 
             # Security + stability guard: sanitize NaN/Inf values before checkpointing
             sanitized_arrays = []

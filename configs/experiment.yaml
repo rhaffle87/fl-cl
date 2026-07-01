@@ -106,3 +106,10 @@ mlops:
 # ── Labeling Configuration ──────────────────────────────────
 labeling:
   dos_duration_threshold_ms: 2000
+
+# ── Data Quality & Validation Gates ─────────────────────────
+data_quality:
+  jsd_threshold: 0.6
+  gate_action: "abort" # Options: "abort", "warn"
+  baseline_stats_path: "configs/baseline_feature_stats.json"
+  baseline_class_distribution: "2000,10,200,50,100"

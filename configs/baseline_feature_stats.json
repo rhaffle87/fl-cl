@@ -1,0 +1,62 @@
+{
+  "0": {
+    "bidirectional_packets": {"mean": 15.2, "std": 12.4},
+    "bidirectional_bytes": {"mean": 2500.5, "std": 1800.1},
+    "duration_ms": {"mean": 500.2, "std": 450.7},
+    "src2dst_packets": {"mean": 8.1, "std": 6.3},
+    "src2dst_bytes": {"mean": 1200.2, "std": 950.4},
+    "dst2src_packets": {"mean": 7.1, "std": 6.1},
+    "dst2src_bytes": {"mean": 1300.3, "std": 850.7},
+    "src2dst_mean_piat_ms": {"mean": 45.6, "std": 35.2},
+    "dst2src_mean_piat_ms": {"mean": 38.2, "std": 29.8},
+    "dst_port": {"mean": 80.0, "std": 0.0}
+  },
+  "1": {
+    "bidirectional_packets": {"mean": 42.1, "std": 15.2},
+    "bidirectional_bytes": {"mean": 8400.3, "std": 3200.7},
+    "duration_ms": {"mean": 1500.4, "std": 600.2},
+    "src2dst_packets": {"mean": 21.3, "std": 8.2},
+    "src2dst_bytes": {"mean": 4100.2, "std": 1600.4},
+    "dst2src_packets": {"mean": 20.8, "std": 7.8},
+    "dst2src_bytes": {"mean": 4300.1, "std": 1700.3},
+    "src2dst_mean_piat_ms": {"mean": 120.3, "std": 80.4},
+    "dst2src_mean_piat_ms": {"mean": 115.2, "std": 75.1},
+    "dst_port": {"mean": 8888.0, "std": 418.2}
+  },
+  "2": {
+    "bidirectional_packets": {"mean": 4.0, "std": 0.0},
+    "bidirectional_bytes": {"mean": 340.0, "std": 20.5},
+    "duration_ms": {"mean": 80.3, "std": 25.1},
+    "src2dst_packets": {"mean": 2.0, "std": 0.0},
+    "src2dst_bytes": {"mean": 150.0, "std": 10.0},
+    "dst2src_packets": {"mean": 2.0, "std": 0.0},
+    "dst2src_bytes": {"mean": 190.0, "std": 10.5},
+    "src2dst_mean_piat_ms": {"mean": 15.2, "std": 5.1},
+    "dst2src_mean_piat_ms": {"mean": 10.1, "std": 3.2},
+    "dst_port": {"mean": 53.0, "std": 0.0}
+  },
+  "3": {
+    "bidirectional_packets": {"mean": 28.5, "std": 12.1},
+    "bidirectional_bytes": {"mean": 3800.2, "std": 1400.5},
+    "duration_ms": {"mean": 850.4, "std": 320.1},
+    "src2dst_packets": {"mean": 15.2, "std": 6.3},
+    "src2dst_bytes": {"mean": 1950.4, "std": 720.2},
+    "dst2src_packets": {"mean": 13.3, "std": 5.8},
+    "dst2src_bytes": {"mean": 1849.8, "std": 680.3},
+    "src2dst_mean_piat_ms": {"mean": 32.1, "std": 15.4},
+    "dst2src_mean_piat_ms": {"mean": 28.4, "std": 12.1},
+    "dst_port": {"mean": 22.0, "std": 0.0}
+  },
+  "4": {
+    "bidirectional_packets": {"mean": 5000.3, "std": 2500.1},
+    "bidirectional_bytes": {"mean": 350000.4, "std": 120000.8},
+    "duration_ms": {"mean": 4500.7, "std": 1200.3},
+    "src2dst_packets": {"mean": 5000.1, "std": 2500.0},
+    "src2dst_bytes": {"mean": 350000.0, "std": 120000.0},
+    "dst2src_packets": {"mean": 0.2, "std": 0.1},
+    "dst2src_bytes": {"mean": 0.4, "std": 0.8},
+    "src2dst_mean_piat_ms": {"mean": 0.8, "std": 0.3},
+    "dst2src_mean_piat_ms": {"mean": 0.0, "std": 0.0},
+    "dst_port": {"mean": 80.0, "std": 0.0}
+  }
+}

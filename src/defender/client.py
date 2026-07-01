@@ -15,14 +15,21 @@ import argparse
 from collections import OrderedDict
 from pathlib import Path
 
-import flwr as fl
+try:
+    import flwr as fl
+    NumPyClientClass = fl.client.NumPyClient
+except ImportError:
+    fl = None
+    class DummyNumPyClient:
+        pass
+    NumPyClientClass = DummyNumPyClient
+
 import numpy as np
 import pandas as pd
 import torch
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
-from cl_strategy import get_continual_learner
 from model import CyberDefenseNet
 
 class MyTensorDataset(TensorDataset):
@@ -193,19 +200,73 @@ def get_experience(x_tensor, y_tensor):
     raise ImportError("No valid Avalanche dataset generators or benchmarks found.")
 
 
-import mlflow
+try:
+    import mlflow
+except ImportError:
+    mlflow = None
+
+if mlflow is None or not hasattr(mlflow, "trace"):
+    def dummy_trace(name=None):
+        def decorator(func):
+            return func
+        return decorator
+    class DummyMlflow:
+        def trace(self, name=None):
+            return dummy_trace(name)
+        def set_tracking_uri(self, uri):
+            pass
+        def set_experiment(self, name):
+            pass
+    mlflow = DummyMlflow()
 
 
-class CyberDefenseClient(fl.client.NumPyClient):
+def jensen_shannon_divergence(p, q):
+    """Compute the Jensen-Shannon Divergence between two distributions using base 2."""
+    p = np.array(p, dtype=float)
+    q = np.array(q, dtype=float)
+    
+    p_sum = np.sum(p)
+    q_sum = np.sum(q)
+    
+    p = p / p_sum if p_sum > 0 else np.zeros_like(p)
+    q = q / q_sum if q_sum > 0 else np.zeros_like(q)
+    
+    if np.sum(p) == 0 or np.sum(q) == 0:
+        return 1.0
+        
+    m = 0.5 * (p + q)
+    
+    def kl_div(x, y):
+        with np.errstate(divide='ignore', invalid='ignore'):
+            val = np.where(x > 0, x * np.log2(x / np.where(y > 0, y, 1.0)), 0.0)
+            val = np.nan_to_num(val, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.sum(val)
+        
+    jsd = 0.5 * kl_div(p, m) + 0.5 * kl_div(q, m)
+    return float(np.clip(jsd, 0.0, 1.0))
+
+
+class CyberDefenseClient(NumPyClientClass):
     """Flower client wrapping the Avalanche CL training loop."""
 
-    def __init__(self, net, cl_strategy, flows_dir, client_id="A", dos_threshold_ms=2000, traffic_gen_ip=None):
+    def __init__(self, net, cl_strategy, flows_dir, client_id="A", dos_threshold_ms=2000, traffic_gen_ip=None, baseline=None, js_threshold=0.6):
         self.net = net
         self.cl = cl_strategy
         self.flows_dir = flows_dir
         self.client_id = client_id
         self.dos_threshold_ms = dos_threshold_ms
         self.traffic_gen_ip = traffic_gen_ip
+        self.js_threshold = js_threshold
+        
+        self.baseline_dist = None
+        if baseline:
+            try:
+                self.baseline_dist = [float(x.strip()) for x in baseline.split(",")]
+                if len(self.baseline_dist) != 5:
+                    raise ValueError("Baseline must contain exactly 5 class values.")
+            except Exception as e:
+                print(f"[client-{client_id}] Error parsing baseline distribution: {e}")
+                self.baseline_dist = None
 
     def get_parameters(self, config):
         return [v.cpu().numpy() for _, v in self.net.state_dict().items()]
@@ -228,14 +289,39 @@ class CyberDefenseClient(fl.client.NumPyClient):
     def fit(self, parameters, config):
         self.set_parameters(parameters)
         num_samples = 0
+        dataset_rejected = 0.0
+        jsd_val = 0.0
+        
         try:
             X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms, traffic_gen_ip=self.traffic_gen_ip)
             num_samples = len(X)
+            
+            # Check for JSD Label Shift
+            if self.baseline_dist is not None and num_samples > 0:
+                y_np = y.cpu().numpy()
+                counts = [int(np.sum(y_np == i)) for i in range(5)]
+                jsd_val = jensen_shannon_divergence(counts, self.baseline_dist)
+                
+                if jsd_val > self.js_threshold:
+                    dataset_rejected = 1.0
+                    print(f"[client-{self.client_id}] DATA QUALITY GATE FAILED: JSD={jsd_val:.4f} > threshold={self.js_threshold}. Skipping local training for this round.")
+                    # Return unchanged parameters, 1 sample (to avoid zero), and metrics indicating rejection
+                    out_params = self.get_parameters(config={})
+                    metrics = {
+                        "accuracy": 0.0,
+                        "loss": 0.0,
+                        "dataset_rejected": 1.0,
+                        "dataset_jsd": jsd_val,
+                        "client_id": self.client_id
+                    }
+                    return out_params, 1, metrics
+            
             experience = get_experience(X, y)
             self.cl.train(experience)
             print(f"[client] Trained on {num_samples} flows")
         except FileNotFoundError as e:
             print(f"[client] WARNING: {e}. Skipping training this round (no flows yet).")
+            
         # Validate outgoing parameters — never send NaN weights back to server
         out_params = self.get_parameters(config={})
         clean_params = []
@@ -247,7 +333,11 @@ class CyberDefenseClient(fl.client.NumPyClient):
             clean_params.append(t.numpy())
         # Return at least 1 so FedAvg aggregate_inplace never divides by zero
         # when all clients have an empty ramdisk (e.g. extractor not ready yet).
-        return clean_params, max(num_samples, 1), {"client_id": self.client_id}
+        return clean_params, max(num_samples, 1), {
+            "client_id": self.client_id,
+            "dataset_rejected": dataset_rejected,
+            "dataset_jsd": jsd_val
+        }
 
     @mlflow.trace(name="client_evaluate")
     def evaluate(self, parameters, config):
@@ -331,6 +421,8 @@ def main():
     parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
     parser.add_argument("--batch-size", type=int, default=32, help="Local training batch size")
     parser.add_argument("--traffic-gen-ip", default=os.environ.get("TRAFFIC_GEN_IP", "10.10.140.10"), help="Traffic Generator IP address")
+    parser.add_argument("--baseline", default=None, help="Comma-separated baseline distribution (e.g. 2,150,3,7,18)")
+    parser.add_argument("--js-threshold", type=float, default=0.6, help="JSD threshold for rejecting batch")
     args = parser.parse_args()
 
     # Set up MLflow
@@ -348,6 +440,7 @@ def main():
     net = CyberDefenseNet().to(device)
     
     weights = [float(w) for w in args.class_weights.split(",")]
+    from cl_strategy import get_continual_learner
     cl = get_continual_learner(
         net, 
         device, 
@@ -366,7 +459,9 @@ def main():
             args.flows_dir,
             client_id=args.client_id,
             dos_threshold_ms=args.dos_threshold_ms,
-            traffic_gen_ip=args.traffic_gen_ip
+            traffic_gen_ip=args.traffic_gen_ip,
+            baseline=args.baseline,
+            js_threshold=args.js_threshold
         ),
     )
 

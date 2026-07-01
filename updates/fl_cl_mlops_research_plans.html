@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FL-CL MLOps Research & Development Roadmap</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-dark: #07080a;
+      --bg-surface: #0f1118;
+      --bg-surface-hover: #141722;
+      --border-cyber: rgba(0, 242, 254, 0.15);
+      --border-cyber-focus: rgba(0, 242, 254, 0.5);
+      --text-primary: #f0f2f5;
+      --text-secondary: #8e9bb0;
+      --text-cyan: #00f2fe;
+      --accent-purple: #7f00ff;
+      
+      /* Status Badge Colors */
+      --color-completed: #00ff87;
+      --color-progress: #ffd000;
+      --color-planned: #8a99ad;
+      
+      --font-display: 'Space Grotesk', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      --shadow-glow: 0 0 15px rgba(0, 242, 254, 0.1);
+      --transition-spring: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Reset & Base Styles */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(127, 0, 255, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(0, 242, 254, 0.05) 0%, transparent 40%);
+      color: var(--text-primary);
+      font-family: var(--font-display);
+      line-height: 1.6;
+      padding: 2rem 1.5rem;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    /* Header & Console Dashboard */
+    header {
+      border-bottom: 2px solid var(--border-cyber);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+      position: relative;
+    }
+    
+    .console-tag {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-cyan);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+      display: inline-block;
+    }
+
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 30%, var(--text-cyan) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      max-width: 700px;
+    }
+
+    /* Convergence Monitor Panel */
+    .dashboard-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-cyber);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow-glow);
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (min-width: 600px) {
+      .dashboard-panel {
+        grid-template-columns: 200px 1fr;
+      }
+    }
+
+    .dial-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-right: none;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-cyber);
+    }
+
+    @media (min-width: 600px) {
+      .dial-container {
+        border-right: 1px solid var(--border-cyber);
+        border-bottom: none;
+        padding-bottom: 0;
+        padding-right: 1.5rem;
+      }
+    }
+
+    .convergence-ring {
+      position: relative;
+      width: 100px;
+      height: 100px;
+    }
+
+    .convergence-ring svg {
+      width: 100px;
+      height: 100px;
+      transform: rotate(-90deg);
+    }
+
+    .convergence-ring circle {
+      fill: none;
+      stroke-width: 6;
+    }
+
+    .convergence-ring .bg {
+      stroke: rgba(255, 255, 255, 0.05);
+    }
+
+    .convergence-ring .progress {
+      stroke: var(--text-cyan);
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.6s ease-in-out;
+    }
+
+    .percentage-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: var(--font-mono);
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .dial-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      margin-top: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .stats-matrix {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      align-content: center;
+    }
+
+    .stat-box {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+      transition: var(--transition-spring);
+    }
+    
+    .stat-box:hover {
+      background: rgba(0, 242, 254, 0.02);
+      border-color: var(--border-cyber);
+    }
+
+    .stat-value {
+      font-family: var(--font-mono);
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+    
+    .stat-box.completed .stat-value { color: var(--color-completed); }
+    .stat-box.progress .stat-value { color: var(--color-progress); }
+    .stat-box.planned .stat-value { color: var(--color-planned); }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    /* Interactive Filters & Search */
+    .controls-wrapper {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    @media (min-width: 768px) {
+      .controls-wrapper {
+        grid-template-columns: 1fr auto;
+      }
+    }
+
+    .search-box-container {
+      position: relative;
+    }
+
+    .search-box {
+      width: 100%;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-cyber);
+      border-radius: 8px;
+      padding: 0.8rem 1rem 0.8rem 2.5rem;
+      color: #fff;
+      font-family: var(--font-display);
+      font-size: 0.9rem;
+      transition: var(--transition-spring);
+    }
+
+    .search-box:focus {
+      outline: none;
+      border-color: var(--text-cyan);
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 0.9rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-secondary);
+      pointer-events: none;
+    }
+
+    .filter-tabs {
+      display: flex;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 0.25rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .filter-tab {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: var(--transition-spring);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .filter-tab.active {
+      background: var(--border-cyber-focus);
+      color: #fff;
+      text-shadow: 0 0 5px rgba(255,255,255,0.5);
+    }
+
+    .filter-tab:hover:not(.active) {
+      color: var(--text-primary);
+      background: rgba(255,255,255,0.05);
+    }
+
+    /* Category Navigator Grid */
+    .navigator-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+      padding-bottom: 1.25rem;
+    }
+
+    .nav-btn {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-secondary);
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: var(--transition-spring);
+    }
+
+    .nav-btn:hover, .nav-btn.active {
+      border-color: var(--text-cyan);
+      color: var(--text-cyan);
+      background: rgba(0, 242, 254, 0.05);
+    }
+
+    /* Roadmap Layout & Section Headers */
+    .roadmap-list {
+      display: grid;
+      gap: 2rem;
+    }
+
+    .section-group {
+      border-left: 2px solid rgba(0, 242, 254, 0.1);
+      padding-left: 1.5rem;
+      position: relative;
+    }
+
+    .section-group::before {
+      content: '';
+      position: absolute;
+      left: -5px;
+      top: 0;
+      width: 8px;
+      height: 8px;
+      background: var(--text-cyan);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--text-cyan);
+    }
+
+    .section-header {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-cyan);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--font-display);
+    }
+    
+    .section-desc {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-top: -0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Plan Cards Styles */
+    .plan-card {
+      background: var(--bg-surface);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 0.75rem;
+      cursor: pointer;
+      transition: var(--transition-spring);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .plan-card::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 3px;
+      background: transparent;
+      transition: var(--transition-spring);
+    }
+    
+    .plan-card[data-status="completed"]::after { background: var(--color-completed); }
+    .plan-card[data-status="progress"]::after { background: var(--color-progress); }
+    .plan-card[data-status="planned"]::after { background: var(--color-planned); }
+
+    .plan-card:hover {
+      border-color: rgba(0, 242, 254, 0.3);
+      background: var(--bg-surface-hover);
+      box-shadow: var(--shadow-glow);
+    }
+
+    .row-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .title-row {
+      font-size: 1.05rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tag-container {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+    }
+
+    /* Badge & Tag Styling */
+    .badge {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-status {
+      border: 1px solid currentColor;
+    }
+
+    .badge-completed { background: rgba(0, 255, 135, 0.1); color: var(--color-completed); }
+    .badge-progress { background: rgba(255, 208, 0, 0.1); color: var(--color-progress); }
+    .badge-planned { background: rgba(138, 153, 173, 0.15); color: var(--color-planned); }
+
+    .badge-diff {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-secondary);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .badge-diff.hi { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.2); }
+    .badge-diff.med { color: #f8c291; border-color: rgba(248, 194, 145, 0.2); }
+    .badge-diff.lo { color: #60a3bc; border-color: rgba(96, 163, 188, 0.2); }
+
+    .tag {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--text-cyan);
+      background: rgba(0, 242, 254, 0.05);
+      border: 1px solid rgba(0, 242, 254, 0.15);
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+
+    /* Expandable Body Panel */
+    .body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1), margin-top 0.4s ease;
+    }
+
+    .plan-card.expanded .body {
+      max-height: 500px;
+      margin-top: 1.25rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 1rem;
+    }
+
+    .body p {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+    }
+
+    .body ul {
+      margin-left: 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .body li {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.4rem;
+      list-style-type: square;
+    }
+    
+    .body li strong {
+      color: var(--text-primary);
+    }
+
+    .ask-btn {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-cyan);
+      border: 1px solid var(--text-cyan);
+      border-radius: 4px;
+      padding: 0.4rem 0.8rem;
+      background: transparent;
+      cursor: pointer;
+      transition: var(--transition-spring);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .ask-btn:hover {
+      background: rgba(0, 242, 254, 0.1);
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+    }
+
+    /* Toast Notification for Clipboard Copy */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--text-cyan);
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      box-shadow: var(--shadow-glow);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transform: translateY(150%);
+      opacity: 0;
+      transition: var(--transition-spring);
+      z-index: 1000;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast-icon {
+      color: var(--color-completed);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="console-tag">System Roadmap // fl-cl-reconciliation</div>
+      <h1>MLOps Research & Development Roadmap</h1>
+      <p class="subtitle">Structured tracking of experimental reproducibility, security, robustness, and deployment gates for Federated Continual Learning.</p>
+    </header>
+
+    <!-- Convergence Monitor Panel (Differentiation Anchor) -->
+    <div class="dashboard-panel">
+      <div class="dial-container">
+        <div class="convergence-ring">
+          <svg>
+            <circle class="bg" cx="50" cy="50" r="42" />
+            <circle class="progress" id="progressCircle" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264" />
+          </svg>
+          <div class="percentage-text" id="progressPercentage">0%</div>
+        </div>
+        <div class="dial-label">System Convergence</div>
+      </div>
+      <div class="stats-matrix">
+        <div class="stat-box completed">
+          <div class="stat-value" id="countCompleted">0</div>
+          <div class="stat-label">Completed</div>
+        </div>
+        <div class="stat-box progress">
+          <div class="stat-value" id="countProgress">0</div>
+          <div class="stat-label">In Progress</div>
+        </div>
+        <div class="stat-box planned">
+          <div class="stat-value" id="countPlanned">0</div>
+          <div class="stat-label">Planned</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters & Search Controls -->
+    <div class="controls-wrapper">
+      <div class="search-box-container">
+        <svg class="search-icon" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="searchBar" class="search-box" placeholder="Search tasks, tools, files or categories...">
+      </div>
+      <div class="filter-tabs">
+        <button class="filter-tab active" data-filter="all">All</button>
+        <button class="filter-tab" data-filter="completed">Completed</button>
+        <button class="filter-tab" data-filter="progress">In Progress</button>
+        <button class="filter-tab" data-filter="planned">Planned</button>
+      </div>
+    </div>
+
+    <!-- Category quick-links navigator -->
+    <div class="navigator-grid" id="categoryNav">
+      <button class="nav-btn active" data-cat="all">All Themes</button>
+      <button class="nav-btn" data-cat="A">A - Reproducibility</button>
+      <button class="nav-btn" data-cat="B">B - Governance</button>
+      <button class="nav-btn" data-cat="C">C - Data Pipeline</button>
+      <button class="nav-btn" data-cat="D">D - CL Strategy</button>
+      <button class="nav-btn" data-cat="E">E - Security</button>
+      <button class="nav-btn" data-cat="F">F - Scalability</button>
+      <button class="nav-btn" data-cat="G">G - Deployment</button>
+      <button class="nav-btn" data-cat="H">H - Neural Arch</button>
+      <button class="nav-btn" data-cat="I">I - Evaluation</button>
+      <button class="nav-btn" data-cat="J">J - Extensions</button>
+    </div>
+
+    <!-- Roadmap Cards List -->
+    <div class="roadmap-list" id="roadmapList">
+      
+      <!-- Section A -->
+      <div class="section-group" data-category="A">
+        <div class="section-header">A — Experiment tracking & reproducibility</div>
+        <div class="section-desc">Infrastructure configuration versioning, sweeps, and hyperparameter logs.</div>
+        
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>A1 · Structured hyperparameter sweep via experiment.yaml</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">MLflow</span>
+              <span class="tag">Flower</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>The repository features a fully implemented sweep controller (<code>src/sweep.py</code>) running systematic grid sweeps over <code>ewc_lambda</code>, <code>lr</code>, etc., using <code>configs/sweep_grid.yaml</code>, logging each run to MLflow.</p>
+            <ul>
+              <li><strong>Variables:</strong> <code>ewc_lambda</code> (0.0–0.8), <code>lr</code>, <code>batch_size</code>, <code>fl_rounds</code>.</li>
+              <li><strong>Metrics logged:</strong> Logs per-round BWT, F1-per-class, and communication bytes to MLflow.</li>
+              <li><strong>Lineage:</strong> Uses MLflow 3.x parent/child run relationships linked via the orchestrator.</li>
+              <li><strong>Visualization:</strong> Builds convergence plots dynamically via <code>tools/plot_metrics.py</code>.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me how the fl-cl sweep config grid search works in sweep.py')">Show sweep logic &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>A2 · Full experiment lineage graph in MLflow 3.x</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">MLflow</span>
+              <span class="tag">LoggedModel</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>The repository automatically computes and logs dataset SHA-256 checksums to MLflow, records lineage metadata via <code>log_dataset.py</code>, and captures full model registry parameters.</p>
+            <ul>
+              <li><strong>Hashing:</strong> Logs dataset checksums (combined defender-a and defender-b flow hashes) at run start.</li>
+              <li><strong>Lineage tags:</strong> Tags each run with <code>parent_run_id</code> and warm-start model version aliases.</li>
+              <li><strong>Summaries:</strong> Uses <code>mlflow.log_table()</code> for evaluation history summaries.</li>
+              <li><strong>Auto-promotion:</strong> Automates alias promotion (champion/challenger) dynamically in the server.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me how fl-cl registers and logs dataset checksums for experiment lineage')">Show lineage details &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>A3 · Snapshot-based experiment reproducibility with LVM-Thin</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">Proxmox</span>
+              <span class="tag">LVM-Thin</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>The infrastructure stack utilizes Proxmox VE with LVM-Thin snapshotting. This plan seeks to automate snapshots before each test sequence to establish a clean state recovery route.</p>
+            <ul>
+              <li><strong>Pre-flight:</strong> Script <code>qm snapshot &lt;vmid&gt; run-$(mlflow_run_id)</code> in <code>orchestrate.py</code>.</li>
+              <li><strong>Rollback:</strong> Automate recovery with <code>qm rollback</code> on experiment run failures.</li>
+              <li><strong>Validation:</strong> Compare identical runs on restored snapshots to verify complete determinism.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Write a shell script that snapshots all 6 Proxmox VMs before an experiment and tags them with an MLflow run ID')">Write this script &nearr;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section B -->
+      <div class="section-group" data-category="B">
+        <div class="section-header">B — Model registry & lifecycle governance</div>
+        <div class="section-desc">champion/challenger evaluation, metadata tracking, and model promotions.</div>
+        
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>B1 · Automated champion/challenger promotion pipeline</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">MLflow Registry</span>
+              <span class="tag">TorchScript</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>The aggregator server automatically evaluates models against per-class F1 thresholds, BWT forgetting checks, and communication budgets, assigning 'champion' or 'challenger' aliases dynamically.</p>
+            <ul>
+              <li><strong>Gating parameters:</strong> Enforces minimum per-class F1, requires non-negative BWT, and validates communication byte consumption.</li>
+              <li><strong>Compilation:</strong> Exports TorchScript compiled models on successful promotion.</li>
+              <li><strong>Observability:</strong> Dispatches detailed validation breakdowns to Telegram channels for real-time monitoring.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me where the validation gate and champion promotion are defined in server.py')">Show validation gate &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>B2 · CL task versioning as first-class model metadata</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">MLflow</span>
+              <span class="tag">Avalanche</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Model versions are explicitly tagged with the trained scenario sequence (e.g. <code>cl_task_sequence</code>) and complexity scores, ensuring transparent tracking of task order impact.</p>
+            <ul>
+              <li><strong>Tags:</strong> Registers task sequence details inside MLflow parameters.</li>
+              <li><strong>Historian:</strong> Stores previous task accuracy maps to enable precise BWT derivations.</li>
+              <li><strong>Summary Reporting:</strong> Extracts accuracy records at peak convergence round.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me how task sequence tags are set on the registered model in server.py')">Show scenario tags &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>B3 · Multi-client model divergence tracking</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">MLflow</span>
+              <span class="tag">Flower</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Weights are dynamically checked for L2 drift and variance anomalies using 3-sigma z-score limits during the aggregation step, flagging anomalous clients automatically.</p>
+            <ul>
+              <li><strong>Metrics:</strong> Logs <code>client_X_weight_drift</code> directly to MLflow tracking.</li>
+              <li><strong>Anomalies:</strong> Generates warning alerts if divergence surpasses statistical thresholds.</li>
+              <li><strong>Defense:</strong> Identifies bad-acting or outlier nodes before weights influence the global model.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me the weight drift and anomaly detection logic in server.py')">Show drift logic &nearr;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section C -->
+      <div class="section-group" data-category="C">
+        <div class="section-header">C — Data pipeline & quality gates</div>
+        <div class="section-desc">Real-time data inspection, drift detection, and replay verification.</div>
+        
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>C1 · Per-batch data quality gate with distribution shift detection</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">NFStream</span>
+              <span class="tag">check_dataset.py</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>A data quality gate exists (<code>tools/check_dataset.py</code>) running label count distribution checks before clients start training, alongside client-side real-time Jensen-Shannon divergence (JSD) shift tracking to reject drifted batches.</p>
+            <ul>
+              <li><strong>Groundwork:</strong> <code>tools/check_dataset.py</code> verifies label counts and flags missing classes on defender ramdisks.</li>
+              <li><strong>Enforcement:</strong> <code>orchestrate.py</code> halts runs (abort action) or flags warnings if the client data violates divergence expectations.</li>
+              <li><strong>Real-time rejection:</strong> Client-side <code>fit()</code> checks Jensen-Shannon divergence against baselines, aborting updates and logging telemetry.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('How do I run the data quality check on a defender node in the fl-cl project?')">Explain data quality check &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>C2 · Feature drift monitoring with TensorBoard + MLflow</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">TensorBoard</span>
+              <span class="tag">scikit-learn</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Per-class feature stats are analyzed and logged using <code>tools/check_features.py</code>; streaming feature distribution stats directly to MLflow and TensorBoard.</p>
+            <ul>
+              <li><strong>Diagnostics:</strong> <code>tools/check_features.py</code> extracts mean, std, and Z-scores for flow features per attack category, identifying statistical shifts.</li>
+              <li><strong>Z-Score Limits:</strong> Flag skews exceeding 3-sigma thresholds against baseline statistical parameters.</li>
+              <li><strong>Integration:</strong> Logged parameters to MLflow runs and visualizes active feature distribution histograms on TensorBoard.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me what features tools/check_features.py inspects and how it is run')">Explain check_features &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>C3 · Benchmark dataset replay reproducibility</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">tcpreplay</span>
+              <span class="tag">CIC-IDS2017</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Orchestration fully replicates standard benchmarks by running sequential simulation stages and tracking cumulative datasets with SHA-256 combined checksums.</p>
+            <ul>
+              <li><strong>Integrity:</strong> Verifies dataset files match hashes with <code>get_dataset_hash()</code> before execution.</li>
+              <li><strong>Sequencing:</strong> Controls attack stages (benign, SSH, slowloris, dns_exfil, botnet) with precise schedules.</li>
+              <li><strong>Provenance:</strong> Logs hashes into MLflow artifacts to preserve lineage.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me how dataset checksumming and attack sequences are orchestrated in orchestrate.py')">Show orchestrator dataset logic &nearr;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section D -->
+      <div class="section-group" data-category="D">
+        <div class="section-header">D — Training strategy & continual learning research</div>
+        <div class="section-desc">EWC parameter sweeps, custom memory algorithms, and warm start runs.</div>
+        
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>D1 · EWC lambda ablation — forgetting vs. plasticity trade-off</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">Avalanche</span>
+              <span class="tag">EWC</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>This is implemented via <code>src/sweep.py</code>, enabling grid search over <code>ewc_lambda</code> parameter sweeps to find the optimal trade-off point.</p>
+            <ul>
+              <li><strong>Sweeps:</strong> Tests lambda ranges <code>[0.0, 0.1, 0.2, 0.4, 0.8]</code> to trace plasticity curves.</li>
+              <li><strong>Tracking:</strong> Pairs runs as child instances under a single parent run in MLflow.</li>
+              <li><strong>Outcome:</strong> Helps locate the optimal point protecting previous task knowledge without halting new learning.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me the sweep configuration file configs/sweep_grid.yaml')">Show sweep config &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>D2 · CL strategy comparison: EWC vs. GEM vs. PackNet</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">Avalanche</span>
+              <span class="tag">PyTorch</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>The repository uses EWC exclusively. This plan aims to integrate and compare alternative continual learning strategies using Avalanche interfaces.</p>
+            <ul>
+              <li><strong>GEM:</strong> Gradient Episodic Memory restricts weight updates to prevent task loss, requiring rehearsal memory buffers.</li>
+              <li><strong>PackNet:</strong> Parameter pruning locks specific network pathways for completed tasks.</li>
+              <li><strong>Metrics:</strong> Compare final BWT, training duration, and peak classification F1 scores.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('How do I swap EWC for GEM in the fl-cl Avalanche CL strategy without changing the Flower client interface?')">Show me how to swap &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>D3 · Warm-start vs. cold-start convergence comparison</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">MLflow</span>
+              <span class="tag">production-strategy</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>The server and orchestrator fully support <code>--production-strategy resume</code> (warm-start from the champion alias in Model Registry) or <code>fresh</code> (cold-start from scratch).</p>
+            <ul>
+              <li><strong>Download:</strong> Queries MLflow model registry for active champion versions and loads weights.</li>
+              <li><strong>Lineage:</strong> Logs warm-start tags and registers origin model versions.</li>
+              <li><strong>Evaluation:</strong> Compares convergence rates and forgetting patterns between warm and cold starts.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Explain how warm-start model download is implemented on the Flower server in server.py')">Show warm-start logic &nearr;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section E -->
+      <div class="section-group" data-category="E">
+        <div class="section-header">E — Security, privacy & robustness</div>
+        <div class="section-desc">Poisoning simulations, differential privacy, and robust aggregation.</div>
+        
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>E1 · Data poisoning attack simulation and detection</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">Kali</span>
+              <span class="tag">MLflow</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Simulate malicious participants injecting poisoned traffic inputs (label flips or network patterns) to disrupt the global federated classification model.</p>
+            <ul>
+              <li><strong>Simulation:</strong> Inject mislabeled packets into a target defender node dataset.</li>
+              <li><strong>Divergence checks:</strong> Audit weight updates at the aggregator using cosine similarity.</li>
+              <li><strong>Mitigation:</strong> Compare convergence resistance across strategies like Trimmed Mean or Krum.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('How do I simulate a label poisoning attack on one fl-cl defender client and detect it at the aggregator?')">Design the attack + detection &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>E2 · Differential privacy noise injection at client level</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff lo">Hard</span>
+              <span class="tag">Opacus</span>
+              <span class="tag">Flower</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Implement client-side differential privacy (DP) during local backpropagation using Opacus to provide mathematical privacy guarantees for local flow datasets.</p>
+            <ul>
+              <li><strong>Opacus:</strong> Wrap local model optimizer inside dynamic gradient-clipping privacy engines.</li>
+              <li><strong>Tracking:</strong> Log accumulated privacy budget parameters (epsilon, delta) across rounds.</li>
+              <li><strong>Trade-off:</strong> Sweep noise multipliers to locate optimal privacy vs. F1 balance boundaries.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('How do I add Opacus differential privacy to the fl-cl Flower client while tracking privacy budget in MLflow?')">Help me add DP &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>E3 · Byzantine-robust aggregation: FedAvg vs. Krum vs. Median</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">Flower</span>
+              <span class="tag">server.py</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Replace baseline FedAvg with robust strategies (Krum, Coordinate-wise Median, or Trimmed Mean) to resist outlier update interference.</p>
+            <ul>
+              <li><strong>Swapping:</strong> Subclass Flower's base aggregation strategy classes.</li>
+              <li><strong>Efficacy:</strong> Test resilience against poisoning attempts from plan E1.</li>
+              <li><strong>Trace:</strong> Log active strategy names inside MLflow metadata tags.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Implement Krum aggregation strategy as a Flower custom Strategy in the fl-cl server.py')">Implement Krum &nearr;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section F -->
+      <div class="section-group" data-category="F">
+        <div class="section-header">F — Scalability & infrastructure</div>
+        <div class="section-desc">Virtualization, scale metrics, and automated LLM reporting.</div>
+        
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>F1 · Scale from 2 to N defenders — horizontal scalability test</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">Proxmox</span>
+              <span class="tag">Flower</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Scale the local testbed horizontally by provisioning additional defender VMs inside Proxmox to measure communication overheads and convergence delays.</p>
+            <ul>
+              <li><strong>Deployment:</strong> Clone VM templates to run 3+ client environments.</li>
+              <li><strong>Bandwidth:</strong> Track gRPC communication payloads across horizontal expansions.</li>
+              <li><strong>Convergence:</strong> Evaluate global classification latency vs. local task iteration counts.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('How do I add a third defender VM to the fl-cl cluster and modify the Flower server to handle variable client availability?')">Help me scale this &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>F2 · GPU passthrough impact on training throughput</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff lo">Hard</span>
+              <span class="tag">vfio/IOMMU</span>
+              <span class="tag">CUDA</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Implement vfio/IOMMU GPU passthrough on target VM nodes to quantify performance gains for localized training sweeps.</p>
+            <ul>
+              <li><strong>Acceleration:</strong> Test GPU-accelerated training steps for MLP configurations vs. CPU workloads.</li>
+              <li><strong>Metrics:</strong> Record GPU temperatures, compute utilization, and round durations.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('How do I benchmark GPU vs CPU training time per FL round in the fl-cl setup and log results to MLflow?')">Help me benchmark this &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-completed">Completed</span>
+              <span>F3 · LLM threat reporting pipeline evaluation</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">Ollama</span>
+              <span class="tag">generate_llm_report.py</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Fully implemented in <code>tools/generate_llm_report.py</code> using Ollama and Qwen to construct automated post-training reports uploaded as MLflow artifacts.</p>
+            <ul>
+              <li><strong>Pipeline:</strong> Queries local Qwen model using run summary statistics and metrics payload.</li>
+              <li><strong>Highlights:</strong> Flags catastrophic forgetting, validation gate results, and general performance.</li>
+              <li><strong>Integration:</strong> Logs generated threat assessment report directly into the MLflow active run.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me the LLM threat report generation code in tools/generate_llm_report.py')">Show report generator &nearr;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section G -->
+      <div class="section-group" data-category="G">
+        <div class="section-header">G — Deployment & observability</div>
+        <div class="section-desc">TorchScript verification, real-time loops, and deployment pipelines.</div>
+        
+        <div class="plan-card" data-status="progress" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-progress">In Progress</span>
+              <span>G1 · Real-time inference deployment with model validation gate</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">TorchScript</span>
+              <span class="tag">validate_model.py</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>The pre-deployment validation gate is completed (<code>tools/validate_model.py</code>) to run inference on flows and verify thresholds. Continuous real-time loop integration is planned.</p>
+            <ul>
+              <li><strong>Gate:</strong> Loads serialized TorchScript models and runs validation checks on flow datasets.</li>
+              <li><strong>Safety:</strong> Enforces minimum class-wise F1 metrics before tagging models as champions.</li>
+              <li><strong>Planned:</strong> Design continuous inference loops to monitor and classify live network interfaces on defender nodes.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me how to run tools/validate_model.py against a checkpoint')">Show validation check &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>G2 · CI/CD pipeline for model promotion via GitHub Actions</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">GitHub Actions</span>
+              <span class="tag">MLflow API</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Currently orchestrate.py is run manually from the workstation. Add a GitHub Actions workflow that: triggers on push to main, runs the validation gate against the last registered model, and promotes champion automatically if thresholds pass.</p>
+            <ul>
+              <li><strong>Automate:</strong> SSH to aggregator &rarr; query registry &rarr; run <code>validate_model.py</code> &rarr; promote alias.</li>
+              <li><strong>Success:</strong> Post GitHub deployment events and dispatch Telegram warnings on fail.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Write a GitHub Actions workflow for automated fl-cl model validation and champion promotion via the MLflow API')">Write this workflow &nearr;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section H -->
+      <div class="section-group" data-category="H">
+        <div class="section-header">H — Model architecture & neural network research</div>
+        <div class="section-desc">Exploring alternative model backbones for ETA flow classifiers.</div>
+        
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>H1 · Architecture search: MLP vs. 1D-CNN vs. Transformer on ETA features</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">PyTorch</span>
+              <span class="tag">Avalanche</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>CyberDefenseNet is a 3-layer MLP on 32 flat features. The research paper hints at 1D-CNNs and LSTMs for SPLT sequences. Compare architectures directly — same data, same CL strategy, different model.</p>
+            <ul>
+              <li><strong>MLP (current):</strong> 32&rarr;64&rarr;32&rarr;5. Fast, but misses sequential characteristics.</li>
+              <li><strong>1D-CNN:</strong> Treat flow packet sequences (SPLT) as 1D temporal signals.</li>
+              <li><strong>Transformer:</strong> Self-attention over the ETA feature metrics.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Help me implement a 1D-CNN alternative to CyberDefenseNet for the fl-cl ETA feature pipeline')">Help me implement 1D-CNN &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>H2 · Fisher Information Matrix inspection across FL rounds</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">EWC</span>
+              <span class="tag">TensorBoard</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>EWC computes the Fisher Information Matrix (FIM) after each task to decide which weights to protect. Visualize how the FIM evolves across FL rounds — which model parameters become increasingly "important" and which remain plastic.</p>
+            <ul>
+              <li><strong>Telemetry:</strong> Stream FIM diagonals to TensorBoard histograms per round.</li>
+              <li><strong>Analysis:</strong> Evaluate if feature extraction layers solidify faster than output layers.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('How do I extract and log the EWC Fisher Information Matrix from Avalanche to TensorBoard per FL round?')">Show me how &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>H3 · Model compression for edge IDS deployment</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">PyTorch</span>
+              <span class="tag">TorchScript</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Apply model optimization, pruning, and quantization steps to reduce storage footprints and acceleration times for embedded IDS environments.</p>
+            <ul>
+              <li><strong>Quantization:</strong> Apply 8-bit dynamic quantization to TorchScript exports.</li>
+              <li><strong>Pruning:</strong> Remove nodes containing weak Fisher values (based on Plan H2 maps).</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Apply PyTorch quantization and Fisher-guided pruning to the CyberDefenseNet champion model in fl-cl')">Help me compress the model &nearr;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section I -->
+      <div class="section-group" data-category="I">
+        <div class="section-header">I — Evaluation & benchmarking</div>
+        <div class="section-desc">Unified validation tests, generalization matrices, and class confusions.</div>
+        
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>I1 · Standardized BWT evaluation suite across all plans</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">MLflow</span>
+              <span class="tag">tools/</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Build a robust post-simulation testing engine that acts as the single source of truth for BWT verification metrics across all configurations.</p>
+            <ul>
+              <li><strong>Ground truth:</strong> Fixed testing targets containing all sequenced threats.</li>
+              <li><strong>Lineage artifacts:</strong> Log formatted CSV evaluations signed with validation hashes.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Build a standardized BWT evaluation suite for fl-cl that logs results to MLflow as a signed artifact')">Build this suite &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>I2 · Cross-dataset generalization benchmark</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">CIC-IDS2017</span>
+              <span class="tag">USTC-TFC2016</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Evaluate generalization capabilities across heterogeneous packet captures (e.g. training on CIC-IDS2017, testing on USTC-TFC2016) to verify real-world IDS utility.</p>
+            <ul>
+              <li><strong>Execution:</strong> Map out evaluation cross-matrices to identify signature overlap errors.</li>
+              <li><strong>Lineage tagging:</strong> Track dataset IDs in MLflow registers for clean attribution.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Design a cross-dataset generalization benchmark for fl-cl using CIC-IDS2017 for training and USTC-TFC2016 for evaluation')">Design this benchmark &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>I3 · Confusion matrix evolution tracking per FL round</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff hi">High</span>
+              <span class="tag">MLflow</span>
+              <span class="tag">scikit-learn</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Log complete 5&times;5 confusion heatmaps per federated round to track exact classification intersections between similar threat patterns.</p>
+            <ul>
+              <li><strong>Figures:</strong> Use <code>mlflow.log_figure()</code> to save visual confusion artifacts per round.</li>
+              <li><strong>Diagnostics:</strong> Track off-diagonal trends (e.g. slowloris vs. benign misclassifications).</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Log per-round confusion matrices as MLflow figure artifacts in the fl-cl Flower training loop')">Help me log confusion matrices &nearr;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section J -->
+      <div class="section-group" data-category="J">
+        <div class="section-header">J — Future architecture extensions</div>
+        <div class="section-desc">Asynchronous setups, personalized FL layers, and homomorphic encryption.</div>
+        
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>J1 · Asynchronous FL: clients train at different round cadences</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff lo">Hard</span>
+              <span class="tag">Flower</span>
+              <span class="tag">AsyncFedAvg</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Re-architect the synchronous round loop to support asynchronous participant updates, eliminating delays caused by network or processor bottlenecks.</p>
+            <ul>
+              <li><strong>Flower:</strong> Adapt execution strategy to support dynamic, client-independent updates.</li>
+              <li><strong>Simulate:</strong> Introduce delay variables to client loops and measure convergence rates under stress.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('How do I implement asynchronous federated learning in Flower for the fl-cl project to handle straggler clients?')">Help me implement async FL &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>J2 · Personalized FL: per-client fine-tuning on global model</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">Flower</span>
+              <span class="tag">pFedMe</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Maintain localized personal models at each defender client that adapt standard global updates to distinct network distributions.</p>
+            <ul>
+              <li><strong>Adaptation:</strong> Run extra local calibration steps after applying global weights.</li>
+              <li><strong>Regularization:</strong> Guard personalization steps with EWC penalization to prevent baseline forgetting.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Implement personalized FL in fl-cl where each defender fine-tunes locally after FedAvg with EWC regularization')">Help me implement pFL &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>J3 · Homomorphic encryption at the aggregator</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff lo">Hard</span>
+              <span class="tag">TenSEAL</span>
+              <span class="tag">Flower</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Evaluate secure aggregation pipelines using TenSEAL to combine weight updates directly inside homomorphic cipher spaces, protecting participant privacy.</p>
+            <ul>
+              <li><strong>Encryption:</strong> Encrypt client update payloads before gRPC transfers.</li>
+              <li><strong>Aggregation:</strong> Perform homomorphic sums without decrypting weights at the coordinator.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('How do I integrate TenSEAL homomorphic encryption into the fl-cl Flower aggregator for encrypted weight averaging?')">Help me integrate HE &nearr;</button>
+          </div>
+        </div>
+
+        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+          <div class="row-meta">
+            <div class="title-row">
+              <span class="badge badge-status badge-planned">Planned</span>
+              <span>J4 · Federated anomaly detection as a complement to classification</span>
+            </div>
+            <div class="tag-container">
+              <span class="badge badge-diff med">Medium</span>
+              <span class="tag">PyTorch</span>
+              <span class="tag">Autoencoder</span>
+            </div>
+          </div>
+          <div class="body">
+            <p>Complement CyberDefenseNet with an unsupervised anomaly autoencoder trained solely on benign flows to identify novel, zero-day threat patterns.</p>
+            <ul>
+              <li><strong>Autoencoder:</strong> Reconstruct benign traffic patterns and flag flows yielding high reconstruction errors.</li>
+              <li><strong>Federated:</strong> Coordinate autoencoder weights inside the Flower strategy cycle.</li>
+            </ul>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Design a federated autoencoder anomaly detection branch for the fl-cl system that complements CyberDefenseNet')">Design the AE branch &nearr;</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast Notification element -->
+  <div id="toast" class="toast">
+    <span class="toast-icon">&check;</span>
+    <span id="toastMessage">Prompt copied to clipboard!</span>
+  </div>
+
+  <script>
+    // Toggle Card Expansion
+    function toggleCard(card) {
+      // Toggle expanded class
+      card.classList.toggle('expanded');
+    }
+
+    // Dynamic Stats Calculator and Progress Dial Updater
+    function updateMetrics() {
+      const cards = document.querySelectorAll('.plan-card');
+      let completed = 0;
+      let progress = 0;
+      let planned = 0;
+
+      cards.forEach(card => {
+        const status = card.getAttribute('data-status');
+        if (status === 'completed') completed++;
+        else if (status === 'progress') progress++;
+        else if (status === 'planned') planned++;
+      });
+
+      // Update counters
+      document.getElementById('countCompleted').textContent = completed;
+      document.getElementById('countProgress').textContent = progress;
+      document.getElementById('countPlanned').textContent = planned;
+
+      // Update convergence percentage
+      const total = completed + progress + planned;
+      const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+      document.getElementById('progressPercentage').textContent = percentage + '%';
+
+      // Update circular SVG progress bar
+      // Circumference = 2 * Math.PI * r = 2 * 3.14159 * 42 = ~264
+      const circle = document.getElementById('progressCircle');
+      const circumference = 264;
+      const offset = circumference - (percentage / 100) * circumference;
+      circle.style.strokeDashoffset = offset;
+    }
+
+    // Filter by tab
+    const tabs = document.querySelectorAll('.filter-tab');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        applyFilters();
+      });
+    });
+
+    // Filter by Category Quick Links
+    const catButtons = document.querySelectorAll('.nav-btn');
+    catButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        catButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyFilters();
+      });
+    });
+
+    // Search bar functionality
+    const searchBar = document.getElementById('searchBar');
+    searchBar.addEventListener('input', applyFilters);
+
+    function applyFilters() {
+      const activeFilter = document.querySelector('.filter-tab.active').getAttribute('data-filter');
+      const activeCat = document.querySelector('.nav-btn.active').getAttribute('data-cat');
+      const searchVal = searchBar.value.toLowerCase().trim();
+
+      // Show/Hide Sections based on category
+      const sections = document.querySelectorAll('.section-group');
+      sections.forEach(sec => {
+        const cat = sec.getAttribute('data-category');
+        if (activeCat === 'all' || activeCat === cat) {
+          sec.style.display = 'block';
+        } else {
+          sec.style.display = 'none';
+        }
+      });
+
+      // Filter Plan Cards
+      const cards = document.querySelectorAll('.plan-card');
+      cards.forEach(card => {
+        const status = card.getAttribute('data-status');
+        const text = card.textContent.toLowerCase();
+        
+        const matchesFilter = (activeFilter === 'all') || (status === activeFilter);
+        const matchesSearch = (searchVal === '') || (text.includes(searchVal));
+
+        if (matchesFilter && matchesSearch) {
+          card.style.display = 'block';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    // Clipboard Copy & VS Code Prompt Dispatcher Integration
+    function executePrompt(promptText) {
+      // Check if sendPrompt exists (VS Code WebView Host Integration)
+      if (typeof sendPrompt === 'function') {
+        sendPrompt(promptText + " ↗");
+      } else {
+        // Fallback for normal browser view: Copy prompt text to clipboard
+        navigator.clipboard.writeText(promptText).then(() => {
+          showToast("Prompt copied to clipboard!");
+        }).catch(err => {
+          console.error('Could not copy text: ', err);
+          showToast("Failed to copy prompt.");
+        });
+      }
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMessage').textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2500);
+    }
+
+    // Run Initializations on window load
+    window.addEventListener('DOMContentLoaded', () => {
+      updateMetrics();
+      applyFilters();
+    });
+  </script>
+</body>
+</html>
