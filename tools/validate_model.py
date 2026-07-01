@@ -81,7 +81,7 @@ def main():
     passed = True
     print(f"\nPer-class Validation:")
     print(f"  {'Class':>15s}  {'Accuracy':>8s}  {'F1 Score':>8s}  {'Threshold':>9s}  {'Status':>6s}  {'Samples':>7s}")
-    print(f"  {'─'*15}  {'─'*8}  {'─'*8}  {'─'*9}  {'─'*6}  {'─'*7}")
+    print(f"  {'-'*15}  {'-'*8}  {'-'*8}  {'-'*9}  {'-'*6}  {'-'*7}")
 
     for label in range(5):
         mask = np.array(all_targets) == label

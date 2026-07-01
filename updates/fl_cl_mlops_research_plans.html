@@ -1078,48 +1078,49 @@
         <div class="section-header">G — Deployment & observability</div>
         <div class="section-desc">TorchScript verification, real-time loops, and deployment pipelines.</div>
         
-        <div class="plan-card" data-status="progress" onclick="toggleCard(this)">
+        <div class="plan-card" data-status="done" onclick="toggleCard(this)">
           <div class="row-meta">
             <div class="title-row">
-              <span class="badge badge-status badge-progress">In Progress</span>
+              <span class="badge badge-status badge-done">Completed</span>
               <span>G1 · Real-time inference deployment with model validation gate</span>
             </div>
             <div class="tag-container">
               <span class="badge badge-diff hi">High</span>
               <span class="tag">TorchScript</span>
-              <span class="tag">validate_model.py</span>
+              <span class="tag">inference_loop.py</span>
             </div>
           </div>
           <div class="body">
-            <p>The pre-deployment validation gate is completed (<code>tools/validate_model.py</code>) to run inference on flows and verify thresholds. Continuous real-time loop integration is planned.</p>
+            <p>Fully implemented in <code>src/defender/inference_loop.py</code>. Runs a continuous, real-time traffic monitoring and classification loop on defender nodes with hot-reloading support.</p>
             <ul>
-              <li><strong>Gate:</strong> Loads serialized TorchScript models and runs validation checks on flow datasets.</li>
-              <li><strong>Safety:</strong> Enforces minimum class-wise F1 metrics before tagging models as champions.</li>
-              <li><strong>Planned:</strong> Design continuous inference loops to monitor and classify live network interfaces on defender nodes.</li>
+              <li><strong>Continuous Loop:</strong> Polls the extractor flow output directories and runs fast model inference on the features.</li>
+              <li><strong>Hot-Reloading:</strong> Detects new version promotions on disk and dynamically reloads TorchScript model weights without service interruption.</li>
+              <li><strong>Security Alerts:</strong> Formats and appends high-confidence malicious flow predictions to a local structured JSON log file.</li>
             </ul>
-            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me how to run tools/validate_model.py against a checkpoint')">Show validation check &nearr;</button>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me the real-time inference loop in src/defender/inference_loop.py')">Show inference loop &nearr;</button>
           </div>
         </div>
 
-        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+        <div class="plan-card" data-status="done" onclick="toggleCard(this)">
           <div class="row-meta">
             <div class="title-row">
-              <span class="badge badge-status badge-planned">Planned</span>
+              <span class="badge badge-status badge-done">Completed</span>
               <span>G2 · CI/CD pipeline for model promotion via GitHub Actions</span>
             </div>
             <div class="tag-container">
               <span class="badge badge-diff med">Medium</span>
               <span class="tag">GitHub Actions</span>
-              <span class="tag">MLflow API</span>
+              <span class="tag">ci_cd_promote.py</span>
             </div>
           </div>
           <div class="body">
-            <p>Currently orchestrate.py is run manually from the workstation. Add a GitHub Actions workflow that: triggers on push to main, runs the validation gate against the last registered model, and promotes champion automatically if thresholds pass.</p>
+            <p>Fully implemented in <code>tools/ci_cd_promote.py</code> and automated via <code>.github/workflows/model_promotion.yml</code>.</p>
             <ul>
-              <li><strong>Automate:</strong> SSH to aggregator &rarr; query registry &rarr; run <code>validate_model.py</code> &rarr; promote alias.</li>
-              <li><strong>Success:</strong> Post GitHub deployment events and dispatch Telegram warnings on fail.</li>
+              <li><strong>Automate:</strong> Queries the model registry for challenger candidates, transfers weights, runs verification checks on the defender, and updates the champion alias.</li>
+              <li><strong>Integration:</strong> Connects to Tailscale and aggregator nodes, executing validation script gates.</li>
+              <li><strong>Alerting:</strong> Dispatches success/failure Telegram alerts containing model metrics and verification rationales.</li>
             </ul>
-            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Write a GitHub Actions workflow for automated fl-cl model validation and champion promotion via the MLflow API')">Write this workflow &nearr;</button>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me the CI/CD promotion script in tools/ci_cd_promote.py')">Show promotion script &nearr;</button>
           </div>
         </div>
       </div>
