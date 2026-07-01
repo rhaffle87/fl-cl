@@ -84,6 +84,10 @@ graph TD
             aggregator["FL Aggregator (LXC 300)<br/>4 vCPU · 8 GB · 10.10.130.10/16"]
         end
     end
+    trafficGen -.->|Attacks + Benign Traffic| targetA
+    trafficGen -.->|Attacks + Benign Traffic| targetB
+    clientA <-->|gRPC FL Updates| aggregator
+    clientB <-->|gRPC FL Updates| aggregator
 ```
 
 ### VM Resource Allocations

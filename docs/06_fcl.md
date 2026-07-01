@@ -221,15 +221,16 @@ Where:
 
 **In plain English:** If a weight was critical for detecting SSH brute force, EWC makes it expensive to change that weight while learning DoS patterns. The model finds alternative weights to represent the new knowledge.
 
-```
-                    Without EWC                          With EWC
-              ┌─────────────────────┐         ┌─────────────────────────┐
-  Round 1:    │ Learns SSH-BF ✓     │         │ Learns SSH-BF ✓         │
-  Round 2:    │ Learns DoS ✓        │         │ Learns DoS ✓            │
-              │ Forgets SSH-BF ✗    │         │ Retains SSH-BF ✓        │
-  Round 3:    │ Learns Botnet ✓     │         │ Learns Botnet ✓         │
-              │ Forgets DoS ✗       │         │ Retains SSH-BF + DoS ✓  │
-              └─────────────────────┘         └─────────────────────────┘
+```mermaid
+graph LR
+    subgraph WithoutEWC ["Without EWC"]
+        W1["Round 1: Learns SSH-BF ✓"] --> W2["Round 2: Learns DoS ✓ <br/> (Forgets SSH-BF ✗)"]
+        W2 --> W3["Round 3: Learns Botnet ✓ <br/> (Forgets DoS ✗)"]
+    end
+    subgraph WithEWC ["With EWC"]
+        E1["Round 1: Learns SSH-BF ✓"] --> E2["Round 2: Learns DoS ✓ <br/> (Retains SSH-BF ✓)"]
+        E2 --> E3["Round 3: Learns Botnet ✓ <br/> (Retains SSH-BF + DoS ✓)"]
+    end
 ```
 
 #### 3.3.3 Class Weighting for Imbalanced Traffic
@@ -267,16 +268,17 @@ This returns a list of NumPy arrays representing:
 
 > **This is the fundamental privacy mechanism of Federated Learning.** The aggregator never sees raw traffic, raw packets, IP addresses, or any organizational data. It only receives abstract mathematical weight matrices.
 
-```
-  Defender A                          Aggregator                         Defender B
-  ┌────────┐                         ┌──────────┐                       ┌────────┐
-  │ Local   │   [w1, b1, w2, b2,    │ Receives │   [w1, b1, w2, b2,   │ Local   │
-  │ Model   │──  w3, b3]  ────────►│ weight   │◄──── w3, b3]  ──────│ Model   │
-  │ Weights │   (NumPy arrays       │ updates  │   (NumPy arrays      │ Weights │
-  └────────┘    via gRPC)           │ from     │    via gRPC)         └────────┘
-                                     │ both     │
-                NO raw data          │ clients  │          NO raw data
-                leaves Org A         └──────────┘          leaves Org B
+```mermaid
+sequenceDiagram
+    participant A as Defender A
+    participant AG as FL Aggregator
+    participant B as Defender B
+
+    Note over A: NO raw data leaves Org A
+    A->>AG: Send weights [w1, b1, w2, b2, w3, b3] (via gRPC)
+    Note over B: NO raw data leaves Org B
+    B->>AG: Send weights [w1, b1, w2, b2, w3, b3] (via gRPC)
+    Note over AG: Receives weight updates from both clients
 ```
 
 ---

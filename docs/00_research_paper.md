@@ -184,8 +184,8 @@ graph TD
     end
     TG -.->|Attacks + Benign Traffic| TA
     TG -.->|Attacks + Benign Traffic| TB
-    DA <====>|gRPC FL Updates| AG
-    DB <====>|gRPC FL Updates| AG
+    DA <-->|gRPC FL Updates| AG
+    DB <-->|gRPC FL Updates| AG
 ```
 
 | Hypervisor | ID | Hostname | OS | vCPU | RAM | Disk | Flat L2 IP Address | Role |
@@ -239,14 +239,13 @@ graph TD
     subgraph Proxmox_Host ["Proxmox Host"]
         %% VM Definitions
         subgraph Target_VM ["Target VM 311 (target-a1)"]
-            style Target_VM fill:none,stroke:#fff,stroke-dasharray: 5 5
-            T_Net["net0 ➔ tap311i0"]
-         Downs
+            style Target_VM fill:none,stroke:#fff,stroke-dasharray: 5 5;
+            T_Net["net0 -> tap311i0"]
         end
 
         subgraph Defender_VM ["Defender VM 310"]
-            style Defender_VM fill:none,stroke:#fff,stroke-dasharray: 5 5
-            D_Net["net1 ➔ tap310i1"]
+            style Defender_VM fill:none,stroke:#fff,stroke-dasharray: 5 5;
+            D_Net["net1 -> tap310i1"]
         end
 
         %% Traffic Mirroring Connections
@@ -255,8 +254,8 @@ graph TD
     end
 
     %% Global Styles
-    style Proxmox_Host fill:#1a1a1a,stroke:#fff,stroke-width:2px,color:#fff
-    classDef default fill:#2d2d2d,stroke:#fff,color:#fff
+    style Proxmox_Host fill:#1a1a1a,stroke:#fff,stroke-width:2px,color:#fff;
+    classDef default fill:#2d2d2d,stroke:#fff,color:#fff;
 ```
 
 The mirroring commands configure both ingress and egress duplication:
@@ -382,13 +381,13 @@ graph TD
     B --> D[Statistical Flow Features]
     
     %% Feature details using markdown formatting
-    subgraph TLS_Features [ ]
-        style TLS_Features fill:none,stroke:none
+    subgraph TLS_Features [" "]
+        style TLS_Features fill:none,stroke:none;
         C --- C1["• JA3/JA4 fingerprints<br>• JA3S/JA4S fingerprints<br>• SNI domain"]
     end
 
-    subgraph Stat_Features [ ]
-        style Stat_Features fill:none,stroke:none
+    subgraph Stat_Features [" "]
+        style Stat_Features fill:none,stroke:none;
         D --- D1["• Packet counts/sizes<br>• Duration, inter-arrival<br>• Byte ratios, entropy"]
     end
     
@@ -428,26 +427,28 @@ This chapter presents the software layer that consumes the feature vectors produ
 
 ```mermaid
 graph TD
-    %% Top Server Node
-    Server["Central FL Aggregator<br>(Flower Server - LXC 300)"]
+    Aggregator["Central FL Aggregator<br/>(Flower Server – LXC 300)"]
+    
+    subgraph DefenderA ["Defender Node A"]
+        ClientA["Flower Client"]
+        CL_A["Avalanche EWC<br/>(CL Strategy)"]
+        PipeA["NFStream Pipeline<br/>(Chapter 5)"]
+        
+        ClientA --> CL_A
+        CL_A --> PipeA
+    end
 
-    %% Central sync line split
-    Server -->|gRPC Weight Sync| SplitNode(( ))
-    style SplitNode fill:none,stroke:none
+    subgraph DefenderB ["Defender Node B"]
+        ClientB["Flower Client"]
+        CL_B["Avalanche EWC<br/>(CL Strategy)"]
+        PipeB["NFStream Pipeline<br/>(Chapter 5)"]
+        
+        ClientB --> CL_B
+        CL_B --> PipeB
+    end
 
-    %% Left Branch (Defender Node A)
-    SplitNode --> NodeA["Defender Node A<br>(Flower Client)"]
-    NodeA --> EWC_A["Avalanche EWC<br>(CL Strategy)"]
-    EWC_A --> PipeA["NFStream Pipeline<br>(Chapter 5)"]
-
-    %% Right Branch (Defender Node B)
-    SplitNode --> NodeB["Defender Node B<br>(Flower Client)"]
-    NodeB --> EWC_B["Avalanche EWC<br>(CL Strategy)"]
-    EWC_B --> PipeB["NFStream Pipeline<br>(Chapter 5)"]
-
-    %% Styling to mimic the dashed visual architecture
-    classDef boxStyle fill:#1a1a1a,stroke:#fff,stroke-dasharray: 5 5,color:#fff;
-    class Server,NodeA,EWC_A,PipeA,NodeB,EWC_B,PipeB boxStyle;
+    ClientA <-->|gRPC Weight Sync| Aggregator
+    ClientB <-->|gRPC Weight Sync| Aggregator
 ```
 
 ### 6.1 Neural Network (`model.py`)

@@ -8,35 +8,27 @@
 
 All nodes sit on a flat Layer 2 network over the Proxmox bridge `vmbr1` using the `10.10.0.0/16` subnet. Logical separation is achieved through IP prefixing, not routing.
 
-```
-                        ┌───────────────────────────────┐
-                        │      FL Aggregator (LXC 300)  │
-                        │         10.10.130.10          │
-                        │  Runs: server.py, MLflow      │
-                        └───────────────┬───────────────┘
-                                        │
-              ┌─────────────────────────┼─────────────────────────┐
-              │                         │                         │
-┌─────────────┴─────────────┐           │           ┌─────────────┴─────────────┐
-│   Organization A Zone     │           │           │   Organization B Zone     │
-│                           │           │           │                           │
-│  Defender A (VM 310)      │           │           │  Defender B (VM 320)      │
-│    10.10.130.11           │           │           │    10.10.130.12           │
-│  Runs: extractor.py,      │           │           │  Runs: extractor.py,      │
-│        client.py          │           │           │        client.py          │
-│  Captures via: ens19      │           │           │  Captures via: ens19      │
-│         ▲ (mirror)        │           │           │         ▲ (mirror)        │
-│         │                 │           │           │         │                 │
-│  Target A1 (VM 311)       │           │           │  Target B1 (VM 321)       │
-│    10.10.110.15           │           │           │    10.10.120.15           │
-│  Runs: busybox httpd      │           │           │  Runs: busybox httpd      │
-└───────────────────────────┘           │           └───────────────────────────┘
-                                        │
-                        ┌───────────────┴───────────────┐
-                        │  Traffic Generator (VM 400)   │
-                        │       10.10.140.10            │
-                        │  Runs: attack_flow.py         │
-                        └───────────────────────────────┘
+```mermaid
+graph TD
+    Aggregator["FL Aggregator (LXC 300)<br/>10.10.130.10<br/>Runs: server.py, MLflow"]
+    TG["Traffic Generator (VM 400)<br/>10.10.140.10<br/>Runs: attack_flow.py"]
+
+    subgraph OrgA ["Organization A Zone"]
+        DefenderA["Defender A (VM 310)<br/>10.10.130.11<br/>Runs: extractor.py, client.py<br/>Captures via: ens19"]
+        TargetA["Target A1 (VM 311)<br/>10.10.110.15<br/>Runs: busybox httpd"]
+        TargetA -->|Port Mirror| DefenderA
+    end
+
+    subgraph OrgB ["Organization B Zone"]
+        DefenderB["Defender B (VM 320)<br/>10.10.130.12<br/>Runs: extractor.py, client.py<br/>Captures via: ens19"]
+        TargetB["Target B1 (VM 321)<br/>10.10.120.15<br/>Runs: busybox httpd"]
+        TargetB -->|Port Mirror| DefenderB
+    end
+
+    DefenderA <-->|gRPC Weight Sync| Aggregator
+    DefenderB <-->|gRPC Weight Sync| Aggregator
+    TG -->|Simulated Attacks| TargetA
+    TG -->|Simulated Attacks| TargetB
 ```
 
 ### Node Summary Table

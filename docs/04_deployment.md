@@ -307,17 +307,11 @@ qm set 321 --hookscript local:snippets/mirror-hook-b.sh
 
 Within each Defender VM, network packets duplicated from the targets are captured in real-time on interface `ens19` (mapped from PVE bridge `vmbr1`).
 
-```
-[Target VM Interface] --(SPAN)--> [Defender Interface ens19] 
-                                            │
-                                            ▼
-                                   [NFStream Engine]
-                                            │
-                                    (Extract Features)
-                                            │
-                                            ▼
-                                  [tmpfs RAM Disk Buffer]
-                                  (/mnt/ramdisk/flows/)
+```mermaid
+graph TD
+    Target["Target VM Interface"] -->|SPAN| ens19["Defender Interface ens19"]
+    ens19 --> Engine["NFStream Engine"]
+    Engine -->|Extract Features| Buffer["tmpfs RAM Disk Buffer<br/>(/mnt/ramdisk/flows/)"]
 ```
 
 #### Step 4.1: Bypass I/O Bottlenecks with a tmpfs RAM Disk
@@ -501,12 +495,10 @@ if __name__ == "__main__":
 
 To evaluate the learning stability and detection performance of the system, the Traffic Generator VM (`VM 400`) initiates attack sessions and background traffic.
 
-```
-       [Traffic Generator VM 400]
-                   │
-    ┌──────────────┴──────────────┐
-    ▼                             ▼
-[Target A1 (10.10.110.15/16)]   [Target B1 (10.10.120.15/16)]
+```mermaid
+graph TD
+    TG["Traffic Generator VM 400"] --> TargetA["Target A1 (10.10.110.15/16)"]
+    TG --> TargetB["Target B1 (10.10.120.15/16)"]
 ```
 
 #### Step 7.1: Network Reachability on the Flat L2 Subnet
@@ -607,8 +599,11 @@ netstat -antp | grep 8080
 
 Follow this execution sequence to start the FCL framework:
 
-```
-[1. PVE Network Config] -> [2. Boot target VMs] -> [3. Launch Automated Orchestrator] -> [4. Monitor via MLflow UI]
+```mermaid
+graph LR
+    PVE["1. PVE Network Config"] --> VMs["2. Boot target VMs"]
+    VMs --> Orch["3. Launch Automated Orchestrator"]
+    Orch --> MLflow["4. Monitor via MLflow UI"]
 ```
 
 - [x] **Phase 1**: Set up `vmbr1` on all physical nodes with `10.10.0.0/16` logical ranges.

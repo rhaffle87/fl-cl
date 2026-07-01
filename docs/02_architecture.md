@@ -119,8 +119,12 @@ For future deployments requiring cross-host mirroring, the PVE SDN feature with 
 
 With port mirroring delivering packets to the defender nodes (Section 3), this section defines the feature extraction pipeline that converts raw encrypted traffic into training-ready vectors for the ML model (Section 5).
 
-```
-Raw Packets (ens19) ──► [ NFStream ] ──► Flow Records (CSV) ──► [ Scaling & Encoding ] ──► PyTorch Tensor
+```mermaid
+graph LR
+    Raw["Raw Packets (ens19)"] --> NFStream["[ NFStream ]"]
+    NFStream --> CSV["Flow Records (CSV)"]
+    CSV --> Scale["[ Scaling & Encoding ]"]
+    Scale --> Tensor["PyTorch Tensor"]
 ```
 
 ### 4.1 Feature Extraction with NFStream
@@ -182,28 +186,30 @@ These features are extracted without decryption, preserving end-to-end encryptio
 
 The core innovation is combining **Flower** (a lightweight FL framework) with **Avalanche** (the leading library for Continual Learning). This section presents the four code components that together implement the hybrid FL-CL training loop, consuming the ETA features from Section 4.
 
-```
-         +-------------------------------------------------+
-         |             Central FL Aggregator               |
-         |         (Flower Server – LXC 300)               |
-         +------------------------+------------------------+
-                                  | gRPC Weight Sync
-              +-------------------+-------------------+
-              |                                       |
-    +---------v---------+                   +---------v---------+
-    |  Defender Node A  |                   |  Defender Node B  |
-    | (Flower Client)   |                   | (Flower Client)   |
-    +---------+---------+                   +---------+---------+
-              |                                       |
-    +---------v---------+                   +---------v---------+
-    | Avalanche EWC     |                   | Avalanche EWC     |
-    | (CL Strategy)     |                   | (CL Strategy)     |
-    +---------+---------+                   +---------+---------+
-              |                                       |
-    +---------v---------+                   +---------v---------+
-    | NFStream Pipeline |                   | NFStream Pipeline |
-    | (Section 4)       |                   | (Section 4)       |
-    +-------------------+                   +-------------------+
+```mermaid
+graph TD
+    Aggregator["Central FL Aggregator<br/>(Flower Server – LXC 300)"]
+    
+    subgraph DefenderA ["Defender Node A"]
+        ClientA["Flower Client"]
+        CL_A["Avalanche EWC<br/>(CL Strategy)"]
+        PipeA["NFStream Pipeline<br/>(Section 4)"]
+        
+        ClientA --> CL_A
+        CL_A --> PipeA
+    end
+
+    subgraph DefenderB ["Defender Node B"]
+        ClientB["Flower Client"]
+        CL_B["Avalanche EWC<br/>(CL Strategy)"]
+        PipeB["NFStream Pipeline<br/>(Section 4)"]
+        
+        ClientB --> CL_B
+        CL_B --> PipeB
+    end
+
+    ClientA <-->|gRPC Weight Sync| Aggregator
+    ClientB <-->|gRPC Weight Sync| Aggregator
 ```
 
 ### 5.1 PyTorch Neural Network (`model.py`)
@@ -326,11 +332,12 @@ if __name__ == "__main__":
 
 To close the MLOps loop, the pipeline triggers an automated post-training analysis workflow upon completion:
 
-```
-[ orchestrate.py ] ──► [ generate_llm_report.py ] ──► Nginx Proxy ──► [ Ollama (llama3.1:8b) ]
-                                                            │
-                                                            ▼ (markdown report)
-                                                     [ MLflow Runs / Artifacts ]
+```mermaid
+graph LR
+    Orchestrate["orchestrate.py"] --> Report["generate_llm_report.py"]
+    Report --> Proxy["Nginx Proxy"]
+    Proxy --> Ollama["Ollama (llama3.1:8b)"]
+    Proxy -->|markdown report| MLflow["MLflow Runs / Artifacts"]
 ```
 
 1. **Analytical Assessment**: The aggregator collects the training results (validation losses, final class-specific detection accuracies, and EWC backward transfer metrics).
