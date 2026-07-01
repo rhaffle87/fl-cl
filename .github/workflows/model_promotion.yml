@@ -30,9 +30,11 @@ jobs:
 
       - name: Synchronize Code to Aggregator
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 root@10.10.130.10 "mkdir -p /root/fl-cl/tools /root/fl-cl/src"
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 root@10.10.130.10 "mkdir -p /root/fl-cl/tools /root/fl-cl/src /root/.ssh"
           scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 -r tools/* root@10.10.130.10:/root/fl-cl/tools/
           scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 -r src/* root@10.10.130.10:/root/fl-cl/src/
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 ~/.ssh/id_ed25519 root@10.10.130.10:/root/.ssh/id_ed25519
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 root@10.10.130.10 "chmod 600 /root/.ssh/id_ed25519"
 
       - name: Run Promotion Gate
         run: |
