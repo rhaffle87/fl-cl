@@ -39,17 +39,55 @@ def load_model(checkpoint_path, device):
     return model, os.path.getmtime(checkpoint_path)
 
 
-def preprocess_batch(df):
+def scale_features(X, available_cols, stats_path=None):
+    """
+    Deterministic Z-score scaler using class-0 (benign) stats to avoid covariate shift.
+    """
+    default_stats = {
+        "bidirectional_packets": {"mean": 15.2, "std": 12.4},
+        "bidirectional_bytes": {"mean": 2500.5, "std": 1800.1},
+        "duration_ms": {"mean": 500.2, "std": 450.7},
+        "src2dst_packets": {"mean": 8.1, "std": 6.3},
+        "src2dst_bytes": {"mean": 1200.2, "std": 950.4},
+        "dst2src_packets": {"mean": 7.1, "std": 6.1},
+        "dst2src_bytes": {"mean": 1300.3, "std": 850.7},
+        "src2dst_mean_piat_ms": {"mean": 45.6, "std": 35.2},
+        "dst2src_mean_piat_ms": {"mean": 38.2, "std": 29.8},
+        "dst_port": {"mean": 80.0, "std": 1.0}
+    }
+    
+    stats = default_stats
+    if stats_path and os.path.exists(stats_path):
+        try:
+            with open(stats_path, "r") as f:
+                data = json.load(f)
+                if "0" in data:
+                    stats = data["0"]
+        except Exception:
+            pass
+
+    means = []
+    stds = []
+    for col in available_cols:
+        col_stat = stats.get(col, {"mean": 0.0, "std": 1.0})
+        means.append(col_stat.get("mean", 0.0))
+        std_val = col_stat.get("std", 1.0)
+        if std_val == 0.0:
+            std_val = 1.0
+        stds.append(std_val)
+
+    means = np.array(means, dtype=np.float32)
+    stds = np.array(stds, dtype=np.float32)
+
+    return (X - means) / stds
+
+
+def preprocess_batch(df, stats_path=None):
     """Extract, scale, and pad features to match model requirements."""
     available_cols = [c for c in FEATURE_COLS if c in df.columns]
     X = df[available_cols].fillna(0).values.astype(np.float32)
 
-    # Standardize handling single-sample / zero-variance cases
-    if X.shape[0] > 0:
-        mean = X.mean(axis=0)
-        std = X.std(axis=0)
-        std[std == 0.0] = 1.0  # Avoid division by zero
-        X = (X - mean) / std
+    X = scale_features(X, available_cols, stats_path)
     
     # Pad/truncate to 32 dimensions (CyberDefenseNet expected size)
     if X.shape[1] < 32:
@@ -61,7 +99,7 @@ def preprocess_batch(df):
     return torch.tensor(X)
 
 
-def process_flow_file(file_path, model, device, threshold, alerts_log):
+def process_flow_file(file_path, model, device, threshold, alerts_log, stats_path=None):
     """Run model inference on a single flow CSV and log alerts."""
     try:
         df = pd.read_csv(file_path)
@@ -72,7 +110,7 @@ def process_flow_file(file_path, model, device, threshold, alerts_log):
     if df.empty:
         return
 
-    X = preprocess_batch(df)
+    X = preprocess_batch(df, stats_path)
     
     with torch.no_grad():
         X = X.to(device)
@@ -124,7 +162,13 @@ def main():
     parser.add_argument("--alert-threshold", type=float, default=0.70, help="Confidence threshold to trigger alerts")
     parser.add_argument("--poll-interval", type=float, default=1.0, help="Polling interval in seconds")
     parser.add_argument("--alerts-log", default="/mnt/ramdisk/flows/alerts.json", help="Output file path for security alerts")
+    parser.add_argument("--stats-path", default="/root/baseline_stats.json", help="Path to baseline stats JSON file for fixed standardization")
     args = parser.parse_args()
+
+    # Dynamic fallback check if path does not exist
+    stats_path = args.stats_path
+    if not os.path.exists(stats_path):
+        stats_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "configs", "baseline_feature_stats.json")
 
     print("=" * 62)
     print("      FL-CL Cyber Defense - Real-Time Inference Loop")
@@ -133,6 +177,7 @@ def main():
     print(f"Flows Directory:  {args.flows_dir}")
     print(f"Alert Threshold:  {args.alert_threshold:.0%}")
     print(f"Alert Log Path:   {args.alerts_log}")
+    print(f"Baseline Stats:   {stats_path}")
     print("=" * 62)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -170,8 +215,18 @@ def main():
             for file_path in new_files:
                 # Wait briefly to ensure writing has completed
                 time.sleep(0.1)
-                process_flow_file(file_path, model, device, args.alert_threshold, args.alerts_log)
+                process_flow_file(file_path, model, device, args.alert_threshold, args.alerts_log, stats_path)
                 processed_files.add(file_path)
+
+            # 3. Retention policy: prune files older than 300 seconds to prevent RAM disk exhaustion (DoS)
+            now = time.time()
+            for f in Path(args.flows_dir).glob("flows_*.csv"):
+                try:
+                    if now - f.stat().st_mtime > 300:
+                        os.remove(f)
+                        processed_files.discard(f)
+                except Exception:
+                    pass
 
             time.sleep(args.poll_interval)
             

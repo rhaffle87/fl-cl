@@ -79,6 +79,84 @@ def get_config_value(config: dict, *keys, default=None):
     return current if current is not None else default
 
 
+def validate_sanitized_inputs(
+    rounds, cl_strategy, lambda_ewc, gem_patterns, gem_memory_strength, duration,
+    weights_str, lr, momentum, batch_size, experiment_name, dos_threshold,
+    mlops_mode, production_strategy, jsd_threshold, gate_action, baseline_class_dist,
+    poison_client_ids, poison_rate, poison_from_class, poison_to_class,
+    dp_noise_multiplier, dp_max_grad_norm, aggregation_strategy, trimmed_mean_beta,
+    aggregator_ip, def_a_ip, def_b_ip, target_a_ip, target_b_ip, traffic_gen_ip
+):
+    """
+    Validate that all configuration values are clean and conform to their expected types and boundaries,
+    ensuring resilience against command injection or bad inputs.
+    """
+    import re
+    
+    # 1. Type and value validations
+    assert isinstance(rounds, int) and 0 < rounds <= 1000, f"Invalid rounds: {rounds}"
+    
+    cl_strategy = str(cl_strategy).upper()
+    assert cl_strategy in ("EWC", "GEM", "NAIVE"), f"Invalid CL strategy: {cl_strategy}"
+    
+    assert isinstance(lambda_ewc, (int, float)) and 0.0 <= lambda_ewc <= 100.0, f"Invalid lambda_ewc: {lambda_ewc}"
+    assert isinstance(gem_patterns, int) and 0 < gem_patterns <= 10000, f"Invalid gem_patterns: {gem_patterns}"
+    assert isinstance(gem_memory_strength, (int, float)) and 0.0 <= gem_memory_strength <= 10.0, f"Invalid gem_memory_strength: {gem_memory_strength}"
+    assert isinstance(duration, int) and 0 < duration <= 3600, f"Invalid simulation duration: {duration}"
+    
+    # 2. Check string patterns via regex
+    # class_weights must be a comma-separated list of positive floats/ints: "12.0,3.0,3.0,15.0,1.0"
+    if not re.match(r"^\d+(\.\d+)?(,\d+(\.\d+)?)*$", weights_str):
+        raise ValueError(f"Invalid class weights format: {weights_str}")
+        
+    assert isinstance(lr, (int, float)) and 0.0 < lr <= 1.0, f"Invalid learning rate: {lr}"
+    assert isinstance(momentum, (int, float)) and 0.0 <= momentum <= 1.0, f"Invalid momentum: {momentum}"
+    assert isinstance(batch_size, int) and 0 < batch_size <= 2048, f"Invalid batch_size: {batch_size}"
+    
+    # experiment_name can only contain alphanumeric characters, hyphens, and underscores (safe for paths/shells)
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", experiment_name):
+        raise ValueError(f"Invalid experiment name (must be alphanumeric/hyphen/underscore): {experiment_name}")
+        
+    assert isinstance(dos_threshold, (int, float)) and 0 <= dos_threshold <= 100000, f"Invalid dos_threshold: {dos_threshold}"
+    
+    mlops_mode = str(mlops_mode).lower()
+    assert mlops_mode in ("experimental", "production"), f"Invalid mlops_mode: {mlops_mode}"
+    
+    production_strategy = str(production_strategy).lower()
+    assert production_strategy in ("resume", "scratch"), f"Invalid production_strategy: {production_strategy}"
+    
+    assert isinstance(jsd_threshold, (int, float)) and 0.0 <= jsd_threshold <= 1.0, f"Invalid jsd_threshold: {jsd_threshold}"
+    
+    gate_action = str(gate_action).lower()
+    assert gate_action in ("abort", "quarantine", "alert"), f"Invalid gate_action: {gate_action}"
+    
+    # baseline_class_dist: "2000,10,200,50,100"
+    if not re.match(r"^\d+(,\d+)*$", baseline_class_dist):
+        raise ValueError(f"Invalid baseline_class_distribution: {baseline_class_dist}")
+        
+    # poison_client_ids must contain only valid letters/numbers
+    for cid in poison_client_ids:
+        if not re.match(r"^[a-zA-Z0-9_\-]+$", str(cid)):
+            raise ValueError(f"Invalid client ID for poisoning: {cid}")
+            
+    assert isinstance(poison_rate, (int, float)) and 0.0 <= poison_rate <= 1.0, f"Invalid poison_rate: {poison_rate}"
+    assert isinstance(poison_from_class, int) and 0 <= poison_from_class < 5, f"Invalid poison_from_class: {poison_from_class}"
+    assert isinstance(poison_to_class, int) and 0 <= poison_to_class < 5, f"Invalid poison_to_class: {poison_to_class}"
+
+    assert isinstance(dp_noise_multiplier, (int, float)) and 0.0 <= dp_noise_multiplier <= 10.0, f"Invalid dp_noise_multiplier: {dp_noise_multiplier}"
+    assert isinstance(dp_max_grad_norm, (int, float)) and 0.0 <= dp_max_grad_norm <= 100.0, f"Invalid dp_max_grad_norm: {dp_max_grad_norm}"
+    
+    aggregation_strategy = str(aggregation_strategy)
+    assert aggregation_strategy in ("FedAvg", "FedMedian", "Krum", "TrimmedMean"), f"Invalid aggregation strategy: {aggregation_strategy}"
+    assert isinstance(trimmed_mean_beta, (int, float)) and 0.0 <= trimmed_mean_beta <= 0.5, f"Invalid trimmed_mean_beta: {trimmed_mean_beta}"
+
+    # Verify IP formats to block remote shell IP injection hacks
+    ip_regex = r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$"
+    for ip in (aggregator_ip, def_a_ip, def_b_ip, target_a_ip, target_b_ip, traffic_gen_ip):
+        if not re.match(ip_regex, str(ip)):
+            raise ValueError(f"Malformed node IP address: {ip}")
+
+
 def safe_print(text):
     """Prints text safely bypassing Windows CP1252/Unicode encoding constraints."""
     import sys
@@ -424,25 +502,31 @@ def main():
         default_key = os.path.expanduser("~/.ssh/id_rsa")
     key_path = args.key or os.environ.get("SSH_KEY_PATH") or default_key
 
+    # Define node IPs to pass to the validator
+    aggregator_ip = get_config_value(config, "topology", "aggregator", default="10.10.130.10")
+    def_a_ip = get_config_value(config, "topology", "defender_a", default="10.10.130.11")
+    def_b_ip = get_config_value(config, "topology", "defender_b", default="10.10.130.12")
+    target_a_ip = get_config_value(config, "topology", "target_a", default="10.10.110.15")
+    target_b_ip = get_config_value(config, "topology", "target_b", default="10.10.120.15")
+    traffic_gen_ip = get_config_value(config, "topology", "traffic_gen", default="10.10.140.10")
+
+    # Run sanitization validation to prevent command injection
+    validate_sanitized_inputs(
+        rounds, cl_strategy, lambda_ewc, gem_patterns, gem_memory_strength, duration,
+        weights_str, lr, momentum, batch_size, experiment_name, dos_threshold,
+        mlops_mode, production_strategy, jsd_threshold, gate_action, baseline_class_dist,
+        poison_client_ids, poison_rate, poison_from_class, poison_to_class,
+        dp_noise_multiplier, dp_max_grad_norm, aggregation_strategy, trimmed_mean_beta,
+        aggregator_ip, def_a_ip, def_b_ip, target_a_ip, target_b_ip, traffic_gen_ip
+    )
+
     # Define all remote nodes
-    aggregator = RemoteNode("fl-aggregator",
-                            get_config_value(config, "topology", "aggregator", default="10.10.130.10"),
-                            "root", key_path)
-    def_a = RemoteNode("defender-a",
-                       get_config_value(config, "topology", "defender_a", default="10.10.130.11"),
-                       "root", key_path)
-    def_b = RemoteNode("defender-b",
-                       get_config_value(config, "topology", "defender_b", default="10.10.130.12"),
-                       "root", key_path)
-    target_a = RemoteNode("target-a1",
-                          get_config_value(config, "topology", "target_a", default="10.10.110.15"),
-                          "root", key_path)
-    target_b = RemoteNode("target-b1",
-                          get_config_value(config, "topology", "target_b", default="10.10.120.15"),
-                          "root", key_path)
-    traffic_gen = RemoteNode("traffic-gen",
-                             get_config_value(config, "topology", "traffic_gen", default="10.10.140.10"),
-                             "root", key_path)
+    aggregator = RemoteNode("fl-aggregator", aggregator_ip, "root", key_path)
+    def_a = RemoteNode("defender-a", def_a_ip, "root", key_path)
+    def_b = RemoteNode("defender-b", def_b_ip, "root", key_path)
+    target_a = RemoteNode("target-a1", target_a_ip, "root", key_path)
+    target_b = RemoteNode("target-b1", target_b_ip, "root", key_path)
+    traffic_gen = RemoteNode("traffic-gen", traffic_gen_ip, "root", key_path)
 
     nodes = [aggregator, def_a, def_b, target_a, target_b, traffic_gen]
 

@@ -965,11 +965,11 @@
             </div>
           </div>
           <div class="body">
-            <p>Implement client-side differential privacy (DP) during local backpropagation using Opacus to provide mathematical privacy guarantees for local flow datasets.</p>
+            <p>Implement client-side batch-level gradient regularization and clipping to enhance training resilience and privacy. Clarified documentation to align with batch-level gradient clipping vs. formal per-sample DP bounds.</p>
             <ul>
-              <li><strong>Opacus:</strong> Wrap local model optimizer inside dynamic gradient-clipping privacy engines.</li>
-              <li><strong>Tracking:</strong> Log accumulated privacy budget parameters (epsilon, delta) across rounds.</li>
-              <li><strong>Trade-off:</strong> Sweep noise multipliers to locate optimal privacy vs. F1 balance boundaries.</li>
+              <li><strong>Gradient Clipping:</strong> Automatically clips batch gradients to prevent gradient explosion and bounding influence.</li>
+              <li><strong>Noise Injection:</strong> Scales and adds Gaussian noise to optimizer gradients during local training passes.</li>
+              <li><strong>Mathematical Limit:</strong> Operates as batch-level regularization rather than sample-level DP (which requires per-sample clipping via Opacus).</li>
             </ul>
             <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('How do I add Opacus differential privacy to the fl-cl Flower client while tracking privacy budget in MLflow?')">Help me add DP &nearr;</button>
           </div>
@@ -1078,10 +1078,10 @@
         <div class="section-header">G — Deployment & observability</div>
         <div class="section-desc">TorchScript verification, real-time loops, and deployment pipelines.</div>
         
-        <div class="plan-card" data-status="done" onclick="toggleCard(this)">
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
           <div class="row-meta">
             <div class="title-row">
-              <span class="badge badge-status badge-done">Completed</span>
+              <span class="badge badge-status badge-completed">Completed</span>
               <span>G1 · Real-time inference deployment with model validation gate</span>
             </div>
             <div class="tag-container">
@@ -1091,20 +1091,21 @@
             </div>
           </div>
           <div class="body">
-            <p>Fully implemented in <code>src/defender/inference_loop.py</code>. Runs a continuous, real-time traffic monitoring and classification loop on defender nodes with hot-reloading support.</p>
+            <p>Fully implemented in <code>src/defender/inference_loop.py</code>. Runs a continuous, real-time traffic monitoring and classification loop on defender nodes with hot-reloading support, feature scaling normalization, and OOM prevention.</p>
             <ul>
               <li><strong>Continuous Loop:</strong> Polls the extractor flow output directories and runs fast model inference on the features.</li>
               <li><strong>Hot-Reloading:</strong> Detects new version promotions on disk and dynamically reloads TorchScript model weights without service interruption.</li>
-              <li><strong>Security Alerts:</strong> Formats and appends high-confidence malicious flow predictions to a local structured JSON log file.</li>
+              <li><strong>Security Alerts & Pruning:</strong> Formats and appends high-confidence malicious flow predictions to a local structured JSON log file while automatically pruning stale flow files to prevent RAM disk exhaustion (DoS).</li>
+              <li><strong>Unified Scaling:</strong> Integrates a fixed feature scaling routine utilizing pre-computed baseline statistics to eliminate covariate shifts.</li>
             </ul>
             <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me the real-time inference loop in src/defender/inference_loop.py')">Show inference loop &nearr;</button>
           </div>
         </div>
 
-        <div class="plan-card" data-status="done" onclick="toggleCard(this)">
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
           <div class="row-meta">
             <div class="title-row">
-              <span class="badge badge-status badge-done">Completed</span>
+              <span class="badge badge-status badge-completed">Completed</span>
               <span>G2 · CI/CD pipeline for model promotion via GitHub Actions</span>
             </div>
             <div class="tag-container">
@@ -1114,11 +1115,11 @@
             </div>
           </div>
           <div class="body">
-            <p>Fully implemented in <code>tools/ci_cd_promote.py</code> and automated via <code>.github/workflows/model_promotion.yml</code>.</p>
+            <p>Fully implemented in <code>tools/ci_cd_promote.py</code> and automated via <code>.github/workflows/model_promotion.yml</code>, featuring Tailscale OAuth authentication and command injection hardening.</p>
             <ul>
               <li><strong>Automate:</strong> Queries the model registry for challenger candidates, transfers weights, runs verification checks on the defender, and updates the champion alias.</li>
               <li><strong>Integration:</strong> Connects to Tailscale and aggregator nodes, executing validation script gates.</li>
-              <li><strong>Alerting:</strong> Dispatches success/failure Telegram alerts containing model metrics and verification rationales.</li>
+              <li><strong>Security Guardrails:</strong> Employs strict input sanitization validation for all configuration arguments to eliminate command injection vectors before SSH remote command construction.</li>
             </ul>
             <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me the CI/CD promotion script in tools/ci_cd_promote.py')">Show promotion script &nearr;</button>
           </div>

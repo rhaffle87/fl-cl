@@ -72,6 +72,11 @@ def get_continual_learner(
 
     def _clipped_step(closure=None):
         if dp_enabled:
+            # NOTE: This implementation performs batch-level gradient clipping and noise injection
+            # (Batch-Level Gradient Regularization). While it enforces robustness and guards against
+            # gradient explosion, formal Differential Privacy (DP-SGD) mathematically requires
+            # per-sample gradient clipping BEFORE batch averaging. This batch-level approximation
+            # acts as a strong regularizer but does not yield formal (epsilon, delta) privacy bounds.
             # 1. Clip gradient to dp_max_grad_norm
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=dp_max_grad_norm)
             # 2. Add Gaussian noise to gradients

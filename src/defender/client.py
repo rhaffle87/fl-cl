@@ -68,53 +68,110 @@ except ImportError:
     pass
 
 
-def assign_label(row, dos_threshold_ms=2000, traffic_gen_ip=None):
+def assign_labels_vectorized(df, dos_threshold_ms=2000, traffic_gen_ip=None):
     """
-    Dynamically assign threat labels to flows based on source/destination IP and port fields:
+    Vectorized threat label assignment based on source/destination IP and port fields:
         0: Normal (benign traffic)
         1: Botnet (C2 traffic on 8080/8888/9000)
         2: Exfiltration (DNS exfiltration on port 53)
         3: BruteForce (SSH brute force on port 22)
         4: DoS (volumetric floods / Slowloris on 80/443)
     """
-    src_ip = str(row.get("src_ip", ""))
-    dst_ip = str(row.get("dst_ip", ""))
-    
-    try:
-        src_port = int(float(row.get("src_port", 0)))
-    except (ValueError, TypeError):
-        src_port = 0
-        
-    try:
-        dst_port = int(float(row.get("dst_port", 0)))
-    except (ValueError, TypeError):
-        dst_port = 0
+    if df.empty:
+        return np.array([], dtype=np.int64)
 
     if traffic_gen_ip is None:
         traffic_gen_ip = os.environ.get("TRAFFIC_GEN_IP", "10.10.140.10")
 
-    is_from_traffic_gen = (src_ip == traffic_gen_ip)
-    is_to_traffic_gen = (dst_ip == traffic_gen_ip)
+    src_ips = df["src_ip"].astype(str).values
+    dst_ips = df["dst_ip"].astype(str).values
 
-    if is_from_traffic_gen or is_to_traffic_gen:
-        if dst_port == 22 or src_port == 22:
-            return 3  # BruteForce
-        elif dst_port in [80, 443] or src_port in [80, 443]:
-            try:
-                duration_ms = float(row.get("duration_ms", 0))
-            except (ValueError, TypeError):
-                duration_ms = 0
-            if duration_ms > dos_threshold_ms:
-                return 4  # DoS
-            else:
-                return 0  # Normal (benign background web requests)
-        elif dst_port in [8080, 8888, 9000] or src_port in [8080, 8888, 9000]:
-            return 1  # Botnet
-        elif dst_port == 53 or src_port == 53:
-            return 2  # Exfiltration
-        else:
-            return 4  # Default attack: DoS
-    return 0  # Normal
+    src_ports = pd.to_numeric(df["src_port"], errors="coerce").fillna(0).astype(int).values
+    dst_ports = pd.to_numeric(df["dst_port"], errors="coerce").fillna(0).astype(int).values
+    durations = pd.to_numeric(df["duration_ms"], errors="coerce").fillna(0).astype(float).values
+
+    is_from_tg = (src_ips == traffic_gen_ip)
+    is_to_tg = (dst_ips == traffic_gen_ip)
+    is_tg = is_from_tg | is_to_tg
+
+    labels = np.zeros(len(df), dtype=np.int64)
+
+    # BruteForce (port 22)
+    bf_mask = is_tg & ((src_ports == 22) | (dst_ports == 22))
+    labels[bf_mask] = 3
+
+    # Botnet (ports 8080, 8888, 9000)
+    botnet_mask = is_tg & (~bf_mask) & (np.isin(src_ports, [8080, 8888, 9000]) | np.isin(dst_ports, [8080, 8888, 9000]))
+    labels[botnet_mask] = 1
+
+    # Exfiltration (port 53)
+    exfil_mask = is_tg & (~bf_mask) & (~botnet_mask) & ((src_ports == 53) | (dst_ports == 53))
+    labels[exfil_mask] = 2
+
+    # DoS (ports 80, 443 with duration > dos_threshold_ms)
+    web_ports = [80, 443]
+    web_mask = is_tg & (~bf_mask) & (~botnet_mask) & (~exfil_mask) & (np.isin(src_ports, web_ports) | np.isin(dst_ports, web_ports))
+    dos_web_mask = web_mask & (durations > dos_threshold_ms)
+    labels[dos_web_mask] = 4
+
+    # Default attack label for any other TG traffic
+    default_attack_mask = is_tg & (~bf_mask) & (~botnet_mask) & (~exfil_mask) & (~web_mask)
+    labels[default_attack_mask] = 4
+
+    return labels
+
+
+def scale_features(X, available_cols, stats_path=None):
+    """
+    Deterministic Z-score scaler using class-0 (benign) stats to avoid covariate shift.
+    """
+    import json
+    default_stats = {
+        "bidirectional_packets": {"mean": 15.2, "std": 12.4},
+        "bidirectional_bytes": {"mean": 2500.5, "std": 1800.1},
+        "duration_ms": {"mean": 500.2, "std": 450.7},
+        "src2dst_packets": {"mean": 8.1, "std": 6.3},
+        "src2dst_bytes": {"mean": 1200.2, "std": 950.4},
+        "dst2src_packets": {"mean": 7.1, "std": 6.1},
+        "dst2src_bytes": {"mean": 1300.3, "std": 850.7},
+        "src2dst_mean_piat_ms": {"mean": 45.6, "std": 35.2},
+        "dst2src_mean_piat_ms": {"mean": 38.2, "std": 29.8},
+        "dst_port": {"mean": 80.0, "std": 1.0}
+    }
+    
+    stats = default_stats
+    if stats_path and os.path.exists(stats_path):
+        try:
+            with open(stats_path, "r") as f:
+                data = json.load(f)
+                if "0" in data:
+                    stats = data["0"]
+        except Exception:
+            pass
+
+    means = []
+    stds = []
+    for col in available_cols:
+        col_stat = stats.get(col, {"mean": 0.0, "std": 1.0})
+        means.append(col_stat.get("mean", 0.0))
+        std_val = col_stat.get("std", 1.0)
+        if std_val == 0.0:
+            std_val = 1.0
+        stds.append(std_val)
+
+    means = np.array(means, dtype=np.float32)
+    stds = np.array(stds, dtype=np.float32)
+
+    return (X - means) / stds
+
+
+def assign_label(row, dos_threshold_ms=2000, traffic_gen_ip=None):
+    """
+    Fallback row-by-row label assignment. Maintained for backward compatibility.
+    """
+    df_temp = pd.DataFrame([row])
+    labels = assign_labels_vectorized(df_temp, dos_threshold_ms=dos_threshold_ms, traffic_gen_ip=traffic_gen_ip)
+    return labels[0] if len(labels) > 0 else 0
 
 
 def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: float = 2000, traffic_gen_ip: str = None):
@@ -151,8 +208,14 @@ def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: 
     available_cols = [c for c in feature_cols if c in df.columns]
 
     X = df[available_cols].fillna(0).values.astype(np.float32)
-    scaler = StandardScaler()
-    X = scaler.fit_transform(X)
+    
+    # Load baseline stats to avoid covariate shift
+    stats_path = os.path.expanduser("~/baseline_stats.json")
+    if not os.path.exists(stats_path):
+        # Fallback check relative to workspace configs
+        stats_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "configs", "baseline_feature_stats.json")
+    
+    X = scale_features(X, available_cols, stats_path)
 
     # Pad or truncate to match model input_dim (32)
     if X.shape[1] < 32:
@@ -162,8 +225,7 @@ def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: 
         X = X[:, :32]
 
     # Assign labels dynamically based on IP and port fields
-    df["label"] = df.apply(assign_label, axis=1, dos_threshold_ms=dos_threshold_ms, traffic_gen_ip=traffic_gen_ip)
-    y = df["label"].values.astype(np.int64)
+    y = assign_labels_vectorized(df, dos_threshold_ms=dos_threshold_ms, traffic_gen_ip=traffic_gen_ip)
 
     return torch.tensor(X), torch.tensor(y)
 
