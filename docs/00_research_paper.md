@@ -85,7 +85,7 @@ This allows the model to learn new threats while preserving its competence on pr
 
 The three pillars compose naturally. Each defender node runs an ETA pipeline that extracts metadata features from its local encrypted traffic. These features feed into a PyTorch model wrapped by an Avalanche CL strategy (EWC), which trains locally on each new batch of flows without forgetting older attack signatures. Periodically, the locally updated model weights are transmitted via gRPC to a central Flower aggregator, which merges them with weights from other organizations and redistributes the improved global model.
 
-```
+```mermaid
 graph TD
     %% Horizontal top flow
     A["[ Encrypted Packets ]"] --> B["[ NFStream ETA ]"]
@@ -234,7 +234,7 @@ To feed the ETA pipeline, every packet to and from a target VM must be copied to
 
 Each defender VM has two network interfaces: `net0` on `vmbr0` (management/internet) and `net1` on `vmbr1` (capture). The target VM's `net0` on `vmbr1` is the mirror source. On the hypervisor, these map to TAP interfaces named `tap<VMID>i<NET_INDEX>`:
 
-```
+```mermaid
 graph TD
     subgraph Proxmox_Host ["Proxmox Host"]
         %% VM Definitions
@@ -372,7 +372,7 @@ for flow in streamer:
 ```
 
 The complete feature pipeline:
-```
+```mermaid
 graph TD
     %% Define Nodes
     A[Raw Packets ens19] -->|NFStreamer| B(Flow Records CSV)
@@ -426,7 +426,7 @@ This completes the data pipeline. The output—scaled, encoded feature vectors s
 
 This chapter presents the software layer that consumes the feature vectors produced by the data pipeline (Chapter 5) and orchestrates the hybrid FL-CL training loop. The architecture comprises four components: a PyTorch neural network, an Avalanche CL strategy wrapping that network, a Flower client exposing the CL-equipped model to federated aggregation, and a Flower server performing the global weight merge.
 
-```
+```mermaid
 graph TD
     %% Top Server Node
     Server["Central FL Aggregator<br>(Flower Server - LXC 300)"]
