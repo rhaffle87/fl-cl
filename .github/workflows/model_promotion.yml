@@ -36,4 +36,4 @@ jobs:
 
       - name: Run Promotion Gate
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 root@10.10.130.10 "python3 /root/fl-cl/tools/ci_cd_promote.py"
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 root@10.10.130.10 "/opt/flower-env/bin/python3 /root/fl-cl/tools/ci_cd_promote.py"
