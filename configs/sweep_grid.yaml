@@ -14,3 +14,5 @@ sweep:
     training.lr: [0.005]
     training.batch_size: [32]
     fl.rounds: [15]
+    model.type: ["mlp"]
+    model.prune_fraction: [0.2]

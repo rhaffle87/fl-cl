@@ -47,6 +47,8 @@ security:
 
 # ── Model Architecture ──────────────────────────────────────
 model:
+  type: "mlp"
+  prune_fraction: 0.2
   input_dim: 32
   num_classes: 5
   hidden_layers: [64, 32]

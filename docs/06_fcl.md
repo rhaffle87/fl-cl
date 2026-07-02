@@ -332,7 +332,7 @@ def aggregate_fit(self, server_round, results, failures):
         ndarrays = [np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0) for arr in ndarrays]
 
         # Reconstruct the global model from sanitized parameters
-        model = CyberDefenseNet()
+        model = get_model(self.model_type)
         state_dict = OrderedDict(
             {k: torch.tensor(v) for k, v in zip(model.state_dict().keys(), ndarrays)}
         )

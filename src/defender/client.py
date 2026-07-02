@@ -30,7 +30,7 @@ import torch
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
-from model import CyberDefenseNet
+from model import get_model
 
 class MyTensorDataset(TensorDataset):
     """Custom TensorDataset that exposes a targets field for Avalanche 0.6.0+ compatibility."""
@@ -331,6 +331,12 @@ class CyberDefenseClient(NumPyClientClass):
         self.dp_noise_multiplier = dp_noise_multiplier
         self.dp_max_grad_norm = dp_max_grad_norm
         
+        # Initialize TensorBoard SummaryWriter for H2 FIM telemetry
+        from torch.utils.tensorboard import SummaryWriter
+        tb_dir = f"runs/tensorboard/client_{client_id}"
+        os.makedirs(tb_dir, exist_ok=True)
+        self.writer = SummaryWriter(log_dir=tb_dir)
+        
         self.baseline_dist = None
         if baseline:
             try:
@@ -364,6 +370,10 @@ class CyberDefenseClient(NumPyClientClass):
         num_samples = 0
         dataset_rejected = 0.0
         jsd_val = 0.0
+        fisher_mean = 0.0
+        fisher_max = 0.0
+        fisher_diagonals_serialized = ""
+        current_round = int(config.get("server_round", 1))
         
         try:
             X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms, traffic_gen_ip=self.traffic_gen_ip)
@@ -397,13 +407,50 @@ class CyberDefenseClient(NumPyClientClass):
                         "loss": 0.0,
                         "dataset_rejected": 1.0,
                         "dataset_jsd": jsd_val,
-                        "client_id": self.client_id
+                        "client_id": self.client_id,
+                        "fisher_mean": 0.0,
+                        "fisher_max": 0.0,
+                        "fisher_diagonals": ""
                     }
                     return out_params, 1, metrics
             
             experience = get_experience(X, y)
             self.cl.train(experience)
             print(f"[client] Trained on {num_samples} flows")
+
+            # Extract EWC Fisher Information Matrix diagonals (importance weights)
+            ewc_plugin = None
+            if hasattr(self.cl, "plugins"):
+                for p in self.cl.plugins:
+                    if p.__class__.__name__ == "EWCPlugin":
+                        ewc_plugin = p
+                        break
+            
+            if ewc_plugin is not None and hasattr(ewc_plugin, "importances"):
+                param_to_name = {p: name for name, p in self.net.named_parameters()}
+                fisher_diagonals = {}
+                all_importances = []
+                
+                for (task_id, param), imp_tensor in ewc_plugin.importances.items():
+                    if param in param_to_name:
+                        name = param_to_name[param]
+                        imp_np = imp_tensor.cpu().numpy()
+                        fisher_diagonals[name] = imp_np.tolist()
+                        all_importances.append(imp_np)
+                        
+                        # Log histogram and mean to TensorBoard
+                        if hasattr(self, "writer") and self.writer is not None:
+                            tb_tag = f"fisher/{name.replace('.', '/')}_task_{task_id}"
+                            self.writer.add_histogram(tb_tag, imp_tensor, global_step=current_round)
+                            self.writer.add_scalar(f"fisher_mean/{name.replace('.', '/')}_task_{task_id}", float(imp_np.mean()), global_step=current_round)
+                
+                if all_importances:
+                    flat_importances = np.concatenate([arr.flatten() for arr in all_importances])
+                    fisher_mean = float(np.mean(flat_importances))
+                    fisher_max = float(np.max(flat_importances))
+                    import json
+                    fisher_diagonals_serialized = json.dumps(fisher_diagonals)
+
         except FileNotFoundError as e:
             print(f"[client] WARNING: {e}. Skipping training this round (no flows yet).")
             
@@ -421,7 +468,10 @@ class CyberDefenseClient(NumPyClientClass):
         return clean_params, max(num_samples, 1), {
             "client_id": self.client_id,
             "dataset_rejected": dataset_rejected,
-            "dataset_jsd": jsd_val
+            "dataset_jsd": jsd_val,
+            "fisher_mean": fisher_mean,
+            "fisher_max": fisher_max,
+            "fisher_diagonals": fisher_diagonals_serialized
         }
 
     @mlflow.trace(name="client_evaluate")
@@ -523,6 +573,7 @@ def main():
     parser.add_argument("--traffic-gen-ip", default=os.environ.get("TRAFFIC_GEN_IP", "10.10.140.10"), help="Traffic Generator IP address")
     parser.add_argument("--baseline", default=None, help="Comma-separated baseline distribution (e.g. 2,150,3,7,18)")
     parser.add_argument("--js-threshold", type=float, default=0.6, help="JSD threshold for rejecting batch")
+    parser.add_argument("--model-type", default="mlp", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
     
     # Security parameters
     parser.add_argument("--poison-enabled", action="store_true", help="Enable label poisoning attack simulation")
@@ -557,7 +608,7 @@ def main():
     if args.dp_enabled:
         print(f"[client-{args.client_id}] DP ENABLED: Noise Multiplier={args.dp_noise_multiplier} | Max Grad Norm={args.dp_max_grad_norm}")
 
-    net = CyberDefenseNet().to(device)
+    net = get_model(args.model_type).to(device)
     
     weights = [float(w) for w in args.class_weights.split(",")]
     from cl_strategy import get_continual_learner

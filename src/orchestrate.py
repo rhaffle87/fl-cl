@@ -85,6 +85,7 @@ def validate_sanitized_inputs(
     mlops_mode, production_strategy, jsd_threshold, gate_action, baseline_class_dist,
     poison_client_ids, poison_rate, poison_from_class, poison_to_class,
     dp_noise_multiplier, dp_max_grad_norm, aggregation_strategy, trimmed_mean_beta,
+    model_type, prune_fraction,
     aggregator_ip, def_a_ip, def_b_ip, target_a_ip, target_b_ip, traffic_gen_ip
 ):
     """
@@ -98,6 +99,10 @@ def validate_sanitized_inputs(
     
     cl_strategy = str(cl_strategy).upper()
     assert cl_strategy in ("EWC", "GEM", "NAIVE"), f"Invalid CL strategy: {cl_strategy}"
+    
+    model_type = str(model_type).lower()
+    assert model_type in ("mlp", "cnn", "transformer"), f"Invalid model type: {model_type}"
+    assert isinstance(prune_fraction, (int, float)) and 0.0 <= prune_fraction <= 1.0, f"Invalid prune_fraction: {prune_fraction}"
     
     assert isinstance(lambda_ewc, (int, float)) and 0.0 <= lambda_ewc <= 100.0, f"Invalid lambda_ewc: {lambda_ewc}"
     assert isinstance(gem_patterns, int) and 0 < gem_patterns <= 10000, f"Invalid gem_patterns: {gem_patterns}"
@@ -405,6 +410,8 @@ def main():
     parser.add_argument("--dp-max-grad-norm", type=float, default=None, help="DP max gradient norm")
     parser.add_argument("--aggregation-strategy", default=None, choices=["FedAvg", "FedMedian", "Krum", "TrimmedMean"], help="Robust aggregation strategy")
     parser.add_argument("--trimmed-mean-beta", type=float, default=None, help="Trimmed mean beta")
+    parser.add_argument("--model-type", default=None, choices=["mlp", "cnn", "transformer"], help="Model architecture type (overrides config)")
+    parser.add_argument("--prune-fraction", type=float, default=None, help="Export-time prune fraction parameter (overrides config)")
     args = parser.parse_args()
 
     # Load config — CLI args override YAML values
@@ -502,6 +509,10 @@ def main():
         default_key = os.path.expanduser("~/.ssh/id_rsa")
     key_path = args.key or os.environ.get("SSH_KEY_PATH") or default_key
 
+    # Theme H Configs
+    model_type = args.model_type or get_config_value(config, "model", "type", default="mlp")
+    prune_fraction = args.prune_fraction if args.prune_fraction is not None else get_config_value(config, "model", "prune_fraction", default=0.2)
+
     # Define node IPs to pass to the validator
     aggregator_ip = get_config_value(config, "topology", "aggregator", default="10.10.130.10")
     def_a_ip = get_config_value(config, "topology", "defender_a", default="10.10.130.11")
@@ -517,6 +528,7 @@ def main():
         mlops_mode, production_strategy, jsd_threshold, gate_action, baseline_class_dist,
         poison_client_ids, poison_rate, poison_from_class, poison_to_class,
         dp_noise_multiplier, dp_max_grad_norm, aggregation_strategy, trimmed_mean_beta,
+        model_type, prune_fraction,
         aggregator_ip, def_a_ip, def_b_ip, target_a_ip, target_b_ip, traffic_gen_ip
     )
 
@@ -666,7 +678,7 @@ def main():
         server_sec_args = f" --aggregation-strategy '{aggregation_strategy}' --trimmed-mean-beta {trimmed_mean_beta}"
 
         server_proc = aggregator.run_cmd(
-            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit} --ewc-lambda {lambda_ewc} --lr {lr} --batch-size {batch_size} --class-weights {weights_str} {parent_run_arg}{cl_args}{server_sec_args}",
+            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit} --ewc-lambda {lambda_ewc} --lr {lr} --batch-size {batch_size} --class-weights {weights_str} {parent_run_arg}{cl_args}{server_sec_args} --model-type {model_type} --prune-fraction {prune_fraction}",
             background=True
         )
 
@@ -839,8 +851,8 @@ client.log_artifact('{active_run_id}', '/tmp/dataset_lineage.json')
         if dp_enabled:
             client_b_sec_args += f" --dp-enabled --dp-noise-multiplier {dp_noise_multiplier} --dp-max-grad-norm {dp_max_grad_norm}"
 
-        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --cl-strategy '{cl_strategy}' --ewc-lambda {lambda_ewc} --gem-patterns {gem_patterns} --gem-memory-strength {gem_memory_strength} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}{client_a_sec_args}", background=True)
-        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --cl-strategy '{cl_strategy}' --ewc-lambda {lambda_ewc} --gem-patterns {gem_patterns} --gem-memory-strength {gem_memory_strength} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}{client_b_sec_args}", background=True)
+        def_a.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id A --cl-strategy '{cl_strategy}' --ewc-lambda {lambda_ewc} --gem-patterns {gem_patterns} --gem-memory-strength {gem_memory_strength} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}{client_a_sec_args} --model-type {model_type}", background=True)
+        def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --cl-strategy '{cl_strategy}' --ewc-lambda {lambda_ewc} --gem-patterns {gem_patterns} --gem-memory-strength {gem_memory_strength} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}{client_b_sec_args} --model-type {model_type}", background=True)
 
         stopped_early = False
         print("\n=== Phase 8: Monitoring Training Loop Convergence ===")

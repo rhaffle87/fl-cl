@@ -88,15 +88,18 @@ fl-cl/
 
 ## 3. Script-by-Script Deep Dive
 
-### 3.1 `src/defender/model.py` — The Shared Neural Network
+### 3.1 `src/defender/model.py` — The Neural Network Architectures
 
 **Deployed to:** Aggregator (LXC 300), Defender A (VM 310), Defender B (VM 320)
 
-Defines `CyberDefenseNet`, a 3-layer Multi-Layer Perceptron (MLP):
+Defines three alternative neural network backbones (MLP, 1D-CNN, and Transformer) instantiated dynamically via `get_model`.
 
-```
-Input (32 features) → Linear(64) → ReLU → Dropout(0.2) → Linear(32) → ReLU → Linear(5 classes)
-```
+* **MLP Baseline (`CyberDefenseNet`)**: 
+  ```
+  Input (32 features) → Linear(64) → ReLU → Dropout(0.2) → Linear(32) → ReLU → Linear(5 classes)
+  ```
+* **1D-CNN (`CyberDefenseCNN`)**: Reshapes the input flow features to a 1D sequence and extracts spatial/temporal representations via 1D convolutions and pooling layers.
+* **Transformer (`CyberDefenseTransformer`)**: Projects the features into token embeddings with positional encoding, passing them through Multi-head Attention layers.
 
 * **32 input features** come from NFStream's flow metadata (packet counts, byte volumes, inter-arrival times, JA3 hashes converted to numeric representations).
 * **5 output classes** correspond to threat categories:
@@ -188,7 +191,7 @@ Instead of pre-labeled datasets, this function inspects raw flow metadata to ass
 #### Per-Round Flower Client Lifecycle
 For each federated round, Flower calls these methods in sequence:
 
-1. **`set_parameters()`** — Receives the global model weights from the aggregator and loads them into the local `CyberDefenseNet`.
+1. **`set_parameters()`** — Receives the global model weights from the aggregator and loads them into the local model.
 2. **`fit()`** — Loads fresh flow CSVs from ramdisk, runs poisoning simulation, wraps dataset into an Avalanche experience, and calls `self.cl.train(experience)` to run EWC/GEM training (with optional DP-SGD). Returns updated weights and sample count.
 3. **`evaluate()`** — Runs a PyTorch evaluation loop over the same flow data. Computes overall accuracy/loss and per-class metrics.
 

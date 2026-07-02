@@ -42,7 +42,7 @@ fl-cl/
 │   │   ├── client.py             ← Flower FL client + Avalanche CL
 │   │   ├── cl_strategy.py        ← EWC continual learning (class-weighted)
 │   │   ├── extractor.py          ← NFStream flow feature extraction
-│   │   └── model.py              ← CyberDefenseNet (single source of truth)
+│   │   └── model.py              ← Model architectures (MLP, 1D-CNN, Transformer) & factory
 │   ├── traffic_gen/              ← Traffic Generator (VM 400)
 │   │   └── attack_flow.py        ← Offensive scenario simulator
 │   ├── notifications.py          ← Telegram webhook notifications

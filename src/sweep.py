@@ -138,6 +138,10 @@ def main():
                 elif k == "training.class_weights":
                     weights_str = ",".join(map(str, val)) if isinstance(val, list) else str(val)
                     cmd.extend(["--class-weights", weights_str])
+                elif k == "model.type":
+                    cmd.extend(["--model-type", str(val)])
+                elif k == "model.prune_fraction":
+                    cmd.extend(["--prune-fraction", str(val)])
             
             print(f"[*] Command: {' '.join(cmd)}")
             try:

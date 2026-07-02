@@ -454,12 +454,12 @@ The client script loads local datasets, initiates local continual training using
 import argparse
 import flwr as fl
 import torch
-from model import CyberDefenseNet
+from model import get_model
 from cl_strategy import get_cl_strategy
 
 class CyberDefenseClient(fl.client.NumPyClient):
-    def __init__(self, client_id):
-        self.model = CyberDefenseNet(input_dim=32, num_classes=5)
+    def __init__(self, client_id, model_type="mlp"):
+        self.model = get_model(model_type, input_dim=32, num_classes=5)
         self.strategy = get_cl_strategy(self.model, ewc_lambda=150.0)
         self.client_id = client_id
 

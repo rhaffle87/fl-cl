@@ -30,7 +30,7 @@ import mlflow.artifacts
 import torch
 import numpy as np
 
-from model import CyberDefenseNet
+from model import get_model
 from notifications import TelegramNotifier
 
 
@@ -100,12 +100,15 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
 
     def __init__(self, checkpoint_dir: str = "/opt/mlflow-artifacts/checkpoints",
                  export_torchscript: bool = True, aggregation_strategy: str = "FedAvg",
-                 trimmed_mean_beta: float = 0.1, **kwargs):
+                 trimmed_mean_beta: float = 0.1, model_type: str = "mlp",
+                 prune_fraction: float = 0.2, **kwargs):
         super().__init__(**kwargs)
         self.checkpoint_dir = checkpoint_dir
         self.export_torchscript = export_torchscript
         self.aggregation_strategy = aggregation_strategy
         self.trimmed_mean_beta = trimmed_mean_beta
+        self.model_type = model_type
+        self.prune_fraction = prune_fraction
         self.best_loss = float("inf")
         self.best_round = 0
         self.best_accuracy = 0.0
@@ -120,7 +123,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
         self.fit_clients = 0
         
         # Calculate parameter size in bytes (float32 = 4 bytes)
-        dummy_model = CyberDefenseNet()
+        dummy_model = get_model(self.model_type)
         self.param_bytes = sum(p.numel() * 4 for p in dummy_model.parameters())
 
         # Security audit: enforce strict 0700 owner-only permissions on directories
@@ -344,6 +347,14 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                     total_rejections += 1
                     print(f"[server] WARNING: Client {client_id} dataset rejected due to data quality gate violation! (JSD: {dataset_jsd:.4f})")
 
+                # Log Fisher metrics (H2)
+                f_mean = fit_res.metrics.get("fisher_mean")
+                f_max = fit_res.metrics.get("fisher_max")
+                if f_mean is not None:
+                    mlflow.log_metric(f"client_{client_id}_fisher_mean", float(f_mean), step=server_round)
+                if f_max is not None:
+                    mlflow.log_metric(f"client_{client_id}_fisher_max", float(f_max), step=server_round)
+
                 client_ndarrays = fl.common.parameters_to_ndarrays(fit_res.parameters)
                 drift = calculate_l2_drift(client_ndarrays, ndarrays)
 
@@ -396,7 +407,29 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
             if total_nan > 0:
                 print(f"[server] WARNING: Aggregated weights contained {total_nan} NaN/Inf values at round {server_round}. Sanitized to zero.")
 
-            model = CyberDefenseNet()
+            # Aggregate Fisher Diagonals from all reporting clients (H3)
+            aggregated_fisher = {}
+            fisher_client_count = 0
+            for _, fit_res in results:
+                fisher_str = fit_res.metrics.get("fisher_diagonals", "")
+                if fisher_str:
+                    try:
+                        client_fisher = json.loads(fisher_str)
+                        for name, imp_list in client_fisher.items():
+                            imp_arr = np.array(imp_list)
+                            if name not in aggregated_fisher:
+                                aggregated_fisher[name] = imp_arr
+                            else:
+                                aggregated_fisher[name] += imp_arr
+                        fisher_client_count += 1
+                    except Exception as e:
+                        print(f"[server] Error parsing client Fisher diagonals: {e}")
+
+            if fisher_client_count > 0:
+                for name in aggregated_fisher:
+                    aggregated_fisher[name] /= fisher_client_count
+
+            model = get_model(self.model_type)
             state_dict = OrderedDict(
                 {k: torch.tensor(v) for k, v in zip(model.state_dict().keys(), sanitized_arrays)}
             )
@@ -420,6 +453,52 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                 ts_path = os.path.join(self.checkpoint_dir, "model_latest_scripted.pt")
                 scripted.save(ts_path)
                 os.chmod(ts_path, 0o600)
+                
+                # Measure size
+                orig_size = os.path.getsize(ts_path)
+                mlflow.log_metric("model_scripted_bytes", float(orig_size), step=server_round)
+
+                # Export Quantized TorchScript Model
+                try:
+                    quantized_model = torch.quantization.quantize_dynamic(
+                        model, {torch.nn.Linear}, dtype=torch.qint8
+                    )
+                    scripted_quant = torch.jit.script(quantized_model)
+                    ts_quant_path = os.path.join(self.checkpoint_dir, "model_latest_scripted_quantized.pt")
+                    scripted_quant.save(ts_quant_path)
+                    os.chmod(ts_quant_path, 0o600)
+                    
+                    quant_size = os.path.getsize(ts_quant_path)
+                    mlflow.log_metric("model_quantized_bytes", float(quant_size), step=server_round)
+                except Exception as e:
+                    print(f"[server] Warning: Quantization export failed: {e}")
+
+                # Export Pruned TorchScript Model
+                if self.prune_fraction > 0.0 and aggregated_fisher:
+                    try:
+                        import copy
+                        pruned_model = copy.deepcopy(model)
+                        pruned_model.eval()
+                        
+                        # Apply unstructured pruning based on aggregated Fisher importances
+                        with torch.no_grad():
+                            for name, param in pruned_model.named_parameters():
+                                if "weight" in name and name in aggregated_fisher:
+                                    imp = aggregated_fisher[name]
+                                    if imp.shape == param.shape:
+                                        thresh = np.percentile(imp, self.prune_fraction * 100)
+                                        mask = torch.tensor(imp > thresh, dtype=param.dtype, device=param.device)
+                                        param.mul_(mask)
+                        
+                        scripted_pruned = torch.jit.script(pruned_model)
+                        ts_pruned_path = os.path.join(self.checkpoint_dir, "model_latest_scripted_pruned.pt")
+                        scripted_pruned.save(ts_pruned_path)
+                        os.chmod(ts_pruned_path, 0o600)
+                        
+                        pruned_size = os.path.getsize(ts_pruned_path)
+                        mlflow.log_metric("model_pruned_bytes", float(pruned_size), step=server_round)
+                    except Exception as e:
+                        print(f"[server] Warning: Pruning export failed: {e}")
 
             if server_round % 10 == 0:
                 print(f"[server] Checkpoint saved: {ckpt_path}")
@@ -734,6 +813,8 @@ def main():
     parser.add_argument("--aggregation-strategy", default="FedAvg", choices=["FedAvg", "FedMedian", "Krum", "TrimmedMean"],
                         help="FL aggregation strategy to use")
     parser.add_argument("--trimmed-mean-beta", type=float, default=0.1, help="Beta parameter for TrimmedMean strategy")
+    parser.add_argument("--model-type", default="mlp", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
+    parser.add_argument("--prune-fraction", type=float, default=0.2, help="Export-time prune fraction parameter")
     args = parser.parse_args()
 
     # Instantiate notifier with optional YAML config fallback, prioritizing environment variables
@@ -812,7 +893,7 @@ def main():
         if os.path.exists(latest_ckpt_path):
             print(f"[server] Warm-Start: Loading weights from {latest_ckpt_path}")
             try:
-                model = CyberDefenseNet()
+                model = get_model(args.model_type)
                 # Security audit: use weights_only=True to prevent arbitrary code execution
                 model.load_state_dict(torch.load(latest_ckpt_path, map_location="cpu", weights_only=True))
                 
@@ -858,6 +939,8 @@ def main():
             export_torchscript=True,
             aggregation_strategy=args.aggregation_strategy,
             trimmed_mean_beta=args.trimmed_mean_beta,
+            model_type=args.model_type,
+            prune_fraction=args.prune_fraction,
             initial_parameters=initial_parameters,
             fraction_fit=1.0,
             fraction_evaluate=1.0,
@@ -882,6 +965,8 @@ def main():
             "class_weights": args.class_weights,
             "aggregation_strategy": args.aggregation_strategy,
             "trimmed_mean_beta": args.trimmed_mean_beta,
+            "model_type": args.model_type,
+            "prune_fraction": args.prune_fraction,
         }
         if args.cl_strategy.upper() == "EWC":
             params["ewc_lambda"] = args.ewc_lambda
@@ -959,7 +1044,7 @@ def main():
             import numpy as np
 
             # Instantiate and load model safely
-            model = CyberDefenseNet()
+            model = get_model(args.model_type)
             model.load_state_dict(torch.load(run_best_ckpt, map_location="cpu", weights_only=True))
             model.eval()
 

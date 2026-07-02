@@ -22,7 +22,7 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader, TensorDataset
 
 import client
-from model import CyberDefenseNet
+from model import get_model
 
 LABEL_NAMES = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: "DoS"}
 
@@ -33,6 +33,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=40, help="Training epochs")
     parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
     parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
+    parser.add_argument("--model-type", default="mlp", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
     args = parser.parse_args()
 
     print("Loading ramdisk flows...")
@@ -49,7 +50,8 @@ def main():
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = CyberDefenseNet().to(device)
+    model = get_model(args.model_type).to(device)
+
     optimizer = Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
 
