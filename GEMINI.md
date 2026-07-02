@@ -24,7 +24,7 @@ fl-cl/
 │   ├── aggregator/              # Flower Server & MLflow dashboard
 │   ├── defender/                # Flower Clients, EWC strategies, and Models
 │   │   ├── client.py            # FL Client lifecycle wrapper
-│   │   ├── cl_strategy.py      # Avalanche EWC implementation
+│   │   ├── cl_strategy.py       # Avalanche EWC implementation
 │   │   ├── extractor.py         # NFStream extraction engine
 │   │   └── model.py             # CyberDefenseNet backbones & factory
 │   └── orchestrate.py           # Simulation pipeline controller
