@@ -96,6 +96,94 @@ def safe_print(text):
         print(decoded)
 
 
+def format_validation_logs_to_markdown(validation_output, version_num, validation_passed):
+    summary = f"### Model Version v{version_num} Validation Report\n\n"
+    
+    lines = validation_output.split("\n")
+    overall_acc = "N/A"
+    avg_loss = "N/A"
+    total_samples = "N/A"
+    checkpoint_path = "N/A"
+    flows_dir = "N/A"
+    
+    per_class_rows = []
+    confusion_matrix_lines = []
+    in_per_class = False
+    in_confusion = False
+    status_msg = ""
+    
+    for line in lines:
+        line_strip = line.strip()
+        if not line_strip:
+            continue
+            
+        if "Loading checkpoint:" in line_strip:
+            checkpoint_path = line_strip.split("Loading checkpoint:")[-1].strip()
+        elif "Loading flows from:" in line_strip:
+            flows_dir = line_strip.split("Loading flows from:")[-1].strip()
+        elif "Overall Accuracy:" in line_strip:
+            overall_acc = line_strip.split(":")[-1].strip()
+        elif "Average Loss:" in line_strip:
+            avg_loss = line_strip.split(":")[-1].strip()
+        elif "Total Samples:" in line_strip:
+            total_samples = line_strip.split(":")[-1].strip()
+        elif "Per-class Validation:" in line_strip:
+            in_per_class = True
+            in_confusion = False
+        elif "Confusion Matrix:" in line_strip:
+            in_per_class = False
+            in_confusion = True
+        elif "VALIDATION PASSED" in line_strip or "VALIDATION FAILED" in line_strip:
+            status_msg = line_strip
+            in_per_class = False
+            in_confusion = False
+        else:
+            if in_per_class:
+                if "---" in line_strip or "Class" in line_strip:
+                    continue
+                parts = line_strip.split()
+                if len(parts) >= 6:
+                    per_class_rows.append(parts)
+            elif in_confusion:
+                confusion_matrix_lines.append(line)
+                
+    # Build Overall Metrics Table
+    summary += "#### Overall Metrics\n"
+    summary += "| Metric | Value |\n"
+    summary += "| :--- | :--- |\n"
+    status_emoji = "**PASS**" if validation_passed else "**FAIL**"
+    summary += f"| **Validation Status** | {status_emoji} |\n"
+    summary += f"| **Overall Accuracy** | `{overall_acc}` |\n"
+    summary += f"| **Average Loss** | `{avg_loss}` |\n"
+    summary += f"| **Total Samples** | `{total_samples}` |\n"
+    summary += f"| **Checkpoint** | `{checkpoint_path}` |\n"
+    summary += f"| **Flows Source** | `{flows_dir}` |\n\n"
+    
+    # Build Per-Class Table
+    if per_class_rows:
+        summary += "#### Per-Class Performance\n"
+        summary += "| Class | Accuracy | F1 Score | Threshold | Status | Samples |\n"
+        summary += "| :--- | :---: | :---: | :---: | :---: | :---: |\n"
+        for row in per_class_rows:
+            if len(row) >= 6:
+                cls_name = " ".join(row[:-5])
+                acc, f1, thresh, status, samples = row[-5], row[-4], row[-3], row[-2], row[-1]
+                status_fmt = "**PASS**" if status == "PASS" else "**FAIL**" if status == "FAIL" else f"**{status}**"
+                summary += f"| **{cls_name}** | {acc} | {f1} | {thresh} | {status_fmt} | {samples} |\n"
+        summary += "\n"
+        
+    # Build Confusion Matrix Code Block
+    if confusion_matrix_lines:
+        summary += "#### Confusion Matrix\n"
+        summary += "```text\n"
+        summary += "\n".join(confusion_matrix_lines).strip() + "\n"
+        summary += "```\n\n"
+        
+    if status_msg:
+        summary += f"**Conclusion**: `{status_msg}`\n"
+        
+    return summary
+
 
 def main():
     parser = argparse.ArgumentParser(description="CI/CD Model Promotion Gate")
@@ -215,6 +303,9 @@ def main():
             except ValueError:
                 pass
 
+    # Update model version description with rich Markdown formatting
+    md_desc = format_validation_logs_to_markdown(validation_output, version_num, validation_passed)
+    
     if validation_passed:
         print(f"\n[CI/CD] SUCCESS: Promoting model version {version_num} to 'champion' alias...")
         client.set_registered_model_alias(
@@ -223,11 +314,12 @@ def main():
             version=str(version_num)
         )
         
-        # Update model version description
+        # Update description with success prefix
+        success_desc = f"**Model version v{version_num} promoted to 'champion' via CI/CD Pipeline**.\n\n{md_desc}"
         client.update_model_version(
             name=args.model_name,
             version=str(version_num),
-            description=f"Model version v{version_num} promoted to 'champion' via CI/CD Pipeline.\n\nValidation logs:\n{validation_output[:2000]}"
+            description=success_desc
         )
         
         # Send Telegram notification
@@ -242,6 +334,14 @@ def main():
         print(f"\n[CI/CD] FAIL: Model version {version_num} failed validation thresholds.")
         # Tag run as validation_failed
         client.set_tag(run_id, "validation_status", "FAILED")
+        
+        # Update description with failure prefix
+        failure_desc = f"**Model version v{version_num} failed validation via CI/CD Pipeline**.\n\n{md_desc}"
+        client.update_model_version(
+            name=args.model_name,
+            version=str(version_num),
+            description=failure_desc
+        )
         
         # Send Telegram failure alert
         notifier.notify_promotion_failure(

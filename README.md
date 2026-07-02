@@ -53,6 +53,8 @@ fl-cl/
     ├── check_dataset.py          ← Inspect ramdisk flow label distribution
     ├── check_features.py         ← Per-class feature statistics
     ├── enable_wal.py             ← Enable WAL mode on MLflow SQLite DB
+    ├── bwt_eval_suite.py         ← Standardized BWT validation suite with signatures
+    ├── cross_dataset_benchmark.py ← Heterogeneous generalization benchmark (shift simulator)
     ├── generate_llm_report.py    ← Post-training local LLM threat report generator
     ├── local_train.py            ← Standalone training + confusion matrix
     ├── plot_metrics.py           ← Post-training convergence plot generator
@@ -156,6 +158,9 @@ The sweep controller will:
 | **TorchScript Export** | Production model exported for deployment validation |
 | **Data Quality Gate** | Pre-training label distribution check on both defenders |
 | **Model Validation** | `tools/validate_model.py` — per-class F1 score thresholds |
+| **BWT Evaluation Suite** | `tools/bwt_eval_suite.py` — computes BWT deltas with SHA-256 validation signing |
+| **Generalization Benchmark** | `tools/cross_dataset_benchmark.py` — cross-dataset validation under simulated covariate shift |
+| **Confusion Matrix Tracking** | Per-round 5x5 matrix summation at aggregator with automated MLflow heatmap plots |
 | **Class-Weighted Loss** | Per-class weights `[8.0, 20.0, 3.0, 15.0, 10.0]` for imbalanced data |
 | **Experiment Tracking** | MLflow at `http://10.10.130.10:5000` with git hash tagging, parameters, and metrics tracking |
 | **Notifications** | Telegram bot for start/complete/fail alerts |
@@ -182,6 +187,14 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/local_train.py --epochs 40"
 # Validate a saved model checkpoint
 scp tools/validate_model.py root@10.10.130.11:~/
 ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/validate_model.py --checkpoint /path/to/model.pt"
+
+# Run standardized BWT evaluation suite with cryptographic signing
+scp tools/bwt_eval_suite.py root@10.10.130.11:~/
+ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/bwt_eval_suite.py --checkpoint /path/to/model.pt"
+
+# Run cross-dataset generalization benchmark under simulated shift
+scp tools/cross_dataset_benchmark.py root@10.10.130.11:~/
+ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/cross_dataset_benchmark.py --checkpoint /path/to/model.pt"
 ```
 
 ---

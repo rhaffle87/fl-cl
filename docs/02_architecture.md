@@ -388,13 +388,20 @@ This section provides the generic execution sequence. For cluster-specific provi
    ```
 4. Monitor training rounds via MLflow/TensorBoard. *(See [01_prerequisites.md](01_prerequisites.md) Section 5.B.)*
 
----
+## 7. Evaluation Metrics & Benchmarking Suite
 
-## 7. Evaluation Metrics
+The hybrid FL-CL system's performance, stability, and resistance to catastrophic forgetting are validated using a three-tier benchmarking suite:
 
-These metrics validate the hybrid FL-CL system's performance. For detailed evaluation methodology and the MLOps observability stack, see the research paper Chapter 8.
+1. **Per-Round Confusion Matrix Tracking (I3):** 
+   * **Mechanism:** Defender clients compute local 5x5 confusion matrices on their validation sets and return flattened counts (`cm_t_p`) to the aggregator.
+   * **Aggregation & Visualization:** The aggregator server sums the counts in `weighted_avg` and automatically plots a styled, headless `matplotlib` heatmap logged under `confusion_matrices/confusion_round_{round}.png` in MLflow for every round.
 
-1. **Backward Transfer (BWT):** Measures catastrophic forgetting resistance—how much accuracy on older attack tasks degrades after training on newer ones. BWT ≈ 0 indicates successful retention.
-2. **Collaborative Generalization:** Evaluates whether Defender A can detect attack variants (e.g., SSH brute force) that only occurred in Defender B's network after Federated Aggregation.
-3. **Communication Overhead:** Monitors gRPC weight update payload sizes between clients and aggregator, informing decisions about aggregation frequency.
-4. **ETA Classification Performance:** Tracks Precision, Recall, and F1-Score per attack class, accounting for class imbalance between benign and malicious flows.
+2. **Standardized BWT Evaluation Suite & Cryptographic Lineage (I1):** 
+   * **Tool:** `tools/bwt_eval_suite.py` evaluates candidate TorchScript checkpoints (`.pt`) against ground-truth validation datasets.
+   * **Metrics:** Computes overall accuracy, macro/class-wise F1, and Backward Transfer (BWT) delta profiles relative to historical peak performance.
+   * **Governance:** Signs the results cryptographically with a SHA-256 signature chain combining the model binary hash, the validation dataset flow hash, and the evaluation performance stats, exporting them as a signed CSV to MLflow.
+
+3. **Cross-Dataset Generalization Benchmark (I2):** 
+   * **Tool:** `tools/cross_dataset_benchmark.py` measures model transferability and generalization gaps across heterogeneous flow domains (e.g., training on `CIC-IDS2017` and evaluating on `USTC-TFC2016`).
+   * **Covariate Shift Simulator:** Uses a mathematical feature-shift engine (offset and scaling adjustments) to simulate the distribution of the secondary dataset if local raw pcap directories are unavailable, outputting comparative matrices and uploading generalization logs to MLflow.
+

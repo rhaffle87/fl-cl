@@ -1204,10 +1204,10 @@
         <div class="section-header">I — Evaluation & benchmarking</div>
         <div class="section-desc">Unified validation tests, generalization matrices, and class confusions.</div>
         
-        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
           <div class="row-meta">
             <div class="title-row">
-              <span class="badge badge-status badge-planned">Planned</span>
+              <span class="badge badge-status badge-completed">Completed</span>
               <span>I1 · Standardized BWT evaluation suite across all plans</span>
             </div>
             <div class="tag-container">
@@ -1217,19 +1217,19 @@
             </div>
           </div>
           <div class="body">
-            <p>Build a robust post-simulation testing engine that acts as the single source of truth for BWT verification metrics across all configurations.</p>
+            <p>A standardized post-training testing engine (<code>tools/bwt_eval_suite.py</code>) is fully implemented as the single source of truth for BWT verification metrics, logging results as signed artifacts with validation hashes.</p>
             <ul>
-              <li><strong>Ground truth:</strong> Fixed testing targets containing all sequenced threats.</li>
-              <li><strong>Lineage artifacts:</strong> Log formatted CSV evaluations signed with validation hashes.</li>
+              <li><strong>Ground truth:</strong> Fixed validation targets containing sequential threats.</li>
+              <li><strong>Lineage artifacts:</strong> Logs signed CSV evaluations containing model SHA-256 and dataset hashes to MLflow.</li>
             </ul>
-            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Build a standardized BWT evaluation suite for fl-cl that logs results to MLflow as a signed artifact')">Build this suite &nearr;</button>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me the implementation of the BWT evaluation suite in tools/bwt_eval_suite.py')">Show BWT suite code &nearr;</button>
           </div>
         </div>
 
-        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
           <div class="row-meta">
             <div class="title-row">
-              <span class="badge badge-status badge-planned">Planned</span>
+              <span class="badge badge-status badge-completed">Completed</span>
               <span>I2 · Cross-dataset generalization benchmark</span>
             </div>
             <div class="tag-container">
@@ -1239,19 +1239,19 @@
             </div>
           </div>
           <div class="body">
-            <p>Evaluate generalization capabilities across heterogeneous packet captures (e.g. training on CIC-IDS2017, testing on USTC-TFC2016) to verify real-world IDS utility.</p>
+            <p>A generalization benchmarking engine (<code>tools/cross_dataset_benchmark.py</code>) is implemented to assess transferability across heterogeneous datasets (e.g., CIC-IDS2017 vs. USTC-TFC2016), leveraging a feature-matching covariate shift simulator.</p>
             <ul>
-              <li><strong>Execution:</strong> Map out evaluation cross-matrices to identify signature overlap errors.</li>
-              <li><strong>Lineage tagging:</strong> Track dataset IDs in MLflow registers for clean attribution.</li>
+              <li><strong>Execution:</strong> Evaluates generalization gaps and computes cross-matrices on secondary traffic distributions.</li>
+              <li><strong>Shift Simulation:</strong> Synthetically aligns feature statistics if the secondary dataset is offline.</li>
             </ul>
-            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Design a cross-dataset generalization benchmark for fl-cl using CIC-IDS2017 for training and USTC-TFC2016 for evaluation')">Design this benchmark &nearr;</button>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show me the implementation of the cross-dataset benchmark in tools/cross_dataset_benchmark.py')">Show benchmark code &nearr;</button>
           </div>
         </div>
 
-        <div class="plan-card" data-status="planned" onclick="toggleCard(this)">
+        <div class="plan-card" data-status="completed" onclick="toggleCard(this)">
           <div class="row-meta">
             <div class="title-row">
-              <span class="badge badge-status badge-planned">Planned</span>
+              <span class="badge badge-status badge-completed">Completed</span>
               <span>I3 · Confusion matrix evolution tracking per FL round</span>
             </div>
             <div class="tag-container">
@@ -1261,12 +1261,12 @@
             </div>
           </div>
           <div class="body">
-            <p>Log complete 5&times;5 confusion heatmaps per federated round to track exact classification intersections between similar threat patterns.</p>
+            <p>Per-round 5x5 confusion matrix aggregation is integrated into the client evaluate step and aggregator server. Raw cell counts are summed and plotted as heatmaps.</p>
             <ul>
-              <li><strong>Figures:</strong> Use <code>mlflow.log_figure()</code> to save visual confusion artifacts per round.</li>
-              <li><strong>Diagnostics:</strong> Track off-diagonal trends (e.g. slowloris vs. benign misclassifications).</li>
+              <li><strong>Figures:</strong> Saves visual heatmaps per round using matplotlib and registers them via <code>mlflow.log_figure()</code>.</li>
+              <li><strong>Diagnostics:</strong> Reveals threat-to-threat leakage trends (e.g., normal/DoS/exfiltration intersections).</li>
             </ul>
-            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Log per-round confusion matrices as MLflow figure artifacts in the fl-cl Flower training loop')">Help me log confusion matrices &nearr;</button>
+            <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Show how confusion matrices are logged as MLflow figures in server.py')">Show matrix logging code &nearr;</button>
           </div>
         </div>
       </div>

@@ -745,9 +745,13 @@ Monitor gRPC payload sizes between clients and aggregator to quantify the bandwi
 
 Tracking model behavior across distributed, continually-learning nodes requires centralized experiment tracking:
 
-*   **MLflow**: Deploy a local MLflow tracking server on the aggregator LXC. Each defender VM logs per-round metrics (loss, accuracy per task, BWT) to the central server, enabling comparison of catastrophic forgetting curves across clients.
+*   **MLflow**: Deploy a local MLflow tracking server on the aggregator LXC. Each defender VM logs per-round metrics (loss, accuracy per task, BWT) to the central server. The aggregator automatically aggregates 5x5 confusion matrix counts returned by clients and logs styled heatmap figures to MLflow every round.
+*   **Evaluation & Benchmarking Utilities**: Standalone validation scripts augment the runtime telemetry:
+    *   `tools/bwt_eval_suite.py` calculates overall and class-wise performance, hashes model weights and dataset states, and generates cryptographically signed CSV reports for audit provenance.
+    *   `tools/cross_dataset_benchmark.py` validates model generalization on target distributions (e.g., USTC-TFC2016) by applying a covariate shift simulation engine if physical datasets are offline.
 *   **Weights & Biases (W&B)**: Alternative cloud-hosted tracker for teams preferring managed infrastructure. Particularly useful for visualizing how Client A's accuracy on Task 1 changes when Client B introduces Task 2 through federated aggregation.
 *   **TensorBoard**: Standard local visualizer for monitoring weight distributions, gradient norms, and per-layer activation statistics during CL training.
+
 
 The observability stack closes the feedback loop: metrics from Chapter 8 inform tuning decisions (e.g., adjusting `ewc_lambda` in Chapter 6, modifying aggregation frequency in Chapter 6.4, or rebalancing training data ratios in Chapter 5.1).
 

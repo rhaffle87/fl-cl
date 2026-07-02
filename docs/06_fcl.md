@@ -370,28 +370,51 @@ def aggregate_evaluate(self, server_round, results, failures):
             self.best_metrics = metrics.copy()
             mlflow.log_metric("best_loss", loss, step=server_round)
             mlflow.log_metric("best_round", server_round, step=server_round)
-            print(f"[server] ★ New best model at round {server_round} (loss={loss:.4f})")
+            print(f"[server] New best model at round {server_round} (loss={loss:.4f})")
 
     return aggregated_result
 ```
 
-The per-class accuracy aggregation uses `weighted_avg()`, which weights each client's class accuracy by its sample count while skipping clients that had no samples for a given class (reported as sentinel value `-1.0`):
+The per-class accuracy and F1-score aggregations use `weighted_avg()`, which weights each client's class-wise metric by its dataset sample count, skipping clients that had no samples for a given class. It also sums class-wise confusion matrix counts across clients to get global counts:
 
 ```python
 def weighted_avg(metrics):
     total_samples = sum([n for n, _ in metrics])
+    if total_samples == 0:
+        return {"accuracy": 0.0}
+
     accs = [n * m["accuracy"] for n, m in metrics]
     avg_accuracy = sum(accs) / total_samples
 
     aggregated_metrics = {"accuracy": avg_accuracy}
+    
+    # Class-wise accuracy aggregation
     for i in range(5):
         class_key = f"accuracy_class_{i}"
         class_vals = [(n, m[class_key]) for n, m in metrics if m.get(class_key, -1.0) >= 0.0]
         if class_vals:
             aggregated_metrics[class_key] = sum(w * v for w, v in class_vals) / sum(w for w, _ in class_vals)
+        else:
+            aggregated_metrics[class_key] = -1.0
+
+    # Class-wise F1 score aggregation
+    for i in range(5):
+        f1_key = f"f1_class_{i}"
+        f1_vals = [(n, m[f1_key]) for n, m in metrics if m.get(f1_key, -1.0) >= 0.0]
+        if f1_vals:
+            aggregated_metrics[f1_key] = sum(w * v for w, v in f1_vals) / sum(w for w, _ in f1_vals)
+        else:
+            aggregated_metrics[f1_key] = -1.0
+
+    # Sum raw confusion matrix counts
+    for t in range(5):
+        for p in range(5):
+            cm_key = f"cm_{t}_{p}"
+            aggregated_metrics[cm_key] = float(sum([m.get(cm_key, 0.0) for n, m in metrics]))
 
     return aggregated_metrics
 ```
+
 
 ### 3.5.2 Post-Training: Registration, Datasets, and Governance
 Once training completes (all rounds finished), the server executes the final pipeline integration steps:

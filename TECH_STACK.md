@@ -79,6 +79,7 @@ These packages run inside VM 310 and VM 320.
 | **Python** | 3.11+ | Runtime | `apt install python3 python3-venv` |
 | **Flower (flwr)** | 1.x | Federated Learning server (FedAvg) | `pip install flwr` |
 | **MLflow** | 3.x | Experiment tracking, metric logging, LoggedModel entities | `pip install mlflow` |
+| **matplotlib** | 3.x | Render per-round evaluation confusion matrix heatmaps (headless) | `pip install matplotlib` |
 
 ---
 

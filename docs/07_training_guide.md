@@ -122,3 +122,40 @@ If you press `Ctrl+C` while the training orchestrator is active:
 1. It sends remote interrupt signals to target VMs to gracefully stop background captures and Flower clients.
 2. It logs a cancellation state in MLflow.
 3. It keeps the current database files uncorrupted.
+
+---
+
+## 5. Standalone Evaluation & Benchmarking Tools
+
+FCL provides standalone evaluation scripts to verify model performance, catastrophic forgetting resistance, and cross-dataset generalization out-of-band.
+
+### A. Cryptographically Signed BWT Evaluation Suite
+Use `tools/bwt_eval_suite.py` to evaluate any TorchScript model checkpoint. The tool generates class-wise accuracy, F1-scores, BWT degradation, and cryptographically signs the report.
+
+```bash
+python tools/bwt_eval_suite.py \
+  --checkpoint checkpoints/model_latest_scripted.pt \
+  --test-dir /mnt/ramdisk/flows \
+  --output benchmarks/bwt_report.csv \
+  --peak-f1 "0.95,0.92,0.97,0.94,0.99" \
+  --mlflow-run-id "your_active_mlflow_run_id"
+```
+
+* **Lineage & Authenticity:** Generates a SHA-256 validation signature composed of the model file's hash, dataset hash, and tabular results.
+* **MLflow Tracking:** Logs BWT metrics and uploads the generated CSV report as a run artifact if `--mlflow-run-id` is provided.
+
+### B. Cross-Dataset Generalization Benchmark
+Use `tools/cross_dataset_benchmark.py` to compare FCL models on heterogeneous traffic distributions, measuring generalization performance and domain shift gaps.
+
+```bash
+python tools/cross_dataset_benchmark.py \
+  --checkpoint checkpoints/model_latest_scripted.pt \
+  --dataset-a-dir /mnt/ramdisk/flows \
+  --dataset-b-dir /mnt/ustc_tfc2016/flows \
+  --output benchmarks/generalization_report.csv \
+  --mlflow-run-id "your_active_mlflow_run_id"
+```
+
+* **Covariate Shift Simulator:** If Dataset B is not provided or files are missing, the tool simulates the USTC-TFC2016 domain distribution by dynamically applying deterministic statistical shifts to Dataset A.
+* **Metadata Attribution:** Tags the run with dataset source identities (`train_dataset_id: "CIC-IDS2017"`, `eval_dataset_id: "USTC-TFC2016"`) and uploads comparison matrices to MLflow.
+

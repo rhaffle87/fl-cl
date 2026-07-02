@@ -444,6 +444,7 @@ class CyberDefenseClient(NumPyClientClass):
             class_tp = {i: 0 for i in range(5)}
             class_fp = {i: 0 for i in range(5)}
             class_fn = {i: 0 for i in range(5)}
+            class_cm = [[0] * 5 for _ in range(5)]
 
             with torch.no_grad():
                 for X_batch, y_batch in dataloader:
@@ -454,6 +455,11 @@ class CyberDefenseClient(NumPyClientClass):
                     _, predicted = torch.max(outputs, 1)
                     correct += (predicted == y_batch).sum().item()
                     total += y_batch.size(0)
+
+                    # Populate confusion matrix counts
+                    for t_val, p_val in zip(y_batch.cpu().numpy(), predicted.cpu().numpy()):
+                        if 0 <= t_val < 5 and 0 <= p_val < 5:
+                            class_cm[int(t_val)][int(p_val)] += 1
 
                     for label in range(5):
                         label_mask = (y_batch == label)
@@ -484,10 +490,16 @@ class CyberDefenseClient(NumPyClientClass):
                     class_metrics[f"accuracy_class_{label}"] = -1.0
                     class_metrics[f"f1_class_{label}"] = -1.0
 
+            cm_metrics = {}
+            for t in range(5):
+                for p in range(5):
+                    cm_metrics[f"cm_{t}_{p}"] = float(class_cm[t][p])
+
             metrics = {
                 "accuracy": accuracy,
                 "client_id": self.client_id,
-                **class_metrics
+                **class_metrics,
+                **cm_metrics
             }
             return avg_loss, total, metrics
         except FileNotFoundError:

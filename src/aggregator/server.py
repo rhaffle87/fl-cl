@@ -77,6 +77,12 @@ def weighted_avg(metrics):
         else:
             aggregated_metrics[f1_key] = -1.0
 
+    # Aggregate class-wise confusion matrix elements
+    for t in range(5):
+        for p in range(5):
+            cm_key = f"cm_{t}_{p}"
+            aggregated_metrics[cm_key] = float(sum([m.get(cm_key, 0.0) for n, m in metrics]))
+
     return aggregated_metrics
 
 
@@ -157,12 +163,79 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                 else:
                     metrics[f"bwt_class_{i}"] = -1.0
 
+            # Calculate the overall crucial performance score (macro F1 + average BWT)
+            f1_scores = [metrics.get(f"f1_class_{i}", 0.0) for i in range(5) if metrics.get(f"f1_class_{i}", -1.0) >= 0.0]
+            bwt_deltas = [metrics.get(f"bwt_class_{i}", 0.0) for i in range(5) if metrics.get(f"bwt_class_{i}", -1.0) != -1.0]
+            
+            if f1_scores:
+                macro_f1 = sum(f1_scores) / len(f1_scores)
+                avg_bwt = sum(bwt_deltas) / len(bwt_deltas) if bwt_deltas else 0.0
+                # Combine macro F1 with BWT penalty (avg_bwt is <= 0)
+                crucial_score = max(0.0, macro_f1 + avg_bwt)
+                mlflow.log_metric("crucial_model_performance", crucial_score, step=server_round)
+                metrics["crucial_model_performance"] = crucial_score
+            else:
+                metrics["crucial_model_performance"] = 0.0
+
+            # Generate and log per-round confusion matrix (I3)
+            cm = np.zeros((5, 5))
+            has_cm = False
+            for t_idx in range(5):
+                for p_idx in range(5):
+                    val = metrics.get(f"cm_{t_idx}_{p_idx}", -1.0)
+                    if val >= 0.0:
+                        cm[t_idx, p_idx] = val
+                        has_cm = True
+
+            if has_cm:
+                try:
+                    import matplotlib
+                    matplotlib.use('Agg')
+                    import matplotlib.pyplot as plt
+
+                    fig, ax = plt.subplots(figsize=(6, 5))
+                    im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+                    ax.figure.colorbar(im, ax=ax)
+                    
+                    classes = ["Normal", "Botnet", "Exfiltration", "BruteForce", "DoS"]
+                    ax.set(xticks=np.arange(cm.shape[1]),
+                           yticks=np.arange(cm.shape[0]),
+                           xticklabels=classes, yticklabels=classes,
+                           title=f"Confusion Matrix - Round {server_round}",
+                           ylabel="Actual",
+                           xlabel="Predicted")
+                    
+                    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+                    
+                    fmt = '.0f'
+                    thresh = cm.max() / 2.
+                    for i_idx in range(cm.shape[0]):
+                        for j_idx in range(cm.shape[1]):
+                            ax.text(j_idx, i_idx, format(cm[i_idx, j_idx], fmt),
+                                    ha="center", va="center",
+                                    color="white" if cm[i_idx, j_idx] > thresh else "black")
+                    fig.tight_layout()
+
+                    # Save locally
+                    cm_local_dir = os.path.join(self.checkpoint_dir, "plots")
+                    os.makedirs(cm_local_dir, exist_ok=True)
+                    cm_path = os.path.join(cm_local_dir, f"confusion_round_{server_round}.png")
+                    fig.savefig(cm_path, dpi=150)
+                    
+                    # Log to MLflow
+                    mlflow.log_figure(fig, f"confusion_matrices/confusion_round_{server_round}.png")
+                    print(f"[server] Successfully generated and logged confusion matrix for round {server_round} to {cm_path}")
+                    plt.close(fig)
+                except Exception as cm_err:
+                    print(f"[server] Warning: Failed to generate/log confusion matrix heatmap: {cm_err}")
+
             # Record round details for history table
             record = {
                 "round": int(server_round),
                 "loss": float(loss),
                 "accuracy": float(accuracy),
-                "communication_bytes": int(comm_bytes)
+                "communication_bytes": int(comm_bytes),
+                "crucial_model_performance": float(metrics["crucial_model_performance"])
             }
             for i in range(5):
                 record[f"f1_class_{i}"] = float(metrics.get(f"f1_class_{i}", -1.0))
@@ -177,7 +250,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                 self.best_metrics = metrics.copy()
                 mlflow.log_metric("best_loss", loss, step=server_round)
                 mlflow.log_metric("best_round", server_round, step=server_round)
-                print(f"[server] ★ New best model at round {server_round} (loss={loss:.4f})")
+                print(f"[server] New best model at round {server_round} (loss={loss:.4f})")
 
         return aggregated_result
 
@@ -408,8 +481,221 @@ def sanitize_config(config_path: str) -> str:
             yaml.safe_dump(config, f, default_flow_style=False)
         return sanitized_path
     except Exception as e:
-        print(f"[server] Warning: Sanitization failed: {e}. Logging original config.")
         return config_path
+
+
+def generate_and_log_plots_and_reports(run_checkpoint_dir, strategy, args, new_version, resumed_from_version, resumed_from_run_id):
+    """Generate performance curves and evaluation report and log them as artifacts in MLflow."""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Headless mode
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        import numpy as np
+
+        history = strategy.history_records
+        if not history:
+            print("[server] No history records found. Skipping plot generation.")
+            return
+
+        df = pd.DataFrame(history)
+        rounds = df['round']
+
+        # Ensure directory exists
+        os.makedirs(run_checkpoint_dir, exist_ok=True)
+
+        # 1. Loss & Accuracy Curves
+        fig, ax1 = plt.subplots(figsize=(8, 5))
+        color = 'tab:red'
+        ax1.set_xlabel('Round')
+        ax1.set_ylabel('Loss', color=color)
+        ax1.plot(rounds, df['loss'], color=color, marker='o', label='Loss')
+        ax1.tick_params(axis='y', labelcolor=color)
+
+        ax2 = ax1.twinx()
+        color = 'tab:blue'
+        ax2.set_ylabel('Accuracy', color=color)
+        ax2.plot(rounds, df['accuracy'], color=color, marker='x', label='Accuracy')
+        ax2.tick_params(axis='y', labelcolor=color)
+
+        plt.title('Loss and Accuracy Curves')
+        fig.tight_layout()
+        loss_acc_path = os.path.join(run_checkpoint_dir, 'loss_accuracy_curves.png')
+        plt.savefig(loss_acc_path, dpi=150)
+        plt.close()
+        mlflow.log_artifact(loss_acc_path)
+        print(f"[server] Generated and logged loss/accuracy curves.")
+
+        # 2. Per-class F1 Trends
+        plt.figure(figsize=(8, 5))
+        class_labels = {0: "Normal", 1: "Botnet", 2: "DNS Exfiltration", 3: "SSH Brute Force", 4: "DoS"}
+        for i in range(5):
+            f1_col = f'f1_class_{i}'
+            if f1_col in df.columns:
+                plt.plot(rounds, df[f1_col], marker='o', label=class_labels[i])
+        plt.title('Per-Class F1 Trends')
+        plt.xlabel('Round')
+        plt.ylabel('F1 Score')
+        plt.legend(loc='lower right')
+        plt.grid(True, linestyle='--', alpha=0.6)
+        plt.tight_layout()
+        f1_path = os.path.join(run_checkpoint_dir, 'f1_class_trends.png')
+        plt.savefig(f1_path, dpi=150)
+        plt.close()
+        mlflow.log_artifact(f1_path)
+        print(f"[server] Generated and logged per-class F1 trends.")
+
+        # 3. Forgetting Curves (BWT Deltas)
+        plt.figure(figsize=(8, 5))
+        for i in range(5):
+            bwt_col = f'bwt_class_{i}'
+            if bwt_col in df.columns:
+                plt.plot(rounds, df[bwt_col], marker='s', label=f'{class_labels[i]} BWT')
+        plt.title('Backward Transfer (BWT) Forgetting Curves')
+        plt.xlabel('Round')
+        plt.ylabel('BWT Delta (F1 - Peak F1)')
+        plt.legend(loc='lower left')
+        plt.grid(True, linestyle='--', alpha=0.6)
+        plt.tight_layout()
+        bwt_path = os.path.join(run_checkpoint_dir, 'forgetting_curves.png')
+        plt.savefig(bwt_path, dpi=150)
+        plt.close()
+        mlflow.log_artifact(bwt_path)
+        print(f"[server] Generated and logged forgetting curves.")
+
+        # 4. Multi-run Comparison Chart
+        try:
+            # Retrieve search runs within the current experiment
+            active_exp = mlflow.get_experiment_by_name("FL-CL-CyberDefense")
+            exp_id = active_exp.experiment_id if active_exp else None
+            
+            past_runs = mlflow.search_runs(
+                experiment_ids=[exp_id] if exp_id else None,
+                max_results=10
+            )
+            if not past_runs.empty and 'metrics.crucial_model_performance' in past_runs.columns:
+                # Sort by start_time to show chronological order
+                past_runs = past_runs.sort_values(by='start_time')
+                past_runs['metrics.crucial_model_performance'] = past_runs['metrics.crucial_model_performance'].fillna(0.0)
+                
+                plt.figure(figsize=(9, 5))
+                # Use run names or short run IDs
+                run_names = []
+                for idx, r in past_runs.iterrows():
+                    name = r.get('run_name') or r.get('tags.mlflow.runName')
+                    if not name:
+                        name = r['run_id'][:8]
+                    else:
+                        name = f"{name[:15]} ({r['run_id'][:4]})"
+                    run_names.append(name)
+                    
+                scores = past_runs['metrics.crucial_model_performance']
+                
+                bars = plt.bar(run_names, scores, color='teal', alpha=0.8, edgecolor='black')
+                plt.title('Crucial Model Performance Comparison Across Runs')
+                plt.xlabel('Runs')
+                plt.ylabel('Crucial Performance Index (CPI)')
+                plt.xticks(rotation=30, ha='right')
+                plt.ylim(0, 1.1)
+                
+                # Highlight current active run if any
+                active_run = mlflow.active_run()
+                if active_run:
+                    current_run_id = active_run.info.run_id
+                    for idx, r_id in enumerate(past_runs['run_id']):
+                        if r_id == current_run_id:
+                            bars[idx].set_color('orange')
+                            bars[idx].set_label('Current Run')
+                
+                # Add values on top of bars
+                for bar in bars:
+                    height = bar.get_height()
+                    plt.text(bar.get_x() + bar.get_width()/2.0, height, f'{height:.3f}', ha='center', va='bottom', fontsize=8)
+                    
+                plt.grid(axis='y', linestyle='--', alpha=0.5)
+                plt.tight_layout()
+                comparison_path = os.path.join(run_checkpoint_dir, 'run_comparison_chart.png')
+                plt.savefig(comparison_path, dpi=150)
+                plt.close()
+                mlflow.log_artifact(comparison_path)
+                print(f"[server] Generated and logged cross-run comparison chart.")
+        except Exception as chart_err:
+            print(f"[server] Warning: Could not generate multi-run comparison chart: {chart_err}")
+
+        # 5. Generate post_training_report.md
+        active_run = mlflow.active_run()
+        run_id_str = active_run.info.run_id if active_run else "N/A"
+        
+        report_desc = (
+            f"# Federated Continual Learning Post-Training Report\n\n"
+            f"Generated automatically for MLflow Run: `{run_id_str}`.\n\n"
+            f"## Configuration Parameters\n"
+            f"| Parameter | Value |\n"
+            f"| :--- | :--- |\n"
+            f"| **Model Version** | `{new_version if new_version else 'N/A'}` |\n"
+            f"| **CL Strategy** | `{args.cl_strategy}` |\n"
+            f"| **MLOps Mode** | `{args.mlops_mode.upper()}` |\n"
+            f"| **Production Strategy** | `{args.production_strategy if args.mlops_mode == 'production' else 'N/A'}` |\n"
+            f"| **Total FL Rounds** | `{args.rounds}` |\n"
+            f"| **Learning Rate** | `{args.lr}` |\n"
+            f"| **Batch Size** | `{args.batch_size}` |\n"
+            f"| **Git Commit** | `{get_git_hash(args.git_commit)}` |\n"
+        )
+        if resumed_from_run_id:
+            report_desc += f"| **Resumed From Run** | `{resumed_from_run_id}` (v`{resumed_from_version}`) |\n"
+        report_desc += "\n"
+
+        report_desc += (
+            f"## Performance Summary (Best Round {strategy.best_round})\n"
+            f"| Metric | Value |\n"
+            f"| :--- | :--- |\n"
+            f"| **Global Accuracy** | `{strategy.best_accuracy*100:.4f}%` |\n"
+            f"| **Global Loss** | `{strategy.best_loss:.6f}` |\n"
+            f"| **Crucial Performance Index (CPI)** | `{strategy.best_metrics.get('crucial_model_performance', 0.0):.6f}` |\n\n"
+            f"## Class-wise Detailed Metrics\n"
+            f"| Class | Accuracy | F1-Score | Backward Transfer (BWT) |\n"
+            f"| :--- | :---: | :---: | :---: |\n"
+        )
+        for i in range(5):
+            cls_acc = strategy.best_metrics.get(f"accuracy_class_{i}", 0.0)
+            cls_f1 = strategy.best_metrics.get(f"f1_class_{i}", 0.0)
+            cls_bwt = strategy.best_metrics.get(f"bwt_class_{i}", 0.0)
+            report_desc += f"| **{class_labels[i]}** | {cls_acc*100:.2f}% | {cls_f1:.4f} | {cls_bwt:.4f} |\n"
+        report_desc += "\n"
+
+        report_desc += (
+            f"## Visualization Plots\n\n"
+            f"### Training History (Loss & Accuracy)\n"
+            f"![Loss & Accuracy](loss_accuracy_curves.png)\n\n"
+            f"### Per-Class F1 Trend\n"
+            f"![Per-Class F1](f1_class_trends.png)\n\n"
+            f"### Catastrophic Forgetting Analysis\n"
+            f"![Forgetting Curves](forgetting_curves.png)\n\n"
+            f"### Cross-Run Comparison (CPI)\n"
+            f"![Cross-Run Comparison](run_comparison_chart.png)\n"
+        )
+
+        report_path = os.path.join(run_checkpoint_dir, 'post_training_report.md')
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write(report_desc)
+        mlflow.log_artifact(report_path)
+        print(f"[server] Successfully generated and logged post_training_report.md to MLflow.")
+
+        # Write a copy under the docs/reports folder of the repo if possible
+        try:
+            # Find root of repo
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            repo_report_dir = os.path.abspath(os.path.join(current_dir, '../../docs/reports'))
+            os.makedirs(repo_report_dir, exist_ok=True)
+            repo_report_path = os.path.join(repo_report_dir, f'post_training_report_{run_id_str[:8]}.md')
+            with open(repo_report_path, 'w', encoding='utf-8') as f:
+                f.write(report_desc)
+            print(f"[server] Copied post-training report to project repo: {repo_report_path}")
+        except Exception as copy_err:
+            print(f"[server] Warning: Could not write post-training report to docs/reports: {copy_err}")
+
+    except Exception as e:
+        print(f"[server] Warning: Failed to generate and log plots or report: {e}")
 
 
 def main():
@@ -785,23 +1071,32 @@ def main():
                 client.set_registered_model_tag(model_name, "classes", "0: Normal, 1: Botnet, 2: DNS Exfiltration, 3: SSH Brute Force, 4: DoS")
                 client.set_registered_model_tag(model_name, "cl_strategy", args.cl_strategy)
                 
-                # Construct detailed model version description
+                # Construct detailed model version description in Markdown
                 version_desc = (
-                    f"MLOps Mode: {args.mlops_mode}\n"
-                    f"Production Strategy: {args.production_strategy if args.mlops_mode == 'production' else 'N/A'}\n"
-                    f"Git Commit: {get_git_hash(args.git_commit)}\n"
-                    f"FL Rounds: {args.rounds}\n"
-                    f"CL Task Sequence: {args.cl_task_sequence or 'N/A'}\n"
-                    f"CL Complexity Score: {args.cl_complexity_score:.2f}\n"
-                    f"Evaluation Metrics at Best Round {strategy.best_round}:\n"
-                    f"  - Overall Accuracy: {strategy.best_accuracy*100:.2f}%\n"
-                    f"  - Aggregated Loss: {strategy.best_loss:.4f}\n"
+                    f"### Federated Continual Learning Run (Challenger Candidate)\n\n"
+                    f"#### Configuration\n"
+                    f"| Parameter | Value |\n"
+                    f"| :--- | :--- |\n"
+                    f"| **MLOps Mode** | `{args.mlops_mode.upper()}` |\n"
+                    f"| **Production Strategy** | `{args.production_strategy if args.mlops_mode == 'production' else 'N/A'}` |\n"
+                    f"| **Git Commit** | `{get_git_hash(args.git_commit)}` |\n"
+                    f"| **FL Rounds** | `{args.rounds}` |\n"
+                    f"| **CL Task Sequence** | `{args.cl_task_sequence or 'N/A'}` |\n"
+                    f"| **CL Complexity Score** | `{args.cl_complexity_score:.2f}` |\n\n"
+                    f"#### Evaluation Metrics (Best Round {strategy.best_round})\n"
+                    f"| Metric | Value |\n"
+                    f"| :--- | :--- |\n"
+                    f"| **Overall Accuracy** | `{strategy.best_accuracy*100:.4f}%` |\n"
+                    f"| **Aggregated Loss** | `{strategy.best_loss:.6f}` |\n\n"
+                    f"#### Per-Class Accuracies\n"
+                    f"| Class | Accuracy |\n"
+                    f"| :--- | :---: |\n"
                 )
                 class_labels = {0: "Normal", 1: "Botnet", 2: "DNS Exfiltration", 3: "SSH Brute Force", 4: "DoS"}
                 for i in range(5):
                     class_acc = strategy.best_metrics.get(f"accuracy_class_{i}")
                     if class_acc is not None:
-                        version_desc += f"  - Class {i} ({class_labels[i]}): {class_acc*100:.2f}%\n"
+                        version_desc += f"| **{class_labels[i]}** | {class_acc*100:.2f}% |\n"
                 
                 client.update_model_version(
                     name=model_name,
@@ -928,7 +1223,7 @@ def main():
                         client.update_model_version(
                             name=model_name,
                             version=str(new_version),
-                            description=version_desc + "\n\n🏆 PROMOTION RATIONALE:\n" + rationale
+                            description=version_desc + "\n\nPROMOTION RATIONALE:\n" + rationale
                         )
 
                         # For backwards compatibility with older dashboard layouts, also set deprecated stage
@@ -989,6 +1284,16 @@ def main():
                     )
             except Exception as registry_err:
                 print(f"[server] Warning: Model registry metadata tagging or promotion failed: {registry_err}")
+
+            # Generate and log visual plots and Markdown post-training report
+            generate_and_log_plots_and_reports(
+                run_checkpoint_dir=run_checkpoint_dir,
+                strategy=strategy,
+                args=args,
+                new_version=new_version,
+                resumed_from_version=resumed_from_version,
+                resumed_from_run_id=resumed_from_run_id
+            )
 
             # Write model latest metadata json
             meta_data = {
