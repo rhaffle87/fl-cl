@@ -8,10 +8,10 @@
 
 The testbed is designed to investigate **Hybrid Federated-Continual Learning (FL-CL)** for **Collaborative Cyber Defense** on **Encrypted Networks**, deployed on **Proxmox Virtual Environment (PVE)**. The architecture addresses three converging challenges:
 
-*   **Encrypted Traffic Analysis (ETA):** Since payloads are encrypted (TLS 1.3, HTTPS, SSH, VPN), detection models cannot use Deep Packet Inspection (DPI). Instead, they extract metadata—cipher suites, packet sizes, inter-arrival times, TLS handshakes (JA3/JA4 fingerprints), and flow statistics—to classify traffic types. *(Paper: Chapter 2, Section 2.1)*
-*   **Federated Learning (FL):** Multiple decentralized organizations train a shared threat detection model collaboratively without sharing raw traffic logs, preserving privacy and regulatory compliance (GDPR/HIPAA). Only model weight updates traverse the network. *(Paper: Chapter 2, Section 2.2)*
-*   **Continual Learning (CL):** Local models continuously adapt to new, evolving attack signatures over a streaming data pipeline without forgetting previously learned attacks (**catastrophic forgetting**). Elastic Weight Consolidation (EWC) penalizes changes to parameters important for prior tasks. *(Paper: Chapter 2, Section 2.3)*
-*   **Hybrid FL-CL Integration:** Defender nodes stream local network traffic and train their models continually using CL algorithms while periodically engaging in Federated aggregation rounds to synchronize global threat intelligence. CL prevents forgetting locally; FL prevents blindness globally. *(Paper: Chapter 2, Section 2.4)*
+* **Encrypted Traffic Analysis (ETA):** Since payloads are encrypted (TLS 1.3, HTTPS, SSH, VPN), detection models cannot use Deep Packet Inspection (DPI). Instead, they extract metadata—cipher suites, packet sizes, inter-arrival times, TLS handshakes (JA3/JA4 fingerprints), and flow statistics—to classify traffic types. *(Paper: Chapter 2, Section 2.1)*
+* **Federated Learning (FL):** Multiple decentralized organizations train a shared threat detection model collaboratively without sharing raw traffic logs, preserving privacy and regulatory compliance (GDPR/HIPAA). Only model weight updates traverse the network. *(Paper: Chapter 2, Section 2.2)*
+* **Continual Learning (CL):** Local models continuously adapt to new, evolving attack signatures over a streaming data pipeline without forgetting previously learned attacks (**catastrophic forgetting**). Elastic Weight Consolidation (EWC) penalizes changes to parameters important for prior tasks. *(Paper: Chapter 2, Section 2.3)*
+* **Hybrid FL-CL Integration:** Defender nodes stream local network traffic and train their models continually using CL algorithms while periodically engaging in Federated aggregation rounds to synchronize global threat intelligence. CL prevents forgetting locally; FL prevents blindness globally. *(Paper: Chapter 2, Section 2.4)*
 
 ---
 
@@ -132,6 +132,7 @@ graph LR
 `NFStream` is a high-performance, Python-based network analysis library that aggregates raw packets into bidirectional flows and automatically extracts TLS handshake details (JA3 fingerprints) and statistical flow metrics.
 
 **Install on Defender Nodes:**
+
 ```bash
 pip install nfstream pandas scikit-learn
 ```
@@ -175,10 +176,10 @@ for flow in streamer:
 
 These features are extracted without decryption, preserving end-to-end encryption guarantees:
 
-*   **JA3/JA4 Client Fingerprint:** Hashes of the TLS Client Hello parameters (version, cipher suites, extensions, elliptic curves). Identifies specific malware clients (Metasploit beacons, Cobalt Strike implants) regardless of destination IP or domain rotation.
-*   **JA3S/JA4S Server Fingerprint:** Hashes of the TLS Server Hello. Combined with JA3, creates a bidirectional handshake signature.
-*   **SPLT (Sequence of Packet Lengths and Times):** Ordered list of the first *N* packet sizes and inter-arrival times, annotated with direction. SSH brute-force produces regular small-packet bursts; file downloads show large unidirectional payloads.
-*   **Flow Entropy:** Shannon entropy of payload byte distributions: $H(X) = -\sum P(x_i) \log_2 P(x_i)$. Standard HTTPS shows moderate entropy; encrypted tunneling or exfiltration tends toward maximal entropy.
+* **JA3/JA4 Client Fingerprint:** Hashes of the TLS Client Hello parameters (version, cipher suites, extensions, elliptic curves). Identifies specific malware clients (Metasploit beacons, Cobalt Strike implants) regardless of destination IP or domain rotation.
+* **JA3S/JA4S Server Fingerprint:** Hashes of the TLS Server Hello. Combined with JA3, creates a bidirectional handshake signature.
+* **SPLT (Sequence of Packet Lengths and Times):** Ordered list of the first *N* packet sizes and inter-arrival times, annotated with direction. SSH brute-force produces regular small-packet bursts; file downloads show large unidirectional payloads.
+* **Flow Entropy:** Shannon entropy of payload byte distributions: $H(X) = -\sum P(x_i) \log_2 P(x_i)$. Standard HTTPS shows moderate entropy; encrypted tunneling or exfiltration tends toward maximal entropy.
 
 ---
 
@@ -214,36 +215,43 @@ graph TD
 
 ### 5.1 PyTorch Neural Network Architectures (`model.py`)
 
-The repository supports multiple model architectures for network threat classification on 32 scaled ETA features (yielding 5 output classes: Normal, Botnet, Exfiltration, BruteForce, DoS). These are instantiated dynamically via the `get_model` factory.
+The repository supports multiple model architectures for network threat classification on 32 scaled ETA features (yielding 5 output classes: Normal, Botnet, Exfiltration, BruteForce, DoS). These are instantiated dynamically via the `get_model` factory, supporting tunable hyperparameters (hidden dimensions, channels, heads, dropout rates) passed as keyword arguments.
 
 #### 1. Multi-Layer Perceptron (`mlp` / `CyberDefenseNet`)
+
 A 3-layer MLP that acts as the baseline backbone.
+
 ```python
 class CyberDefenseNet(nn.Module):
-    def __init__(self, input_dim=32, num_classes=5):
+    def __init__(self, input_dim=32, num_classes=5, hidden_dim1=64, hidden_dim2=32, dropout=0.2):
         super().__init__()
         self.fc = nn.Sequential(
-            nn.Linear(input_dim, 64), nn.ReLU(), nn.Dropout(0.2),
-            nn.Linear(64, 32), nn.ReLU(),
-            nn.Linear(32, num_classes)
+            nn.Linear(input_dim, hidden_dim1), nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(hidden_dim1, hidden_dim2), nn.ReLU(),
+            nn.Linear(hidden_dim2, num_classes)
         )
     def forward(self, x):
         return self.fc(x)
 ```
 
 #### 2. 1D Convolutional Neural Network (`cnn` / `CyberDefenseCNN`)
-Treats the 32 input dimensions as a sequence, reshaping to `(batch, 1, 32)`.
+
+Treats the 32 input dimensions as a sequence, reshaping to `(batch, 1, 32)`. The fully connected layer input size is dynamically resolved to prevent mismatch errors.
+
 ```python
 class CyberDefenseCNN(nn.Module):
-    def __init__(self, input_dim=32, num_classes=5):
+    def __init__(self, input_dim=32, num_classes=5, conv_channels1=16, conv_channels2=32, kernel_size=3, fc_dim=64, dropout=0.2):
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(1, 16, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool1d(2),
-            nn.Conv1d(16, 32, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool1d(2)
+            nn.Conv1d(1, conv_channels1, kernel_size=kernel_size, padding=kernel_size//2), nn.ReLU(), nn.MaxPool1d(2),
+            nn.Conv1d(conv_channels1, conv_channels2, kernel_size=kernel_size, padding=kernel_size//2), nn.ReLU(), nn.MaxPool1d(2)
         )
+        with torch.no_grad():
+            dummy_out = self.conv(torch.zeros(1, 1, input_dim))
+            self.fc_input_dim = dummy_out.numel()
         self.fc = nn.Sequential(
-            nn.Linear(32 * 8, 64), nn.ReLU(), nn.Dropout(0.2),
-            nn.Linear(64, num_classes)
+            nn.Linear(self.fc_input_dim, fc_dim), nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(fc_dim, num_classes)
         )
     def forward(self, x):
         x = x.unsqueeze(1)
@@ -253,21 +261,24 @@ class CyberDefenseCNN(nn.Module):
 ```
 
 #### 3. Transformer Classifier (`transformer` / `CyberDefenseTransformer`)
-Reshapes the input to 8 tokens of dimension 4, applies linear projection, positional encoding, and self-attention.
+
+Reshapes the input to `token_len` tokens of dimension `token_dim`, applies linear projection, positional encoding, and self-attention.
+
 ```python
 class CyberDefenseTransformer(nn.Module):
-    def __init__(self, input_dim=32, num_classes=5):
+    def __init__(self, input_dim=32, num_classes=5, token_len=8, token_dim=4, d_model=32, nhead=4, dim_feedforward=64, num_layers=2, fc_dim=32, dropout=0.1):
         super().__init__()
-        self.token_len, self.token_dim, self.d_model = 8, 4, 32
+        assert token_len * token_dim == input_dim
+        self.token_len, self.token_dim, self.d_model = token_len, token_dim, d_model
         self.input_projection = nn.Linear(self.token_dim, self.d_model)
         self.pos_encoder = nn.Parameter(torch.randn(1, self.token_len, self.d_model))
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=self.d_model, nhead=4, dim_feedforward=64, dropout=0.1, batch_first=True
+            d_model=self.d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout, batch_first=True
         )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=2)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.fc = nn.Sequential(
-            nn.Linear(self.d_model, 32), nn.ReLU(), nn.Dropout(0.2),
-            nn.Linear(32, num_classes)
+            nn.Linear(self.d_model, fc_dim), nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(fc_dim, num_classes)
         )
     def forward(self, x):
         x = x.view(x.size(0), self.token_len, self.token_dim)
@@ -277,12 +288,13 @@ class CyberDefenseTransformer(nn.Module):
 ```
 
 #### 4. Model Factory
+
 ```python
-def get_model(model_type="mlp", input_dim=32, num_classes=5):
+def get_model(model_type="mlp", input_dim=32, num_classes=5, **kwargs):
     m_type = model_type.lower()
-    if m_type == "mlp": return CyberDefenseNet(input_dim, num_classes)
-    elif m_type == "cnn": return CyberDefenseCNN(input_dim, num_classes)
-    elif m_type == "transformer": return CyberDefenseTransformer(input_dim, num_classes)
+    if m_type == "mlp": return CyberDefenseNet(input_dim, num_classes, **kwargs)
+    elif m_type == "cnn": return CyberDefenseCNN(input_dim, num_classes, **kwargs)
+    elif m_type == "transformer": return CyberDefenseTransformer(input_dim, num_classes, **kwargs)
     else: raise ValueError(f"Unknown model type: {model_type}")
 ```
 
@@ -398,19 +410,18 @@ graph LR
 2. **CPU-Bound Instruct Inference**: The report engine interfaces with a local Ollama endpoint secured by an Nginx reverse proxy. It queries the instruct-capable `llama3.1:8b` model using a highly structured prompt to produce an executive summary and actionable recommendations. It configures controlled thread concurrency (`num_thread: 4`) and a strict limit on generated tokens (`num_predict: 512`) to prevent timeouts and enforce high-quality, structured output.
 3. **Artifact Registration**: The engine appends the generated security threat report directly to the run's `run_summary.md` and uploads it to the active MLflow run tracking database as an artifact.
 
----
-
-
 ## 6. Setup Workflow (Step-by-Step)
 
 This section provides the generic execution sequence. For cluster-specific provisioning commands (including exact `qm create` / `pct create` flags, hookscript deployment, and software installation), see [03_workarounds.md](03_workarounds.md) Section 4.
 
 ### Phase 1: Proxmox Virtual Networks Setup
+
 1. Log into your Proxmox server console.
 2. Ensure `vmbr1` is configured as a VLAN-aware bridge on all nodes. *(See [03_workarounds.md](03_workarounds.md) Section 1.C.)*
 3. Apply the standardized `/etc/hosts` template. *(See [03_workarounds.md](03_workarounds.md) Section 1.A.)*
 
 ### Phase 2: VM & Container Provisioning
+
 1. Deploy LXC 300 (`fl-aggregator`) on node `pve` with dual NICs (`vmbr0` + `vmbr1` Flat L2 Network).
 2. Deploy VM 310 (`defender-a`) on node `its` with dual NICs (`vmbr0` + `vmbr1` Flat L2 Network).
 3. Deploy VM 320 (`defender-b`) on node `node2` with dual NICs (`vmbr0` + `vmbr1` Flat L2 Network).
@@ -418,6 +429,7 @@ This section provides the generic execution sequence. For cluster-specific provi
 5. Bind hookscripts to target VMs for automatic port mirroring. *(See [03_workarounds.md](03_workarounds.md) Section 4, Phase 3.)*
 
 ### Phase 3: Traffic Generation & Data Collection
+
 1. **Benign Background**: On target VMs, run headless browser scripts (Selenium) simulating human HTTPS browsing. *(See [01_prerequisites.md](01_prerequisites.md) Section 4.)*
 2. **Benchmark Replay**: On the traffic generator VM, replay labeled PCAPs (CIC-IDS2017, USTC-TFC2016) using `tcpreplay`. *(See [01_prerequisites.md](01_prerequisites.md) Section 3.)*
 3. **Live Attacks**: On the traffic generator VM, execute coordinated attack campaigns:
@@ -427,35 +439,41 @@ This section provides the generic execution sequence. For cluster-specific provi
 4. Keep the `extractor.py` script running on defender nodes to capture flows into `/mnt/ramdisk/flows/`, labeling them based on active attack scripts.
 
 ### Phase 4: Model Execution and Verification
+
 1. Start the Flower aggregator server on LXC 300:
+
    ```bash
    source /opt/flower-env/bin/activate && python3 server.py
    ```
+
 2. Start the NFStream capture on each defender VM:
+
    ```bash
    source ~/fl-cl-env/bin/activate
    python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/
    ```
+
 3. Start FL-CL clients on each defender VM:
+
    ```bash
    python3 client.py --server 10.10.130.10:8080 --client-id A
    ```
+
 4. Monitor training rounds via MLflow/TensorBoard. *(See [01_prerequisites.md](01_prerequisites.md) Section 5.B.)*
 
 ## 7. Evaluation Metrics & Benchmarking Suite
 
 The hybrid FL-CL system's performance, stability, and resistance to catastrophic forgetting are validated using a three-tier benchmarking suite:
 
-1. **Per-Round Confusion Matrix Tracking (I3):** 
+1. **Per-Round Confusion Matrix Tracking (I3):**
    * **Mechanism:** Defender clients compute local 5x5 confusion matrices on their validation sets and return flattened counts (`cm_t_p`) to the aggregator.
    * **Aggregation & Visualization:** The aggregator server sums the counts in `weighted_avg` and automatically plots a styled, headless `matplotlib` heatmap logged under `confusion_matrices/confusion_round_{round}.png` in MLflow for every round.
 
-2. **Standardized BWT Evaluation Suite & Cryptographic Lineage (I1):** 
+2. **Standardized BWT Evaluation Suite & Cryptographic Lineage (I1):**
    * **Tool:** `tools/bwt_eval_suite.py` evaluates candidate TorchScript checkpoints (`.pt`) against ground-truth validation datasets.
    * **Metrics:** Computes overall accuracy, macro/class-wise F1, and Backward Transfer (BWT) delta profiles relative to historical peak performance.
    * **Governance:** Signs the results cryptographically with a SHA-256 signature chain combining the model binary hash, the validation dataset flow hash, and the evaluation performance stats, exporting them as a signed CSV to MLflow.
 
-3. **Cross-Dataset Generalization Benchmark (I2):** 
+3. **Cross-Dataset Generalization Benchmark (I2):**
    * **Tool:** `tools/cross_dataset_benchmark.py` measures model transferability and generalization gaps across heterogeneous flow domains (e.g., training on `CIC-IDS2017` and evaluating on `USTC-TFC2016`).
    * **Covariate Shift Simulator:** Uses a mathematical feature-shift engine (offset and scaling adjustments) to simulate the distribution of the secondary dataset if local raw pcap directories are unavailable, outputting comparative matrices and uploading generalization logs to MLflow.
-

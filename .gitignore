@@ -54,5 +54,9 @@ scratch/
 # Exported plots and reports
 exports/
 
-
-
+# Python test, typing & coverage caches
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/

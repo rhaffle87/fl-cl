@@ -1144,11 +1144,11 @@
             </div>
           </div>
           <div class="body">
-            <p>CyberDefenseNet is a 3-layer MLP on 32 flat features. We have integrated alternative 1D-CNN and Transformer architectures in <code>src/defender/model.py</code>, enabling direct comparative analysis on spatial/temporal signatures.</p>
+            <p>CyberDefenseNet is a 3-layer MLP on 32 flat features. We have integrated alternative 1D-CNN and Transformer architectures in <code>src/defender/model.py</code>, supporting tunable hyperparameters (hidden layers, convolutional channels, attention heads, projection and feedforward dimensions, and dropout rates) to enable automated grid searches and comparative analysis on spatial/temporal signatures.</p>
             <ul>
-              <li><strong>MLP:</strong> 3-layer feedforward neural network.</li>
-              <li><strong>1D-CNN (CyberDefenseCNN):</strong> Extracts spatial patterns from sequence-reshaped flows.</li>
-              <li><strong>Transformer (CyberDefenseTransformer):</strong> Employs self-attention over partitioned feature tokens.</li>
+              <li><strong>MLP:</strong> Parameterized 3-layer feedforward neural network.</li>
+              <li><strong>1D-CNN (CyberDefenseCNN):</strong> Extracts spatial patterns from sequence-reshaped flows with dynamic fully connected dimension mapping.</li>
+              <li><strong>Transformer (CyberDefenseTransformer):</strong> Employs self-attention over partitioned, projected feature tokens with tunable encoder heads and layer sizes.</li>
               <li><strong>Verification:</strong> Validated locally via <code>scratch/test_local_train.py</code> with 3-epoch convergence runs on simulated multi-class traffic.</li>
             </ul>
             <button class="ask-btn" onclick="event.stopPropagation(); executePrompt('Help me implement a 1D-CNN alternative to CyberDefenseNet for the fl-cl ETA feature pipeline')">Help me implement 1D-CNN &nearr;</button>
