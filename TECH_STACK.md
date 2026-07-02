@@ -9,7 +9,7 @@ Complete technology inventory organized by system layer. Each entry specifies th
 These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 
 | Technology | Version | Purpose | Install / Enable |
-|:---|:---|:---|:---|
+| :--- | :--- | :--- | :--- |
 | **Proxmox VE** | 8.x | Type-1 hypervisor for VM/CT management | Pre-installed on bare metal |
 | **Linux Bridge (`vmbr0`, `vmbr1`)** | Kernel built-in | Virtual network switching between VMs | Configured in `/etc/network/interfaces` |
 | **Flat L2 Subnetting** | Kernel module / IP Routing | Logical subnets on flat L2 vmbr1 to bypass switch VLAN constraints | Subnet mask /16 (`10.10.0.0/16`) on vmbr1 |
@@ -26,7 +26,7 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 ## Layer 2: Guest Operating Systems
 
 | VM/CT | OS | Version | Purpose |
-|:---|:---|:---|:---|
+| :--- | :--- | :--- | :--- |
 | LXC 300 (`fl-aggregator`) | Ubuntu Server | 24.04 LTS | Lightweight container for FL server + MLflow |
 | VM 310 (`defender-a`) | Ubuntu Server | 24.04 LTS | Full VM for GPU passthrough + ML training |
 | VM 320 (`defender-b`) | Ubuntu Server | 24.04 LTS | Full VM for parallel defender |
@@ -39,7 +39,7 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 ## Layer 3: Networking
 
 | Technology | Purpose | Where |
-|:---|:---|:---|
+| :--- | :--- | :--- |
 | **Subnet Zone A** (10.10.110.0/16) | Organization A logical subnet | VM 310, VM 311 |
 | **Subnet Zone B** (10.10.120.0/16) | Organization B logical subnet | VM 320, VM 321 |
 | **Subnet Zone FL** (10.10.130.0/16) | FL Aggregation logical subnet | LXC 300 |
@@ -56,7 +56,7 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 These packages run inside VM 310 and VM 320.
 
 | Package | Version | Purpose | Install |
-|:---|:---|:---|:---|
+| :--- | :--- | :--- | :--- |
 | **Python** | 3.11+ | Runtime | `apt install python3 python3-venv` |
 | **PyTorch** | 2.x | Deep learning framework (CyberDefenseNet MLP) | `pip install torch --index-url .../cpu` |
 | **Avalanche** | 0.5+ | Continual Learning library (EWC strategy) | `pip install avalanche-lib` |
@@ -75,7 +75,7 @@ These packages run inside VM 310 and VM 320.
 ## Layer 5: Python Aggregator Stack (LXC 300)
 
 | Package | Version | Purpose | Install |
-|:---|:---|:---|:---|
+| :--- | :--- | :--- | :--- |
 | **Python** | 3.11+ | Runtime | `apt install python3 python3-venv` |
 | **Flower (flwr)** | 1.x | Federated Learning server (FedAvg) | `pip install flwr` |
 | **MLflow** | 3.x | Experiment tracking, metric logging, LoggedModel entities | `pip install mlflow` |
@@ -86,7 +86,7 @@ These packages run inside VM 310 and VM 320.
 ## Layer 6: Traffic Generation Stack (VM 400 — Kali Linux)
 
 | Tool | Purpose | Install |
-|:---|:---|:---|
+| :--- | :--- | :--- |
 | **Metasploit Framework** | C2 beaconing, reverse HTTPS shells | Pre-installed on Kali |
 | **Hydra** | SSH/RDP brute-force attacks | `apt install hydra` |
 | **hping3** | TCP/UDP flood, DDoS simulation | `apt install hping3` |
@@ -103,7 +103,7 @@ These packages run inside VM 310 and VM 320.
 ## Layer 7: Benchmark Datasets
 
 | Dataset | Content | Use Case |
-|:---|:---|:---|
+| :--- | :--- | :--- |
 | **USTC-TFC2016** | 10 malware + 10 benign encrypted traffic classes | Multi-class baseline training |
 | **CIC-IDS2017** | Multi-day captures with DoS, DDoS, brute force labels | CL task sequencing across temporal sessions |
 | **CIC-IDS2018** | Extended version with additional attack scenarios | Supplementary CL tasks |
@@ -114,7 +114,7 @@ These packages run inside VM 310 and VM 320.
 ## Layer 8: I/O & Storage Optimization
 
 | Technology | Purpose | Where |
-|:---|:---|:---|
+| :--- | :--- | :--- |
 | **tmpfs RAM Disk** (4 GB) | Buffer NFStream flow writes to avoid RAID I/O contention | Inside VM 310, VM 320 at `/mnt/ramdisk` |
 | **LVM-Thin Snapshots** | Fast VM checkpoint/rollback for experiment reproducibility | PVE host storage pool (`local-lvm`) |
 | **CSV** | Tabular storage format for batched flow records | `/mnt/ramdisk/flows/` → per-batch CSV files |
@@ -124,20 +124,19 @@ These packages run inside VM 310 and VM 320.
 ## Layer 9: MLOps & Observability
 
 | Tool | Purpose | Where | Port |
-|:---|:---|:---|:---|
+| :--- | :--- | :--- | :--- |
 | **MLflow** | Centralized experiment tracking (loss, accuracy, BWT per round) | LXC 300 | 5000 |
 | **TensorBoard** | Weight distributions, gradient norms, activation statistics | VM 310, VM 320 | 6006 |
 | **Weights & Biases** | Cloud-hosted alternative for team collaboration | Any (cloud) | — |
 | **Ollama** | Local LLM inference engine for threat reports (`llama3.1:8b`) | LXC / Tailscale Node | 11435 |
 | **Nginx Reverse Proxy** | Dual-key authenticated endpoint proxying local Ollama APIs | Tailscale Node | 443 / 80 |
 
-
 ---
 
 ## Optional: GPU Acceleration
 
 | Technology | Purpose | Install |
-|:---|:---|:---|
+| :--- | :--- | :--- |
 | **NVIDIA Driver** | GPU compute on host | `apt install nvidia-driver` on PVE host |
 | **vfio / IOMMU** | PCIe GPU passthrough to VMs | Enable in BIOS + kernel params |
 | **NVIDIA CUDA Toolkit** | GPU compute inside VM | Install inside defender VM |

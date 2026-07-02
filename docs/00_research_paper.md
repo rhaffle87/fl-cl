@@ -6,7 +6,7 @@
 
 ---
 
-### Abstract
+## Abstract
 
 The convergence of pervasive end-to-end encryption (TLS 1.3, HTTPS, DoH) and strict data-privacy regulation (GDPR, HIPAA) creates a dual constraint for network security: deep packet inspection is no longer viable, and raw traffic logs cannot be shared across organizational boundaries. Simultaneously, the threat landscape is non-stationary—novel attack vectors emerge continuously, causing static machine-learning classifiers to degrade through catastrophic forgetting. This paper addresses these converging challenges through a unified **Hybrid Federated-Continual Learning (FL-CL)** framework. Federated Learning enables multiple organizations to collaboratively train a shared threat-detection model without exchanging raw data; Continual Learning ensures each local model adapts to new attack streams without losing knowledge of previously encountered threats.
 
@@ -26,8 +26,8 @@ Even when an organization develops an effective ETA classifier, two structural p
 
 The Hybrid FL-CL framework addresses both problems simultaneously:
 
-*   **Federated Learning (FL)** enables cross-organizational model collaboration by exchanging only model weight updates—never raw data—through a central aggregation server.
-*   **Continual Learning (CL)** equips each local node with regularization strategies (specifically Elastic Weight Consolidation) that preserve knowledge of older threats while integrating new attack streams.
+* **Federated Learning (FL)** enables cross-organizational model collaboration by exchanging only model weight updates—never raw data—through a central aggregation server.
+* **Continual Learning (CL)** equips each local node with regularization strategies (specifically Elastic Weight Consolidation) that preserve knowledge of older threats while integrating new attack streams.
 
 The combination produces a system where each defender node continuously adapts to its local threat environment through CL, while periodically synchronizing with a global model through FL. The result is a privacy-preserving, forgetting-resistant, collaboratively intelligent cyber defense network.
 
@@ -35,10 +35,10 @@ The combination produces a system where each defender node continuously adapts t
 
 This paper makes four concrete contributions:
 
-1.  **Integrated FL-CL Architecture**: A systematic design unifying Flower (FL), Avalanche (CL), and NFStream (ETA) into a single coherent pipeline from packet capture to federated aggregation.
-2.  **Heterogeneous Proxmox Testbed**: A fully specified virtual lab deployed across a 3-node PVE cluster with documented workarounds for real-world infrastructure inconsistencies (VLAN mismatch, DNS conflicts, LACP asymmetry).
-3.  **Hookscript-Based Port Mirroring**: A Proxmox lifecycle-aware solution to the problem of ephemeral TAP interfaces that would otherwise break traffic capture on every VM reboot.
-4.  **End-to-End Reproducibility**: Complete provisioning commands, implementation code, traffic generation strategy, and an MLOps evaluation methodology sufficient to reproduce the testbed from bare metal.
+1. **Integrated FL-CL Architecture**: A systematic design unifying Flower (FL), Avalanche (CL), and NFStream (ETA) into a single coherent pipeline from packet capture to federated aggregation.
+2. **Heterogeneous Proxmox Testbed**: A fully specified virtual lab deployed across a 3-node PVE cluster with documented workarounds for real-world infrastructure inconsistencies (VLAN mismatch, DNS conflicts, LACP asymmetry).
+3. **Hookscript-Based Port Mirroring**: A Proxmox lifecycle-aware solution to the problem of ephemeral TAP interfaces that would otherwise break traffic capture on every VM reboot.
+4. **End-to-End Reproducibility**: Complete provisioning commands, implementation code, traffic generation strategy, and an MLOps evaluation methodology sufficient to reproduce the testbed from bare metal.
 
 ### 1.4 Paper Organization
 
@@ -54,10 +54,10 @@ This chapter establishes the three pillars—ETA, FL, and CL—and motivates the
 
 Since TLS 1.3 renders payload content opaque, ETA extracts discriminative features from the observable metadata of encrypted flows:
 
-*   **JA3/JA4 Fingerprints**: Deterministic hashes of the TLS Client Hello parameters (protocol version, cipher suites, extensions, elliptic curves). These fingerprints uniquely identify client applications—including specific malware strains and C2 frameworks like Metasploit or Cobalt Strike—regardless of destination IP or domain rotation.
-*   **JA3S/JA4S Server Fingerprints**: The server-side counterpart, hashing the Server Hello response. Combined with JA3, this creates a bidirectional handshake signature.
-*   **SPLT (Sequence of Packet Lengths and Times)**: An ordered list of the first *N* packet sizes and their inter-arrival times, annotated with direction (client→server or server→client). SPLT patterns are highly predictive: an SSH brute-force attempt produces regular, small-packet bursts, while a file download shows large unidirectional payloads.
-*   **Flow Entropy**: The Shannon entropy $H(X) = -\sum_{i=1}^{n} P(x_i) \log_2 P(x_i)$ computed over payload byte distributions. Standard HTTPS traffic exhibits moderate entropy; encrypted tunneling or data exfiltration tends toward maximal entropy, providing a statistical discriminator.
+* **JA3/JA4 Fingerprints**: Deterministic hashes of the TLS Client Hello parameters (protocol version, cipher suites, extensions, elliptic curves). These fingerprints uniquely identify client applications—including specific malware strains and C2 frameworks like Metasploit or Cobalt Strike—regardless of destination IP or domain rotation.
+* **JA3S/JA4S Server Fingerprints**: The server-side counterpart, hashing the Server Hello response. Combined with JA3, this creates a bidirectional handshake signature.
+* **SPLT (Sequence of Packet Lengths and Times)**: An ordered list of the first *N* packet sizes and their inter-arrival times, annotated with direction (client→server or server→client). SPLT patterns are highly predictive: an SSH brute-force attempt produces regular, small-packet bursts, while a file download shows large unidirectional payloads.
+* **Flow Entropy**: The Shannon entropy $H(X) = -\sum_{i=1}^{n} P(x_i) \log_2 P(x_i)$ computed over payload byte distributions. Standard HTTPS traffic exhibits moderate entropy; encrypted tunneling or data exfiltration tends toward maximal entropy, providing a statistical discriminator.
 
 These features are extracted without decryption, preserving the end-to-end encryption guarantee while enabling classification.
 
@@ -65,9 +65,9 @@ These features are extracted without decryption, preserving the end-to-end encry
 
 Federated Learning decouples model training from data centralization. In each aggregation round:
 
-1.  The central server distributes the current global model weights $\theta_G$ to all participating client nodes.
-2.  Each client $k$ trains on its local dataset $D_k$, producing updated local weights $\theta_k$.
-3.  The server aggregates client weights using **Federated Averaging (FedAvg)**: $\theta_G^{t+1} = \sum_{k=1}^{K} \frac{n_k}{n} \theta_k^{t+1}$, where $n_k / n$ is the fraction of total training examples contributed by client $k$.
+1. The central server distributes the current global model weights $\theta_G$ to all participating client nodes.
+2. Each client $k$ trains on its local dataset $D_k$, producing updated local weights $\theta_k$.
+3. The server aggregates client weights using **Federated Averaging (FedAvg)**: $\theta_G^{t+1} = \sum_{k=1}^{K} \frac{n_k}{n} \theta_k^{t+1}$, where $n_k / n$ is the fraction of total training examples contributed by client $k$.
 
 Raw network captures never leave their originating organization. Only model parameters—which cannot be trivially reverse-engineered into individual flow records—traverse the network.
 
@@ -118,22 +118,23 @@ Translating the theoretical framework into a working research environment requir
 
 The testbed demands sufficient compute, memory, and I/O bandwidth to run simultaneous traffic capture, feature extraction, and deep learning training across multiple VMs:
 
-*   **CPU**: Modern multi-core processors (e.g., Intel Xeon or AMD EPYC) to provide the 26+ vCPUs required across all VMs.
-*   **GPU Passthrough (Recommended)**: Deep learning models—particularly 1D-CNNs or LSTMs for advanced ETA—train significantly faster on GPUs. An NVIDIA RTX 3060/4060 or Tesla T4/P4 can be passed through to defender VMs via PCIe passthrough using `vfio` drivers on the PVE host.
-*   **RAM**: Minimum 32 GB per node; recommended 64 GB+. PyTorch datasets loaded in-memory for training require at least 16 GB per defender VM.
-*   **Storage**: NVMe SSDs or SSD RAID arrays exclusively. Continuous flow extraction and model checkpointing create sustained I/O load that spinning disks cannot service without becoming a system-wide bottleneck.
+* **CPU**: Modern multi-core processors (e.g., Intel Xeon or AMD EPYC) to provide the 26+ vCPUs required across all VMs.
+* **GPU Passthrough (Recommended)**: Deep learning models—particularly 1D-CNNs or LSTMs for advanced ETA—train significantly faster on GPUs. An NVIDIA RTX 3060/4060 or Tesla T4/P4 can be passed through to defender VMs via PCIe passthrough using `vfio` drivers on the PVE host.
+* **RAM**: Minimum 32 GB per node; recommended 64 GB+. PyTorch datasets loaded in-memory for training require at least 16 GB per defender VM.
+* **Storage**: NVMe SSDs or SSD RAID arrays exclusively. Continuous flow extraction and model checkpointing create sustained I/O load that spinning disks cannot service without becoming a system-wide bottleneck.
 
 For labs that extend beyond synthetic virtual traffic to defend real physical network segments:
 
-*   **Managed Switch**: An L2-managed switch supporting **802.1Q VLANs** and **SPAN port mirroring** (e.g., Ubiquiti UniFi, TP-Link JetStream, Cisco Catalyst) to mirror physical network traffic into the Proxmox host.
-*   **Multi-Port NIC**: An Intel-based quad-port Gigabit card (e.g., Intel i350-T4) providing dedicated physical interfaces for each VLAN.
-*   **Hardware TAP (Optional)**: An inline network TAP (e.g., Throwing Star LAN Tap) for passive capture between router and modem without switch-level configuration.
+* **Managed Switch**: An L2-managed switch supporting **802.1Q VLANs** and **SPAN port mirroring** (e.g., Ubiquiti UniFi, TP-Link JetStream, Cisco Catalyst) to mirror physical network traffic into the Proxmox host.
+* **Multi-Port NIC**: An Intel-based quad-port Gigabit card (e.g., Intel i350-T4) providing dedicated physical interfaces for each VLAN.
+* **Hardware TAP (Optional)**: An inline network TAP (e.g., Throwing Star LAN Tap) for passive capture between router and modem without switch-level configuration.
 
 ### 3.2 Cluster Topology and Network Audit
 
 The testbed is deployed across a heterogeneous 3-node Proxmox VE cluster. Before any VMs can be provisioned, three infrastructure inconsistencies must be reconciled to prevent cluster instability:
 
 #### A. Hostname Resolution Conflict
+
 Node `pve` resolves cluster members via management IPs on `192.168.x.x`, while nodes `its` and `node2` resolve via the secondary network `10.10.10.x`. This mismatch causes Corosync—which requires consistent, low-latency routing—to lose quorum or enter split-brain states.
 
 **Resolution**: Standardize `/etc/hosts` across all three hypervisors. Route all cluster-internal and FL-CL training traffic over the secondary network (`10.10.10.x`), which benefits from physical LACP bonds on `its` and `node2`. Reserve `vmbr0` management IPs for out-of-band access only:
@@ -153,11 +154,13 @@ Node `pve` resolves cluster members via management IPs on `192.168.x.x`, while n
 ```
 
 #### B. Split DNS for `its.ac.id`
+
 Node `its` maps `its.ac.id` to `10.3.132.7`; node `node2` maps it to `192.168.18.199`. VMs querying this domain for package mirrors or dataset hosting will experience host-dependent routing failures.
 
 **Resolution**: Remove all static `its.ac.id` entries from host files. Deploy a centralized DNS forwarder (e.g., `dnsmasq` on the aggregator LXC) to resolve this domain uniformly across all VMs.
 
 #### C. VLAN Mismatch & Switch Restrictions
+
 Initially, the research architecture isolated nodes using tagged VLANs (110, 120, 130, 140) on `vmbr1`. However, Node `node2` was configured with a VLAN-aware `vmbr1` bridge, whereas `its` and `pve` were not. Crucially, the physical unmanaged switch connecting the three Proxmox hosts does not support 802.1Q VLAN trunking, causing tagged VLAN frames to be silently dropped during cross-host communication.
 
 **Resolution**: Keep VLAN awareness enabled on `vmbr1` on all nodes to allow for host-level tagging experiments if needed, but migrate the primary network to a flat, untagged Layer 2 topology using a `/16` subnet mask (`10.10.0.0/16`). This bypasses physical switch limitations while preserving logical subnet groupings.
@@ -189,7 +192,7 @@ graph TD
 ```
 
 | Hypervisor | ID | Hostname | OS | vCPU | RAM | Disk | Flat L2 IP Address | Role |
-|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **pve** | 300 | `fl-aggregator` | Ubuntu 24.04 | 4 | 8 GB | 50 GB | 10.10.130.10/16 | Flower server, global model checkpoints |
 | **its** | 310 | `defender-a` | Ubuntu 24.04 | 8 | 16 GB | 100 GB | 10.10.130.11/16 | NFStream capture, PyTorch/Avalanche training, Flower client |
 | **its** | 311 | `target-a1` | Alpine Linux | 1 | 1 GB | 10 GB | 10.10.110.15/16 | Receives benign/malicious traffic from traffic generator |
@@ -220,7 +223,7 @@ To bypass the physical unmanaged switch constraints (lack of 802.1Q trunking sup
 Logical segmentation is enforced via IP range assignments:
 
 | Subnet Prefix | Assigned Group | Members |
-|:---|:---|:---|
+| :--- | :--- | :--- |
 | 10.10.110.0/24 | Organization A | `target-a1` (10.10.110.15) |
 | 10.10.120.0/24 | Organization B | `target-b1` (10.10.120.15) |
 | 10.10.130.0/24 | Aggregator & Defenders | `fl-aggregator` (10.10.130.10), `defender-a` (10.10.130.11), `defender-b` (10.10.130.12) |
@@ -315,26 +318,29 @@ With the network infrastructure delivering mirrored packets to each defender nod
 The quality of the ML model depends entirely on the quality and diversity of its training data. The testbed employs two complementary data sources:
 
 #### A. Established Benchmark Datasets (Offline Replay)
+
 For reproducible baseline experiments, pre-labeled PCAP datasets are replayed over the virtual bridge interfaces using `tcpreplay`:
 
-*   **USTC-TFC2016**: 10 categories of encrypted malware traffic and 10 categories of benign traffic. Provides the foundational multi-class classification baseline.
-*   **CIC-IDS2017 / CIC-IDS2018**: Multi-day network captures with structured labels for DoS, DDoS, brute force, and web-based attacks. The temporal span enables realistic CL task sequencing.
-*   **CIRA-CIC-DoHBrw-2020**: Specialized dataset for DNS-over-HTTPS exfiltration—a particularly challenging encrypted channel to detect.
+* **USTC-TFC2016**: 10 categories of encrypted malware traffic and 10 categories of benign traffic. Provides the foundational multi-class classification baseline.
+* **CIC-IDS2017 / CIC-IDS2018**: Multi-day network captures with structured labels for DoS, DDoS, brute force, and web-based attacks. The temporal span enables realistic CL task sequencing.
+* **CIRA-CIC-DoHBrw-2020**: Specialized dataset for DNS-over-HTTPS exfiltration—a particularly challenging encrypted channel to detect.
 
 Replay command on the traffic generator VM:
+
 ```bash
 tcpreplay --intf1=eth0 --multiplier=2.0 --loop=5 /datasets/CIC-IDS2017-Friday.pcap
 ```
 
 #### B. Live Synthetic Traffic (Online Generation)
+
 For dynamic training that exercises the full CL adaptation loop, the traffic generator VM produces both benign and malicious flows in real-time:
 
-*   **Benign Background**: Headless browser scripts (Selenium/Puppeteer) running on target VMs simulate human browsing patterns—search queries, streaming, social media—generating realistic TLS flow metadata with natural timing jitter.
-*   **Automated Attacks**: The Kali-based traffic generator executes coordinated attack campaigns:
-    *   **SSH Brute Force**: `hydra -l root -P wordlist.txt ssh://target-a1` generates rapid, small-packet authentication flows.
-    *   **HTTP Flood / Slowloris**: `slowloris target-a1 -p 80 -s 100` creates distinctive long-held connection patterns.
-    *   **C2 Beaconing**: Metasploit reverse HTTPS shells produce periodic, regular-interval encrypted callbacks that generate characteristic SPLT signatures.
-*   **High-Volume Load**: Cisco T-Rex or Locust for stateful L4–L7 encrypted stream generation at scale.
+* **Benign Background**: Headless browser scripts (Selenium/Puppeteer) running on target VMs simulate human browsing patterns—search queries, streaming, social media—generating realistic TLS flow metadata with natural timing jitter.
+* **Automated Attacks**: The Kali-based traffic generator executes coordinated attack campaigns:
+  * **SSH Brute Force**: `hydra -l root -P wordlist.txt ssh://target-a1` generates rapid, small-packet authentication flows.
+  * **HTTP Flood / Slowloris**: `slowloris target-a1 -p 80 -s 100` creates distinctive long-held connection patterns.
+  * **C2 Beaconing**: Metasploit reverse HTTPS shells produce periodic, regular-interval encrypted callbacks that generate characteristic SPLT signatures.
+* **High-Volume Load**: Cisco T-Rex or Locust for stateful L4–L7 encrypted stream generation at scale.
 
 Each attack campaign constitutes a distinct **CL task**. By running SSH brute force first, then pivoting to C2 beaconing, then introducing DoH exfiltration, the testbed creates the sequential, non-stationary data stream that exercises the EWC anti-forgetting mechanism.
 
@@ -371,6 +377,7 @@ for flow in streamer:
 ```
 
 The complete feature pipeline:
+
 ```mermaid
 graph TD
     %% Define Nodes
@@ -456,7 +463,9 @@ graph TD
 The repository supports multiple model architectures for network threat classification on 32 scaled ETA features (yielding 5 output classes: Normal, Botnet, Exfiltration, BruteForce, DoS). These are instantiated dynamically via the `get_model` factory.
 
 #### 1. Multi-Layer Perceptron (`mlp` / `CyberDefenseNet`)
+
 A 3-layer MLP that acts as the baseline backbone.
+
 ```python
 class CyberDefenseNet(nn.Module):
     def __init__(self, input_dim=32, num_classes=5):
@@ -471,7 +480,9 @@ class CyberDefenseNet(nn.Module):
 ```
 
 #### 2. 1D Convolutional Neural Network (`cnn` / `CyberDefenseCNN`)
+
 Treats the 32 input dimensions as a sequence, reshaping to `(batch, 1, 32)`.
+
 ```python
 class CyberDefenseCNN(nn.Module):
     def __init__(self, input_dim=32, num_classes=5):
@@ -492,7 +503,9 @@ class CyberDefenseCNN(nn.Module):
 ```
 
 #### 3. Transformer Classifier (`transformer` / `CyberDefenseTransformer`)
+
 Reshapes the input to 8 tokens of dimension 4, applies linear projection, positional encoding, and self-attention.
+
 ```python
 class CyberDefenseTransformer(nn.Module):
     def __init__(self, input_dim=32, num_classes=5):
@@ -516,6 +529,7 @@ class CyberDefenseTransformer(nn.Module):
 ```
 
 #### 4. Model Factory
+
 ```python
 def get_model(model_type="mlp", input_dim=32, num_classes=5):
     m_type = model_type.lower()
@@ -635,6 +649,7 @@ This chapter sequences the provisioning steps from Chapters 3–6 into a linear 
 **Step 1.1 — Synchronize `/etc/hosts`**: Apply the standardized template from Section 3.2A to all three nodes.
 
 **Step 1.2 — Enable VLAN awareness**: On nodes `its` and `pve` (already enabled on `node2`):
+
 ```bash
 if ! grep -q "bridge-vlan-aware yes" /etc/network/interfaces; then
     sed -i '/iface vmbr1 inet manual/a \        bridge-vlan-aware yes' /etc/network/interfaces
@@ -643,6 +658,7 @@ fi
 ```
 
 **Step 1.3 — Enable snippet storage**: Allow hookscripts on all nodes:
+
 ```bash
 pvesm set local --content backup,vztmpl,iso,snippets
 ```
@@ -652,6 +668,7 @@ pvesm set local --content backup,vztmpl,iso,snippets
 Deploy in dependency order: aggregator first (so clients can resolve it), then defenders, then targets, then traffic generator.
 
 **Aggregator (Node `pve`):**
+
 ```bash
 pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
   -cores 4 -memory 8192 -swap 2048 -hostname fl-aggregator \
@@ -662,6 +679,7 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
 ```
 
 **Defender A (Node `its`):**
+
 ```bash
 qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
   --cpu host --sockets 1 --ostype l26 \
@@ -671,6 +689,7 @@ qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
 ```
 
 **Target A1 (Node `its`):**
+
 ```bash
 qm create 311 --name target-a1 --cores 1 --memory 1024 \
   --net0 virtio,bridge=vmbr1 \
@@ -682,6 +701,7 @@ qm create 311 --name target-a1 --cores 1 --memory 1024 \
 ### Phase 3: Hookscript Deployment (Hypervisor Shells)
 
 Create and bind the port-mirroring hookscript from Section 4.3 on each hypervisor hosting a target VM:
+
 ```bash
 mkdir -p /var/lib/vz/snippets
 # Write mirror-hook.sh (see Section 4.3)
@@ -693,6 +713,7 @@ qm set 321 --hookscript local:snippets/mirror-hook.sh  # Node node2
 ### Phase 4: Software Provisioning (Inside Guest VMs)
 
 **Aggregator (LXC 300):**
+
 ```bash
 apt update && apt install -y python3-pip python3-venv git
 python3 -m venv /opt/flower-env
@@ -701,6 +722,7 @@ pip install --upgrade pip && pip install flwr
 ```
 
 **Defender VMs (310 & 320):**
+
 ```bash
 sudo apt update && sudo apt install -y python3-pip python3-venv libpcap-dev git
 sudo mkdir -p /mnt/ramdisk
@@ -717,21 +739,28 @@ pip install avalanche-lib flwr nfstream scikit-learn pandas numpy
 
 The startup order mirrors the data flow: aggregator → flow extraction → traffic generation → FL clients.
 
-1.  **Start Flower Server** (Aggregator, LXC 300):
+1. **Start Flower Server** (Aggregator, LXC 300):
+
     ```bash
     source /opt/flower-env/bin/activate && python3 server.py
     ```
-2.  **Start NFStream Capture** (Defender VMs):
+
+2. **Start NFStream Capture** (Defender VMs):
+
     ```bash
     source ~/fl-cl-env/bin/activate
     python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/
     ```
-3.  **Validate Mirroring** — confirm packets arrive on the capture interface:
+
+3. **Validate Mirroring** — confirm packets arrive on the capture interface:
+
     ```bash
     sudo tcpdump -i ens19 -c 10
     ```
-4.  **Start Traffic Generation** (VM 400): Launch attack campaigns and benign browsing scripts.
-5.  **Start FL-CL Clients** (Defender VMs):
+
+4. **Start Traffic Generation** (VM 400): Launch attack campaigns and benign browsing scripts.
+5. **Start FL-CL Clients** (Defender VMs):
+
     ```bash
     source ~/fl-cl-env/bin/activate
     python3 client.py --server 10.10.130.10:8080 --client-id A
@@ -748,18 +777,21 @@ Validating the hybrid FL-CL system requires both operational verification (confi
 Before initiating training, execute these infrastructure checks:
 
 **Cluster Quorum**: Confirm Corosync sees all three nodes via the secondary network:
+
 ```bash
 pvecm status
 corosync-cfgtool -s
 ```
 
 **Flat L2 Bridge Verification**: Confirm direct communication over the secondary network bond:
+
 ```bash
 # From node 'its' (10.10.10.11) to 'node2' (10.10.10.12)
 ping -c 3 10.10.10.12
 ```
 
 **Flat L2 VM Connectivity**: Confirm that guest VMs on different nodes can communicate directly on the flat `10.10.0.0/16` subnet:
+
 ```bash
 # From Target VM 311 (10.10.110.15 on node 'its') → Target VM 321 (10.10.120.15 on node 'node2')
 # Ping should succeed with 0% packet loss
@@ -767,11 +799,13 @@ ping -c 3 10.10.120.15
 ```
 
 **Hookscript Execution**: Verify mirroring activates on VM boot:
+
 ```bash
 journalctl -u pvedaemon | grep "mirror-hook"
 ```
 
 **Port Mirror Integrity**: On the defender VM, confirm captured packets match traffic on the target:
+
 ```bash
 sudo tcpdump -i ens19 -c 10  # Should show target-a1's traffic
 ```
@@ -779,6 +813,7 @@ sudo tcpdump -i ens19 -c 10  # Should show target-a1's traffic
 ### 8.2 Research Evaluation Metrics
 
 #### Backward Transfer (BWT) — Catastrophic Forgetting Resistance
+
 After training on $K$ sequential attack tasks, BWT measures how much accuracy on earlier tasks has degraded:
 
 $$\text{BWT} = \frac{1}{K-1} \sum_{i=1}^{K-1} (A_{K,i} - A_{i,i})$$
@@ -786,27 +821,29 @@ $$\text{BWT} = \frac{1}{K-1} \sum_{i=1}^{K-1} (A_{K,i} - A_{i,i})$$
 $A_{K,i}$ is accuracy on Task $i$ after completing Task $K$. BWT ≈ 0 indicates successful forgetting resistance; BWT ≪ 0 indicates severe forgetting.
 
 #### Collaborative Generalization — Cross-Organization Knowledge Transfer
+
 After a federated aggregation round, test whether Defender A (which has only seen SSH brute-force locally) can detect the HTTPS C2 beaconing that only Defender B observed. Improvement in cross-domain accuracy after aggregation directly measures the value of federated collaboration.
 
 #### Classification Performance — ETA Accuracy
+
 Network traffic classes are inherently imbalanced (benign flows vastly outnumber attacks). Report Precision, Recall, and F1-Score per class:
 
 $$\text{F1} = 2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}}$$
 
 #### Communication Overhead
+
 Monitor gRPC payload sizes between clients and aggregator to quantify the bandwidth cost of federated synchronization. This metric informs decisions about aggregation frequency and gradient compression.
 
 ### 8.3 MLOps Observability Stack
 
 Tracking model behavior across distributed, continually-learning nodes requires centralized experiment tracking:
 
-*   **MLflow**: Deploy a local MLflow tracking server on the aggregator LXC. Each defender VM logs per-round metrics (loss, accuracy per task, BWT) to the central server. The aggregator automatically aggregates 5x5 confusion matrix counts returned by clients and logs styled heatmap figures to MLflow every round.
-*   **Evaluation & Benchmarking Utilities**: Standalone validation scripts augment the runtime telemetry:
-    *   `tools/bwt_eval_suite.py` calculates overall and class-wise performance, hashes model weights and dataset states, and generates cryptographically signed CSV reports for audit provenance.
-    *   `tools/cross_dataset_benchmark.py` validates model generalization on target distributions (e.g., USTC-TFC2016) by applying a covariate shift simulation engine if physical datasets are offline.
-*   **Weights & Biases (W&B)**: Alternative cloud-hosted tracker for teams preferring managed infrastructure. Particularly useful for visualizing how Client A's accuracy on Task 1 changes when Client B introduces Task 2 through federated aggregation.
-*   **TensorBoard**: Standard local visualizer for monitoring weight distributions, gradient norms, and per-layer activation statistics during CL training.
-
+* **MLflow**: Deploy a local MLflow tracking server on the aggregator LXC. Each defender VM logs per-round metrics (loss, accuracy per task, BWT) to the central server. The aggregator automatically aggregates 5x5 confusion matrix counts returned by clients and logs styled heatmap figures to MLflow every round.
+* **Evaluation & Benchmarking Utilities**: Standalone validation scripts augment the runtime telemetry:
+  * `tools/bwt_eval_suite.py` calculates overall and class-wise performance, hashes model weights and dataset states, and generates cryptographically signed CSV reports for audit provenance.
+  * `tools/cross_dataset_benchmark.py` validates model generalization on target distributions (e.g., USTC-TFC2016) by applying a covariate shift simulation engine if physical datasets are offline.
+* **Weights & Biases (W&B)**: Alternative cloud-hosted tracker for teams preferring managed infrastructure. Particularly useful for visualizing how Client A's accuracy on Task 1 changes when Client B introduces Task 2 through federated aggregation.
+* **TensorBoard**: Standard local visualizer for monitoring weight distributions, gradient norms, and per-layer activation statistics during CL training.
 
 The observability stack closes the feedback loop: metrics from Chapter 8 inform tuning decisions (e.g., adjusting `ewc_lambda` in Chapter 6, modifying aggregation frequency in Chapter 6.4, or rebalancing training data ratios in Chapter 5.1).
 
@@ -816,22 +853,22 @@ The observability stack closes the feedback loop: metrics from Chapter 8 inform 
 
 This paper has presented a complete, end-to-end architecture for Hybrid Federated-Continual Learning applied to collaborative cyber defense on encrypted networks. The system was designed as an integrated pipeline where each layer depends on and feeds into the next:
 
-1.  **Theoretical foundations** (Chapter 2) identified the three converging challenges—encrypted visibility, organizational isolation, and temporal non-stationarity—and showed how ETA, FL, and CL respectively address them.
-2.  **Testbed architecture** (Chapter 3) translated these requirements into a concrete 3-node Proxmox cluster, reconciling real-world infrastructure inconsistencies that would otherwise prevent distributed training.
-3.  **Network infrastructure** (Chapter 4) established the Flat L2 network and hookscript-based port mirroring that reliably delivers traffic to defender nodes despite Proxmox's ephemeral TAP interface limitation.
-4.  **Data pipeline** (Chapter 5) defined the traffic generation strategy—combining benchmark dataset replay with live synthetic attacks—and the NFStream extraction process that converts raw encrypted packets into training-ready feature vectors, buffered through RAM disks to avoid I/O contention.
-5.  **Software engine** (Chapter 6) integrated PyTorch, Avalanche EWC, and Flower into a unified training loop where local continual learning prevents forgetting and federated aggregation distributes knowledge.
-6.  **Deployment workflow** (Chapter 7) sequenced these components into an executable provisioning and startup procedure.
-7.  **Evaluation methodology** (Chapter 8) established metrics for forgetting resistance (BWT), collaborative knowledge transfer, classification accuracy (F1), and communication overhead, supported by centralized MLOps tracking.
+1. **Theoretical foundations** (Chapter 2) identified the three converging challenges—encrypted visibility, organizational isolation, and temporal non-stationarity—and showed how ETA, FL, and CL respectively address them.
+2. **Testbed architecture** (Chapter 3) translated these requirements into a concrete 3-node Proxmox cluster, reconciling real-world infrastructure inconsistencies that would otherwise prevent distributed training.
+3. **Network infrastructure** (Chapter 4) established the Flat L2 network and hookscript-based port mirroring that reliably delivers traffic to defender nodes despite Proxmox's ephemeral TAP interface limitation.
+4. **Data pipeline** (Chapter 5) defined the traffic generation strategy—combining benchmark dataset replay with live synthetic attacks—and the NFStream extraction process that converts raw encrypted packets into training-ready feature vectors, buffered through RAM disks to avoid I/O contention.
+5. **Software engine** (Chapter 6) integrated PyTorch, Avalanche EWC, and Flower into a unified training loop where local continual learning prevents forgetting and federated aggregation distributes knowledge.
+6. **Deployment workflow** (Chapter 7) sequenced these components into an executable provisioning and startup procedure.
+7. **Evaluation methodology** (Chapter 8) established metrics for forgetting resistance (BWT), collaborative knowledge transfer, classification accuracy (F1), and communication overhead, supported by centralized MLOps tracking.
 
 ### Future Directions
 
 Three extensions would strengthen the framework's security and scalability:
 
-1.  **Secure Aggregation via Homomorphic Encryption**: The current FedAvg strategy transmits model weights in cleartext over gRPC/TLS. While TLS protects the transport layer, a compromised aggregator could reconstruct information about client training data from the weights themselves. Integrating homomorphic encryption or secure multi-party computation into the aggregation protocol would provide cryptographic guarantees against this vector.
+1. **Secure Aggregation via Homomorphic Encryption**: The current FedAvg strategy transmits model weights in cleartext over gRPC/TLS. While TLS protects the transport layer, a compromised aggregator could reconstruct information about client training data from the weights themselves. Integrating homomorphic encryption or secure multi-party computation into the aggregation protocol would provide cryptographic guarantees against this vector.
 
-2.  **Differential Privacy**: Adding calibrated noise to client weight updates before transmission would provide a formal $(\epsilon, \delta)$-privacy guarantee, bounding the information leakage per aggregation round regardless of aggregator trustworthiness.
+2. **Differential Privacy**: Adding calibrated noise to client weight updates before transmission would provide a formal $(\epsilon, \delta)$-privacy guarantee, bounding the information leakage per aggregation round regardless of aggregator trustworthiness.
 
-3.  **Hardware-Accelerated Trusted Execution Environments**: Leveraging AMD SEV-SNP or Intel SGX/TDX within Proxmox VMs would protect the training process itself—ensuring that even a compromised hypervisor cannot inspect model weights or training data in memory.
+3. **Hardware-Accelerated Trusted Execution Environments**: Leveraging AMD SEV-SNP or Intel SGX/TDX within Proxmox VMs would protect the training process itself—ensuring that even a compromised hypervisor cannot inspect model weights or training data in memory.
 
 These extensions would elevate the testbed from a research prototype to a deployment-ready framework for production multi-tenant cyber defense.

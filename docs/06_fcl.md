@@ -14,7 +14,7 @@ Traditional machine learning assumes that all training data is available in one 
 **Federated Continual Learning (FCL)** solves both problems simultaneously:
 
 | Challenge | Solution | Implementation |
-|:----------|:---------|:---------------|
+| :---------- | :--------- | :--------------- |
 | Distributed data silos | **Federated Learning** — share model weights, not raw data | Flower framework (`FedAvg`) |
 | Evolving attack landscape | **Continual Learning** — regularize weight updates to prevent forgetting | Avalanche EWC strategy |
 
@@ -75,6 +75,7 @@ Each federated round follows a precise sequence. Below is the complete lifecycle
 The defender VMs have a second network interface (`ens19`) that receives a port-mirrored copy of all traffic flowing through the target VM's interface. This is set up via `tc` mirroring rules applied by Proxmox hookscripts (see [04_deployment.md](04_deployment.md)).
 
 The `extractor.py` script runs as a background daemon:
+
 ```bash
 ~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 500
 ```
@@ -82,7 +83,7 @@ The `extractor.py` script runs as a background daemon:
 It uses **NFStream** to reconstruct raw packets into bidirectional network flows and extracts statistical features:
 
 | Feature | Description |
-|:--------|:------------|
+| :-------- | :------------ |
 | `bidirectional_packets` | Total packets in both directions |
 | `bidirectional_bytes` | Total bytes in both directions |
 | `duration_ms` | Flow duration in milliseconds |
@@ -181,6 +182,7 @@ def fit(self, parameters, config):
 ```
 
 The `load_ramdisk_flows()` function:
+
 1. Reads all CSV files from `/mnt/ramdisk/flows/`
 2. Selects the 10 numeric feature columns
 3. Applies fixed baseline Z-score scaling (utilizing mean/std statistics from class 0 baseline configurations) to prevent covariate shift across client dynamic updates
@@ -214,6 +216,7 @@ After training on historical attack data (e.g., SSH brute force), EWC computes t
 $$\mathcal{L}(\theta) = \mathcal{L}_{\text{new}}(\theta) + \frac{\lambda}{2} \sum_{i} F_i (\theta_i - \theta_i^*)^2$$
 
 Where:
+
 - $\mathcal{L}_{\text{new}}(\theta)$ is the cross-entropy loss on the new attack data
 - $\theta_i^*$ are the optimal weights from the previous task
 - $F_i$ is the Fisher Information for weight $i$ (how important it is)
@@ -260,6 +263,7 @@ def get_parameters(self, config):
 ```
 
 This returns a list of NumPy arrays representing:
+
 - Layer 1 weights: `(32 × 64)` matrix + `(64,)` bias vector
 - Layer 2 weights: `(64 × 32)` matrix + `(32,)` bias vector
 - Output layer weights: `(32 × 5)` matrix + `(5,)` bias vector
@@ -291,24 +295,28 @@ sequenceDiagram
 The aggregator receives weight updates from connected clients and combines them using the selected **Aggregation Strategy** (defaulting to baseline `FedAvg`).
 
 #### Aggregation Strategies
-*   **Federated Averaging (FedAvg)**:
+
+- **Federated Averaging (FedAvg)**:
     Computes a weighted average based on client training set sizes:
     $$\theta_{\text{global}} = \sum_{c=1}^{C} \frac{N_c}{N_{\text{total}}} \cdot \theta_c$$
-*   **Federated Coordinate-wise Median (FedMedian)**:
+
+- **Federated Coordinate-wise Median (FedMedian)**:
     Computes the median independently for each coordinate across client weight updates:
     $$\theta_{\text{global}, i} = \text{median}(\{\theta_{c, i}\}_{c=1}^{C})$$
     Highly effective at neutralizing extreme model poisoning or arbitrary weight replacements.
-*   **Coordinate-wise Trimmed Mean (TrimmedMean)**:
+- **Coordinate-wise Trimmed Mean (TrimmedMean)**:
     Sorts parameters coordinate-wise and trims a fraction $\beta$ of values from each tail before computing the mean:
     $$\theta_{\text{global}, i} = \frac{1}{C - 2k} \sum_{c=k+1}^{C-k} \theta_{(c), i}$$
     Where $k = \lfloor \beta \cdot C \rfloor$, and $\theta_{(c), i}$ represents sorted coordinate updates.
-*   **Krum (Consensus Client Selection)**:
+- **Krum (Consensus Client Selection)**:
     Selects a single representative client update that minimizes the sum of squared distances to its $C - f - 2$ nearest updates (where $f$ is the assumed number of Byzantine attackers):
     $$c^* = \arg\min_{c} \sum_{c' \in \mathcal{N}_c} \|\theta_c - \theta_{c'}\|^2$$
     Guarantees that the chosen client update lies within the convex hull of clean updates.
 
 #### NaN/Inf Sanitization Guard
+
 To prevent Byzantine clients from crashing the training cycle using NaN/Inf weight injection (model collapse attack), the server sanitizes all aggregated parameters:
+
 ```python
 # Replace NaN and Inf parameters with 0.0 prior to model assembly and serialization
 clean_ndarrays = []
@@ -415,12 +423,13 @@ def weighted_avg(metrics):
     return aggregated_metrics
 ```
 
-
 ### 3.5.2 Post-Training: Registration, Datasets, and Governance
+
 Once training completes (all rounds finished), the server executes the final pipeline integration steps:
 
 1. **Log Model Artifact**: The PyTorch model is registered to MLflow using `mlflow.pytorch.log_model(..., registered_model_name="CyberDefenseNet")`.
 2. **Link Training Dataset**: The aggregator documents training context using an MLflow `Dataset` entity:
+
    ```python
    dataset_summary = pd.DataFrame([
        {"class": "Normal", "defender_a": 22, "defender_b": 10},
@@ -429,6 +438,7 @@ Once training completes (all rounds finished), the server executes the final pip
    train_dataset = mlflow.data.from_pandas(dataset_summary, name="aggregated_training_flows")
    mlflow.log_metrics(..., model_id=logged_model.model_id, dataset=train_dataset)
    ```
+
 3. **Structured Markdown Note**: The `mlflow.note.content` tag is updated programmatically to display execution metadata and final best class-wise metrics inside the MLflow UI.
 4. **Log Evaluation Table**: Detailed per-class accuracies and sample counts are saved as a structured JSON table artifact (`evaluation_metrics_summary.json` via `mlflow.log_table()`).
 5. **Enforce Version Aliases**: Using `MlflowClient`, the new version is registered and promoted to:
@@ -504,7 +514,7 @@ sequenceDiagram
 ## 5. What Each Node Sees (Privacy Boundary)
 
 | Node | Has access to | Does NOT have access to |
-|:-----|:-------------|:-----------------------|
+| :----- | :------------- | :----------------------- |
 | **Defender A** | Its own raw packets, flow CSVs, local labels, local model weights, EWC Fisher matrix | Defender B's raw data, Defender B's labels, Defender B's local weights |
 | **Defender B** | Its own raw packets, flow CSVs, local labels, local model weights, EWC Fisher matrix | Defender A's raw data, Defender A's labels, Defender A's local weights |
 | **Aggregator** | Aggregated weight matrices from both clients, sample counts, evaluation metrics | Raw packets, flow CSVs, IP addresses, or any per-flow data from either client |
@@ -519,7 +529,7 @@ All tunable parameters are centralized in [`configs/experiment.yaml`](../configs
 ### Federated Learning & Aggregation Parameters
 
 | Parameter | Config Path | Default | Effect |
-|:----------|:-----------|:--------|:-------|
+| :---------- | :----------- | :-------- | :------- |
 | FL Rounds | `fl.rounds` | 100 | More rounds = longer training, better convergence |
 | Min Clients | `fl.min_clients` | 2 | Wait for at least N clients per round |
 | Aggregation Strategy | `fl.strategy` | `FedAvg` | Dynamic selection of `FedAvg`, `FedMedian`, `TrimmedMean`, or `Krum` |
@@ -528,7 +538,7 @@ All tunable parameters are centralized in [`configs/experiment.yaml`](../configs
 ### Continual Learning Parameters
 
 | Parameter | Config Path | Default | Effect |
-|:----------|:-----------|:--------|:-------|
+| :---------- | :----------- | :-------- | :------- |
 | Strategy | `cl.strategy` | `EWC` | Dynamic selection of `EWC`, `GEM`, or `Naive` |
 | EWC Lambda | `cl.ewc_lambda` | 0.25 | Penalty scale for deviation from older parameters (EWC specific) |
 | Patterns Per Experience | `cl.patterns_per_exp` | 256 | Replay buffer pattern limit (GEM specific) |
@@ -537,7 +547,7 @@ All tunable parameters are centralized in [`configs/experiment.yaml`](../configs
 ### Security & Privacy Parameters
 
 | Parameter | Config Path | Default | Effect |
-|:----------|:-----------|:--------|:-------|
+| :---------- | :----------- | :-------- | :------- |
 | Poison Enabled | `security.poison_enabled` | `false` | Simulated adversarial label poisoning on client side |
 | Poison Rate | `security.poison_rate` | `0.2` | Fraction of dataset targets poisoned |
 | Poison Client IDs | `security.poison_client_ids` | `"1"` | String containing client IDs targeted for poisoning |
@@ -548,7 +558,7 @@ All tunable parameters are centralized in [`configs/experiment.yaml`](../configs
 ### Training Parameters
 
 | Parameter | Config Path | Default | Effect |
-|:----------|:-----------|:--------|:-------|
+| :---------- | :----------- | :-------- | :------- |
 | Learning Rate | `training.lr` | 0.01 | Step size for SGD optimizer |
 | Batch Size | `training.batch_size` | 32 | Samples per mini-batch |
 | Epochs/Round | `training.epochs_per_round` | 1 | Local epochs before sending weights |
@@ -556,7 +566,7 @@ All tunable parameters are centralized in [`configs/experiment.yaml`](../configs
 
 ### Tuning Guidelines
 
-```
+```text
 Class 1 (Botnet) accuracy too low?
   → Increase class_weights[1] (currently 20.0)
   → Ensure attack_flow.py --mode botnet is running long enough
@@ -579,6 +589,7 @@ Training gradients exploding or crashing with NaN?
 ## 7. Running the Complete Pipeline
 
 ### Prerequisites
+
 1. All target VMs (`311`, `321`) are booted with port mirroring hookscripts applied
 2. SSH key is authorized on all 6 nodes (`ssh root@10.10.130.10` must work without password)
 3. Python environments are installed on remote nodes (see [04_deployment.md](04_deployment.md))
@@ -599,7 +610,7 @@ python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.
 ### What Happens Automatically
 
 | Phase | Description | Duration |
-|:------|:------------|:---------|
+| :------ | :------------ | :--------- |
 | 1 | Kill stale processes on all nodes | ~5s |
 | 2 | SCP latest code to all nodes | ~10s |
 | 3 | Boot target HTTP servers | ~2s |
@@ -626,16 +637,19 @@ python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.
 To transition from basic collaborative training to a highly robust enterprise deployment, the FCL framework integrates three production MLOps capabilities.
 
 ### 8.1 Automated Hyperparameter Sweep Controller
+
 - **Purpose**: Systematically evaluates multiple config scenarios (e.g. searching over $\lambda_{\text{EWC}}$ to balance stability vs plasticity).
 - **Execution**: Run `python src/sweep.py --config configs/sweep_grid.yaml`.
 - **Implementation**: The sweep controller runs a grid search, launching `orchestrate.py` inside distinct runs nested under a parent MLflow experiment, ensuring complete logging and convergence evaluation across different configurations.
 
 ### 8.2 Cryptographic Data Lineage Tracking
+
 - **Purpose**: Establishes immutable dataset provenance to guarantee training reproducibility and compliance audits.
 - **Execution**: The orchestrator automatically computes SHA-256 digests of the active CSV flows on client RAM disks prior to client execution.
 - **Lineage Registry**: The client-side digests are registered as MLflow parameters, and a merged graph checksum $\text{SHA-256}(\text{hash\\_A} \mathbin{\Vert} \text{hash\\_B})$ is registered alongside a structured `dataset_lineage.json` artifact containing system configurations, git commit SHAs, and timestamped statistics.
 
 ### 8.3 Automated Registry Governance & Validation Gates
+
 - **Purpose**: Restricts automated Model Registry promotions to only candidate models that satisfy strict continual learning performance and communication constraints.
 - **Gates Enforced**:
   1. **Per-Class F1 Thresholds**:
@@ -652,6 +666,7 @@ To transition from basic collaborative training to a highly robust enterprise de
 - **L2 Client Weight Drift Monitoring**: During aggregation, the server computes L2 parameter drift between each client and the global model, monitoring client divergence and detecting anomalies using a 3-sigma rule logged directly to MLflow.
 
 ### 8.4 Byzantine-Robust Aggregation & Privacy Guarantees (Theme E)
+
 - **Objective**: Protect the collaborative model from malicious poisoning attacks, guarantee privacy against membership inference via differential privacy, and ensure computational safety against exploding/NaN parameters.
 - **Robust Aggregation**:
   - **FedMedian**: Computes the coordinate-wise median, preventing single-client extreme updates from influencing the global model.

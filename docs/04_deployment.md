@@ -1,4 +1,5 @@
 # Federated Continual Learning (FCL) Cyber Defense Deployment Walkthrough
+
 ## Comprehensive End-to-End Cluster Provisioning & Pipeline Execution
 
 This document provides a publication-grade, step-by-step deployment walkthrough for the Hybrid Federated-Continual Learning (FCL) cyber defense testbed. The system is deployed across a heterogeneous 3-node Proxmox VE cluster (`its`, `node2`, `pve`). It addresses physical networking variations, virtualized Layer 2 segmentation, ephemeral interface port mirroring, real-time feature extraction, local continual training, and global federated aggregation.
@@ -7,7 +8,7 @@ This document provides a publication-grade, step-by-step deployment walkthrough 
 
 ## Academic Foundation & System Overview
 
-Traditional machine learning assumes **stationary** data distributions (identically and independently distributed - *i.i.d.*). However, in cyber defense, network traffic is highly dynamic, characterized by emerging attack vectors, protocol changes, and evolving network configurations. 
+Traditional machine learning assumes **stationary** data distributions (identically and independently distributed - *i.i.d.*). However, in cyber defense, network traffic is highly dynamic, characterized by emerging attack vectors, protocol changes, and evolving network configurations.
 
 This testbed combines **Federated Learning (FL)** for collaborative decentralized knowledge aggregation and **Continual Learning (CL)** to adapt to non-stationary data streams without forgetting previously learned patterns (catastrophic forgetting).
 
@@ -24,6 +25,7 @@ graph RL
 ### The Stability-Plasticity Dilemma
 
 In local CL, the neural network faces the **Stability-Plasticity Dilemma**:
+
 * **Plasticity** is the ability to acquire new knowledge (e.g., detecting a new threat class like DNS-over-HTTPS exfiltration).
 * **Stability** is the ability to retain previously learned knowledge (e.g., detecting older threats like SSH brute-forcing).
 
@@ -32,6 +34,7 @@ Unrestricted training on a new task overrides the weights critical to old tasks,
 $$\mathcal{L}(\theta) = \mathcal{L}_B(\theta) + \sum_{i} \frac{\lambda}{2} F_i (\theta_i - \theta_{A,i}^*)^2$$
 
 Where:
+
 * $\mathcal{L}_B(\theta)$ is the loss on the new task $B$.
 * $\theta_{A,i}^*$ represents the optimal parameters after completing task $A$.
 * $F_i$ is the diagonal entry of the Fisher Information Matrix for parameter $i$, representing its importance.
@@ -47,7 +50,7 @@ To resolve this while preserving logical network structure, the network on `vmbr
 | :--- | :--- | :--- | :--- |
 | **Org A (Target A1)** | `10.10.110.15` | `/16` | `target-a1` (VM 311) |
 | **Org B (Target B1)** | `10.10.120.15` | `/16` | `target-b1` (VM 321) |
-| **FL Aggregator & Defenders**| `10.10.130.10` - `10.10.130.12` | `/16` | `fl-aggregator` (LXC 300), `defender-a` (VM 310), `defender-b` (VM 320) |
+| **FL Aggregator & Defenders** | `10.10.130.10` - `10.10.130.12` | `/16` | `fl-aggregator` (LXC 300), `defender-a` (VM 310), `defender-b` (VM 320) |
 | **Traffic Generator** | `10.10.140.10` | `/16` | `traffic-gen` (VM 400) |
 
 Under this flat L2 topology, port mirroring via `tc` remains fully functional because it mirrors traffic at the virtual TAP interface queue level, completely bypassing L2/L3 boundary filters.
@@ -59,6 +62,7 @@ Under this flat L2 topology, port mirroring via `tc` remains fully functional be
 ### Layer 1: Physical / Hypervisor Topology
 
 The underlying infrastructure consists of three physical servers connected to an L2-managed switch:
+
 1. **Node `its`**: Primary compute node hosting Org A. Dual 10G NICs aggregated in a Link Aggregation Control Protocol (LACP) bond (`bond0`) to maximize throughput.
 2. **Node `node2`**: Secondary compute node hosting Org B and the Traffic Generator. Also Aggregated via LACP (`bond0`).
 3. **Node `pve`**: Light-compute node hosting the FL aggregator. Connected via a single physical NIC to `vmbr1`.
@@ -81,6 +85,7 @@ graph LR
 ```
 
 #### Step 1.1: Standardize Node Host Resolution
+
 To ensure reliable cluster communication and Corosync health, route node traffic over the low-latency secondary network. Append these mappings to `/etc/hosts` on all three hypervisors:
 
 ```bash
@@ -96,6 +101,7 @@ EOF
 > Ensure all references mapping `its.ac.id` to the management network (`192.168.x.x`) are removed from all host files to prevent Corosync from falling out of quorum.
 
 #### Step 1.2: Enforce Persistent Promiscuous Mode on LACP Bonds (Node `its` & `node2`)
+
 To prevent physical switch LACP link renegotiation flaps and STP blocking state freezes when VM interfaces dynamically transition to promiscuous mode, execute the automated helper script to pre-enable promiscuous mode persistently:
 
 ```bash
@@ -103,6 +109,7 @@ To prevent physical switch LACP link renegotiation flaps and STP blocking state 
 ```
 
 This creates a systemd service (`promisc-bond.service`) that automatically executes:
+
 ```bash
 /sbin/ip link set dev <physical_nic_1> promisc on
 /sbin/ip link set dev <physical_nic_2> promisc on
@@ -126,6 +133,7 @@ graph TD
 ```
 
 #### Step 2.1: Enable VLAN Awareness on vmbr1
+
 Execute the following on nodes `its` and `pve` (already active on `node2`):
 
 ```bash
@@ -138,6 +146,7 @@ fi
 ```
 
 #### Step 2.2: Provision the FL Aggregator LXC (Node `pve`)
+
 Create the aggregator LXC container. `net1` is bound to `vmbr1` on the flat L2 network:
 
 ```bash
@@ -155,9 +164,11 @@ pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
 ```
 
 #### Step 2.3: Provision the Defender and Target VMs
+
 Deploy the VM instances without VLAN tags to ensure untagged flat L2 operations on `vmbr1` across physical hosts.
 
 **On Node `its` (Defender A & Target A1):**
+
 ```bash
 # Create Defender VM (ID 310)
 qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
@@ -174,6 +185,7 @@ qm create 311 --name target-a1 --cores 1 --memory 1024 \
 ```
 
 **On Node `node2` (Defender B, Target B1, & Traffic Generator):**
+
 ```bash
 # Create Defender VM (ID 320)
 qm create 320 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
@@ -199,7 +211,7 @@ qm create 400 --name traffic-gen --cores 4 --memory 4096 \
 
 ### Layer 3: Ephemeral Port Mirroring Hookscripts
 
-When a VM starts, Proxmox dynamically creates a TAP interface (`tap<VMID>i<NET_INDEX>`) on the host and binds it to the Linux bridge. Upon VM shutdown, this interface is destroyed, erasing all custom `tc` mirroring rules. 
+When a VM starts, Proxmox dynamically creates a TAP interface (`tap<VMID>i<NET_INDEX>`) on the host and binds it to the Linux bridge. Upon VM shutdown, this interface is destroyed, erasing all custom `tc` mirroring rules.
 
 To resolve this, we implement a Proxmox Lifecycle Hookscript that automatically re-establishes mirroring rules when a target VM boots.
 
@@ -220,12 +232,15 @@ sequenceDiagram
 ```
 
 #### Step 3.1: Enable Snippet Storage
+
 Execute this on both nodes `its` and `node2` to permit the execution of custom scripts:
+
 ```bash
 pvesm set local --content backup,vztmpl,iso,snippets
 ```
 
 #### Step 3.2: Write the Hookscript on Node `its` (Organization A)
+
 Save this script to `/var/lib/vz/snippets/mirror-hook-a.sh`:
 
 ```bash
@@ -264,6 +279,7 @@ qm set 311 --hookscript local:snippets/mirror-hook-a.sh
 ```
 
 #### Step 3.3: Write the Hookscript on Node `node2` (Organization B)
+
 Save this script to `/var/lib/vz/snippets/mirror-hook-b.sh`:
 
 ```bash
@@ -315,6 +331,7 @@ graph TD
 ```
 
 #### Step 4.1: Bypass I/O Bottlenecks with a tmpfs RAM Disk
+
 Writing high-volume flow metadata directly to hypervisor disks causes severe I/O bottlenecks. Create a memory-backed RAM disk within Defender VMs (`defender-a` and `defender-b`):
 
 ```bash
@@ -326,6 +343,7 @@ echo "tmpfs /mnt/ramdisk tmpfs size=4G 0 0" | sudo tee -a /etc/fstab
 ```
 
 #### Step 4.2: Deploy the NFStream Flow Extractor (`extractor.py`)
+
 Deploy this script to Defender nodes. It monitors `ens19`, extracts flow characteristics (statistics, protocol information, JA3 handshakes), and outputs them to the RAM disk:
 
 ```python
@@ -382,6 +400,7 @@ if __name__ == "__main__":
 ### Layer 5: Local Continual Learning Engine
 
 Inside the Defender VMs, model training uses the Avalanche library. The network model (`CyberDefenseNet`) is a 3-layer Multi-Layer Perceptron (MLP) that maps a 32-feature vector (representing network traffic properties) to 5 threat classes:
+
 1. `0`: Normal (benign traffic)
 2. `1`: Botnet (C2 beaconing on ports 8080/8888/9000)
 3. `2`: Exfiltration (DNS tunneling on port 53)
@@ -389,6 +408,7 @@ Inside the Defender VMs, model training uses the Avalanche library. The network 
 5. `4`: DoS (HTTP floods / Slowloris on port 80/443)
 
 #### Step 5.1: The Avalanche CL Strategy with EWC (`cl_strategy.py`)
+
 To prevent catastrophic forgetting during training, we configure the Elastic Weight Consolidation (EWC) strategy:
 
 ```python
@@ -430,11 +450,12 @@ graph TD
     Aggregator <-->|gRPC / TLS| DefenderB
 ```
 
-
 #### Step 6.1: Run the Flower Server (`server.py` on LXC 300)
+
 The server runs on the Aggregator node. It manages the training lifecycle by orchestrating rounds, collecting client parameter changes, and executing global evaluations. It subclasses the Flower `FedAvg` strategy (`MLflowFedAvg`) to integrate MLflow tracking, evaluation tables, dataset linkages, and model versioning alias promotion.
 
 Key operations implemented:
+
 * **MLflow Tracking**: Logs loss and accuracy metrics per round under trace decorators (`@mlflow.trace`).
 * **Evaluation Tables**: Logs per-class validation metrics to a structured table using `mlflow.log_table()`.
 * **Dataset Linkage**: Documents the aggregated client flow distribution by logging an MLflow `Dataset` entity.
@@ -442,11 +463,13 @@ Key operations implemented:
 * **CLI Options**: Supports `--mlops-mode` (`experimental` | `production`) and `--production-strategy` (`resume` | `fresh`).
 
 Run execution example:
+
 ```bash
 python src/aggregator/server.py --rounds 100 --mlops-mode production --production-strategy resume
 ```
 
 #### Step 6.2: Run the FL Client (`client.py` on Defender VMs)
+
 The client script loads local datasets, initiates local continual training using Avalanche, and sends updated weights back to the server:
 
 ```python
@@ -503,6 +526,7 @@ graph TD
 ```
 
 #### Step 7.1: Network Reachability on the Flat L2 Subnet
+
 Because the testbed operates on a flat `10.10.0.0/16` L2 network bridge, no gateways or static routes are needed for communication between the traffic generator (`10.10.140.10`) and target VMs (`10.10.110.15` and `10.10.120.15`). Verify direct L3 reachability by running pings directly:
 
 ```bash
@@ -513,6 +537,7 @@ ping -c 3 10.10.120.15
 ```
 
 #### Step 7.2: Run Offense Scripts
+
 Simulate threats targeting the client VMs:
 
 ```bash
@@ -535,6 +560,7 @@ tcpreplay --intf=eth1 --pps=500 output.pcap
 ### Layer 8: Observability, MLOps, & Verification
 
 #### Step 8.1: Centralized Experiment Logging
+
 We monitor validation loss, accuracy, and forgetting metrics (Backward Transfer) using MLflow:
 
 ```bash
@@ -544,6 +570,7 @@ mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db
 ```
 
 #### Step 8.2: Automated Orchestration (Workstation)
+
 Instead of manual start sequences, the master controller script `src/orchestrate.py` automates code deployment, server startup, traffic injection, and client execution:
 
 ```powershell
@@ -558,6 +585,7 @@ python src/orchestrate.py --key ~/.ssh/id_ed25519 --rounds 100 --lambda-ewc 0.25
 ```
 
 #### Step 8.2b: Hyperparameter Sweeps (Workstation)
+
 To systematically search over multiple combinations of parameters (e.g. `ewc_lambda` and `lr`), run the sweep controller:
 
 ```powershell
@@ -572,6 +600,7 @@ python src/sweep.py --config configs/sweep_grid.yaml
 
 **1. Confirm Direct L3 Reachability on the Flat Network:**
 Verify that the flat L2 bridge is correctly forwarding packets between sub-zones across physical hypervisors:
+
 ```bash
 # From Target VM 311 (10.10.110.15) to Target VM 321 (10.10.120.15)
 # Pings should succeed with 0% packet loss, validating flat inter-host bridge transit
@@ -580,6 +609,7 @@ ping -c 3 10.10.120.15
 
 **2. Verify Interface Mirroring (SPAN Verification):**
 Confirm target traffic is duplicated and visible to the Defender node:
+
 ```bash
 # From Target VM 311, generate background ping
 ping -c 10 10.10.140.10
@@ -589,6 +619,7 @@ sudo tcpdump -i ens19 -n icmp
 
 **3. Monitor Flower Server Status:**
 Check client connections to the FL aggregator:
+
 ```bash
 # Log query inside LXC 300
 netstat -antp | grep 8080
@@ -607,13 +638,12 @@ graph LR
     Orch --> MLflow["4. Monitor via MLflow UI"]
 ```
 
-- [x] **Phase 1**: Set up `vmbr1` on all physical nodes with `10.10.0.0/16` logical ranges.
-- [x] **Phase 2**: Boot the target VMs (`311` and `321`). Ensure the lifecycle hookscripts apply mirroring rules successfully (`journalctl -u pvedaemon | grep "mirror-hook"`).
-- [x] **Phase 3**: Run the master orchestrator (`python src/orchestrate.py`) to launch:
-  - Benign target servers (`busybox httpd`)
-  - NFStream extractors (`src/defender/extractor.py`)
-  - Aggregator and MLflow servers (`src/aggregator/server.py`)
-  - Offensive traffic generator (`src/traffic_gen/attack_flow.py`: Benign → SSH → Slowloris → DNS Exfil → Botnet)
-  - Flower continual learning clients (`src/defender/client.py` using Avalanche EWC)
-- [x] **Phase 4**: Open `http://10.10.130.10:5000` to monitor training metrics and catastrophic forgetting mitigation in real time.
-
+* [x] **Phase 1**: Set up `vmbr1` on all physical nodes with `10.10.0.0/16` logical ranges.
+* [x] **Phase 2**: Boot the target VMs (`311` and `321`). Ensure the lifecycle hookscripts apply mirroring rules successfully (`journalctl -u pvedaemon | grep "mirror-hook"`).
+* [x] **Phase 3**: Run the master orchestrator (`python src/orchestrate.py`) to launch:
+  * Benign target servers (`busybox httpd`)
+  * NFStream extractors (`src/defender/extractor.py`)
+  * Aggregator and MLflow servers (`src/aggregator/server.py`)
+  * Offensive traffic generator (`src/traffic_gen/attack_flow.py`: Benign → SSH → Slowloris → DNS Exfil → Botnet)
+  * Flower continual learning clients (`src/defender/client.py` using Avalanche EWC)
+* [x] **Phase 4**: Open `http://10.10.130.10:5000` to monitor training metrics and catastrophic forgetting mitigation in real time.

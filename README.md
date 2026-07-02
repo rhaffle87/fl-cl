@@ -6,7 +6,7 @@ A privacy-preserving, forgetting-resistant intrusion detection system deployed o
 
 ## Project Structure
 
-```
+```text
 fl-cl/
 ├── README.md                     ← You are here
 ├── TECH_STACK.md                 ← Complete technology inventory
@@ -66,11 +66,14 @@ fl-cl/
 ## Quick Start — Run an Experiment
 
 ### Prerequisites
+
 - SSH access to all 6 VMs from your local workstation
 - Python environments provisioned on remote nodes (see `infra/04_guest_setup/`)
 
 ### 1. Pre-flight Setup & Cleanup
+
 First, configure your `.env` file at the root of the project with your credentials and SSH private key path:
+
 ```env
 TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
 TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
@@ -81,7 +84,6 @@ OLLAMA_ENDPOINT="https://YOUR_OLLAMA_SERVER_HOSTNAME"
 OLLAMA_KEY="YOUR_OLLAMA_KEY"
 OLLAMA_MODEL="llama3.1:8b"
 ```
-
 
 Prepare the testbed by executing the helper scripts (which auto-load settings from `.env`):
 
@@ -94,6 +96,7 @@ python runs/clean_testbed.py
 ```
 
 ### 2. Execute Training Run
+
 Run the simulation and federated training. The pipeline supports two MLOps modes (`experimental` or `production`) and production strategies (`resume` or `fresh`):
 
 ```bash
@@ -108,6 +111,7 @@ python src/orchestrate.py --mlops-mode production --production-strategy fresh
 ```
 
 The orchestrator will automatically:
+
 1. Clean up old processes on nodes
 2. SCP current source code to remote VMs
 3. Launch target HTTP services, extractors, MLflow, and Flower server (with proper MLOps and strategy configuration flags)
@@ -118,6 +122,7 @@ The orchestrator will automatically:
 8. Notify via Telegram upon completion or failure
 
 ### 3. Execute Hyperparameter Sweep
+
 To systematically run a grid search over multiple hyperparameter combinations, execute the sweep controller:
 
 ```bash
@@ -129,18 +134,18 @@ python src/sweep.py --config configs/sweep_grid.yaml
 ```
 
 The sweep controller will:
+
 1. Iterate over every hyperparameter combination in the configuration file.
 2. Initialize a parent run in MLflow to record the search space.
 3. Nest each training run under the parent run (linking them via `parent-run-id`).
 4. Ensure standard output utilizes UTF-8 encoding on Windows to prevent console emoji errors.
-
 
 ---
 
 ## MLOps & Security Features
 
 | Feature | Implementation |
-|:--------|:---------------|
+| :-------- | :--------------- |
 | **Experiment Config** | `configs/experiment.yaml` — all params in one YAML, logged as MLflow artifact |
 | **Byzantine Robustness** | Aggregator strategy supports `FedMedian`, `TrimmedMean`, and `Krum` coordinate-wise and distance-based filtering |
 | **Differential Privacy** | Client-side DP-SGD via **Opacus** wrapping optimizer, tracking privacy budget metrics ($\epsilon, \delta$) |
@@ -202,7 +207,7 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/cross_dataset_benchmark.py --ch
 ## Cluster Layout
 
 | Node | VM ID | Hostname | Logical IP Subnet | Role |
-|:---|:---|:---|:---|:---|
+| :--- | :--- | :--- | :--- | :--- |
 | pve | 300 | fl-aggregator | `10.10.130.10/16` | Flower server, MLflow tracking |
 | its | 310 | defender-a | `10.10.130.11/16` | NFStream + PyTorch + Avalanche + Flower client |
 | its | 311 | target-a1 | `10.10.110.15/16` | Attack/benign traffic receiver |
@@ -215,7 +220,7 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/cross_dataset_benchmark.py --ch
 ## Documentation
 
 | Document | Purpose |
-|:---|:---|
+| :--- | :--- |
 | [Research Paper](docs/00_research_paper.md) | Complete integrated paper (Chapters 1–9) |
 | [Prerequisites](docs/01_prerequisites.md) | Hardware, datasets, traffic generation tools |
 | [Architecture](docs/02_architecture.md) | Conceptual blueprint, diagrams, code components |
