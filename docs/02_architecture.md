@@ -310,9 +310,9 @@ from torch.nn import CrossEntropyLoss
 from avalanche.training.supervised import EWC
 import torch
 
-def get_continual_learner(model, device, ewc_lambda=0.25, class_weights=None):
+def get_continual_learner(model, device, ewc_lambda=0.8, class_weights=None):
     if class_weights is None:
-        class_weights = [8.0, 20.0, 3.0, 15.0, 10.0]
+        class_weights = [1.0, 250.0, 2.0, 5.0, 50.0]
     weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
     return EWC(
         model=model,

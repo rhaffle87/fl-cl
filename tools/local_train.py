@@ -33,7 +33,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=40, help="Training epochs")
     parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
     parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
-    parser.add_argument("--model-type", default="mlp", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
+    parser.add_argument("--model-type", default="cnn", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
     args = parser.parse_args()
 
     print("Loading ramdisk flows...")

@@ -20,7 +20,7 @@ fl:
 # ── Continual Learning (EWC) ────────────────────────────────
 cl:
   strategy: "EWC"
-  ewc_lambda: 0.1
+  ewc_lambda: 0.8
   gem_patterns_per_exp: 256
   gem_memory_strength: 0.5
   task_sequence: "benign,ssh,slowloris,dns_exfil,botnet"
@@ -53,7 +53,7 @@ security:
 
 # ── Model Architecture ──────────────────────────────────────
 model:
-  type: "mlp"
+  type: "cnn"
   prune_fraction: 0.2
   input_dim: 32
   num_classes: 5
@@ -63,11 +63,11 @@ model:
 # ── Training Hyperparameters ────────────────────────────────
 training:
   optimizer: "SGD"
-  lr: 0.005
+  lr: 0.003
   momentum: 0.9
   batch_size: 32
   epochs_per_round: 1
-  class_weights: [2.0, 150.0, 3.0, 7.0, 18.0]
+  class_weights: [1.0, 250.0, 2.0, 5.0, 50.0]
 
 # ── Feature Engineering ─────────────────────────────────────
 features:

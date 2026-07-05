@@ -1,0 +1,212 @@
+{
+  "0": {
+    "bidirectional_packets": {
+      "mean": 18.122317041634343,
+      "std": 11.433031624013939
+    },
+    "bidirectional_bytes": {
+      "mean": 1410.5686578743212,
+      "std": 875.1946165241739
+    },
+    "duration_ms": {
+      "mean": 915.321955003879,
+      "std": 532.462005611741
+    },
+    "src2dst_packets": {
+      "mean": 10.464701318851823,
+      "std": 7.278118701200853
+    },
+    "src2dst_bytes": {
+      "mean": 808.9498319110421,
+      "std": 548.8453416680483
+    },
+    "dst2src_packets": {
+      "mean": 7.657615722782519,
+      "std": 4.181434938151968
+    },
+    "dst2src_bytes": {
+      "mean": 601.618825963279,
+      "std": 332.06709198952115
+    },
+    "src2dst_mean_piat_ms": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "dst2src_mean_piat_ms": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "dst_port": {
+      "mean": 181.0773209206103,
+      "std": 2160.5995572856273
+    }
+  },
+  "1": {
+    "bidirectional_packets": {
+      "mean": 8.0,
+      "std": 0.0
+    },
+    "bidirectional_bytes": {
+      "mean": 728.2941176470588,
+      "std": 55.54006438804481
+    },
+    "duration_ms": {
+      "mean": 102.76470588235294,
+      "std": 0.49597308879901364
+    },
+    "src2dst_packets": {
+      "mean": 4.0,
+      "std": 0.0
+    },
+    "src2dst_bytes": {
+      "mean": 450.29411764705884,
+      "std": 55.54006438804481
+    },
+    "dst2src_packets": {
+      "mean": 4.0,
+      "std": 0.0
+    },
+    "dst2src_bytes": {
+      "mean": 278.0,
+      "std": 0.0
+    },
+    "src2dst_mean_piat_ms": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "dst2src_mean_piat_ms": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "dst_port": {
+      "mean": 8669.411764705883,
+      "std": 416.3342274523038
+    }
+  },
+  "2": {
+    "bidirectional_packets": {
+      "mean": 1.0073198198198199,
+      "std": 0.08526625190540328
+    },
+    "bidirectional_bytes": {
+      "mean": 81.5929054054054,
+      "std": 6.906566404337664
+    },
+    "duration_ms": {
+      "mean": 40.998873873873876,
+      "std": 533.7743565034789
+    },
+    "src2dst_packets": {
+      "mean": 1.0073198198198199,
+      "std": 0.08526625190540328
+    },
+    "src2dst_bytes": {
+      "mean": 81.5929054054054,
+      "std": 6.906566404337664
+    },
+    "dst2src_packets": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "dst2src_bytes": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "src2dst_mean_piat_ms": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "dst2src_mean_piat_ms": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "dst_port": {
+      "mean": 53.0,
+      "std": 0.0
+    }
+  },
+  "3": {
+    "bidirectional_packets": {
+      "mean": 32.75064267352185,
+      "std": 5.433954991895634
+    },
+    "bidirectional_bytes": {
+      "mean": 5852.7532133676095,
+      "std": 744.7537618189743
+    },
+    "duration_ms": {
+      "mean": 323.04370179948586,
+      "std": 141.94466993284334
+    },
+    "src2dst_packets": {
+      "mean": 15.7146529562982,
+      "std": 2.1534714710608402
+    },
+    "src2dst_bytes": {
+      "mean": 2577.0205655526993,
+      "std": 332.571641128922
+    },
+    "dst2src_packets": {
+      "mean": 17.03598971722365,
+      "std": 3.4377738481205866
+    },
+    "dst2src_bytes": {
+      "mean": 3275.7326478149103,
+      "std": 471.05058113548074
+    },
+    "src2dst_mean_piat_ms": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "dst2src_mean_piat_ms": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "dst_port": {
+      "mean": 22.0,
+      "std": 0.0
+    }
+  },
+  "4": {
+    "bidirectional_packets": {
+      "mean": 7.109489051094891,
+      "std": 5.642119480923069
+    },
+    "bidirectional_bytes": {
+      "mean": 566.0656934306569,
+      "std": 640.9457878834853
+    },
+    "duration_ms": {
+      "mean": 6042.956204379562,
+      "std": 5139.844133692779
+    },
+    "src2dst_packets": {
+      "mean": 4.233576642335766,
+      "std": 5.786981807220191
+    },
+    "src2dst_bytes": {
+      "mean": 361.8029197080292,
+      "std": 651.7318087830668
+    },
+    "dst2src_packets": {
+      "mean": 2.875912408759124,
+      "std": 0.8613024975415787
+    },
+    "dst2src_bytes": {
+      "mean": 204.26277372262774,
+      "std": 54.703918301562375
+    },
+    "src2dst_mean_piat_ms": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "dst2src_mean_piat_ms": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "dst_port": {
+      "mean": 78.83211678832117,
+      "std": 9.630351333663254
+    }
+  }
+}

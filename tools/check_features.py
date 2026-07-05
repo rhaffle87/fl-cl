@@ -49,7 +49,7 @@ def load_flows(flows_dir):
         sys.exit(1)
 
     df = pd.concat(dfs, ignore_index=True)
-    df["label"] = df.apply(client.assign_label, axis=1)
+    df["label"] = client.assign_labels_vectorized(df)
     return df
 
 

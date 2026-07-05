@@ -485,15 +485,22 @@ Treats the 32 input dimensions as a sequence, reshaping to `(batch, 1, 32)`.
 
 ```python
 class CyberDefenseCNN(nn.Module):
-    def __init__(self, input_dim=32, num_classes=5):
+    def __init__(self, input_dim=32, num_classes=5, conv_channels1=16, conv_channels2=32,
+                 kernel_size=3, fc_dim=64, dropout=0.2):
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(1, 16, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool1d(2),
-            nn.Conv1d(16, 32, kernel_size=3, padding=1), nn.ReLU(), nn.MaxPool1d(2)
+            nn.Conv1d(1, conv_channels1, kernel_size=kernel_size, padding=kernel_size//2),
+            nn.ReLU(), nn.MaxPool1d(2),
+            nn.Conv1d(conv_channels1, conv_channels2, kernel_size=kernel_size, padding=kernel_size//2),
+            nn.ReLU(), nn.MaxPool1d(2)
         )
+        # Dynamic FC input dimension resolution via dummy forward pass
+        with torch.no_grad():
+            dummy_out = self.conv(torch.zeros(1, 1, input_dim))
+            self.fc_input_dim = dummy_out.numel()
         self.fc = nn.Sequential(
-            nn.Linear(32 * 8, 64), nn.ReLU(), nn.Dropout(0.2),
-            nn.Linear(64, num_classes)
+            nn.Linear(self.fc_input_dim, fc_dim), nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(fc_dim, num_classes)
         )
     def forward(self, x):
         x = x.unsqueeze(1)
@@ -550,9 +557,9 @@ from torch.optim import SGD
 from torch.nn import CrossEntropyLoss
 from avalanche.training.supervised import EWC
 
-def get_continual_learner(model, device, ewc_lambda=0.4, class_weights=None):
+def get_continual_learner(model, device, ewc_lambda=0.8, class_weights=None):
     if class_weights is None:
-        class_weights = [12.0, 3.0, 3.0, 15.0, 1.0]  # Overridden by experiment.yaml
+        class_weights = [1.0, 250.0, 2.0, 5.0, 50.0]  # Overridden by experiment.yaml
     weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
     return EWC(
         model=model,
@@ -564,7 +571,7 @@ def get_continual_learner(model, device, ewc_lambda=0.4, class_weights=None):
     )
 ```
 
-The `ewc_lambda` default of `0.4` in code is overridden at runtime by `configs/experiment.yaml` (currently set to `0.25`). This coefficient balances plasticity (ability to learn new attacks) against stability (retention of old attack knowledge) and should be tuned during evaluation (Chapter 8).
+The `ewc_lambda` default of `0.8` in code is overridden at runtime by `configs/experiment.yaml` (currently set to `0.8`). This coefficient balances plasticity (ability to learn new attacks) against stability (retention of old attack knowledge) and should be tuned during evaluation (Chapter 8).
 
 ### 6.3 Flower Client (`client.py`)
 

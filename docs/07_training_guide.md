@@ -62,12 +62,12 @@ You can override configuration parameters directly from the command line:
 | `--config` | String | Path to experiment configuration YAML | `configs/experiment.yaml` |
 | `--key` | String | Path to private SSH key for node connection | Load from `.env` or SSH agent |
 | `--rounds` | Integer | Number of federated learning rounds to run | `100` |
-| `--lambda-ewc` | Float | EWC regularization strength ($\lambda$) | `0.1` |
-| `--lr` | Float | Learning rate of client optimizers | `0.005` |
+| `--lambda-ewc` | Float | EWC regularization strength ($\lambda$) | `0.8` |
+| `--lr` | Float | Learning rate of client optimizers | `0.003` |
 | `--momentum` | Float | SGD momentum multiplier | `0.9` |
 | `--batch-size` | Integer | Client training batch size | `32` |
 | `--dos-threshold-ms` | Integer | Duration threshold (ms) to label flows as DoS | `2000` |
-| `--class-weights` | String | Comma-separated class weight multipliers | `2.0,150.0,3.0,7.0,18.0` |
+| `--class-weights` | String | Comma-separated class weight multipliers | `1.0,250.0,2.0,5.0,50.0` |
 | `--parent-run-id` | String | Link this execution as a child run inside an MLflow sweep parent | None |
 
 ### B. Running a Parameter Sweep (Hyperparameter Grid)

@@ -49,7 +49,7 @@ def run_plotting(key_path, aggregator_ip, local_db="mlflow_temp.db", run_id_arg=
     # 1. Back up database remotely using Python's sqlite3 backup API
     print(f"[*] Backing up remote MLflow database on {aggregator_ip}...")
     backup_script = "import sqlite3; src = sqlite3.connect('/root/mlflow.db'); dst = sqlite3.connect('/tmp/mlflow_backup.db'); src.backup(dst); dst.close(); src.close()"
-    backup_cmd = ["ssh"] + ssh_opts + [f"root@{aggregator_ip}", f"python3 -c \"{backup_script}\""]
+    backup_cmd = ["ssh", "-n"] + ssh_opts + [f"root@{aggregator_ip}", f"python3 -c \"{backup_script}\""]
     subprocess.run(backup_cmd, check=True)
 
     # 2. Download backup via SCP
@@ -61,7 +61,7 @@ def run_plotting(key_path, aggregator_ip, local_db="mlflow_temp.db", run_id_arg=
     subprocess.run(scp_cmd, check=True)
 
     # 3. Delete remote backup file
-    cleanup_remote_cmd = ["ssh"] + ssh_opts + [f"root@{aggregator_ip}", "rm -f /tmp/mlflow_backup.db"]
+    cleanup_remote_cmd = ["ssh", "-n"] + ssh_opts + [f"root@{aggregator_ip}", "rm -f /tmp/mlflow_backup.db"]
     subprocess.run(cleanup_remote_cmd, check=True)
 
     # 4. Query metrics

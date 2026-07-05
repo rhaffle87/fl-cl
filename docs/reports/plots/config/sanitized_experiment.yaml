@@ -1,0 +1,96 @@
+checkpointing:
+  export_torchscript: true
+  save_best: true
+  save_dir: /opt/mlflow-artifacts/checkpoints
+cl:
+  comm_overhead_budget: 200000000
+  complexity_score: 1.4
+  ewc_lambda: 0.8
+  gem_memory_strength: 0.5
+  gem_patterns_per_exp: 256
+  strategy: EWC
+  task_sequence: benign,ssh,slowloris,dns_exfil,botnet
+data_quality:
+  baseline_class_distribution: 2000,10,200,50,100
+  baseline_stats_path: configs/baseline_feature_stats.json
+  gate_action: abort
+  jsd_threshold: 0.6
+experiment:
+  description: Federated Continual Learning with EWC on 5-class encrypted traffic
+  name: FL-CL-EWC-Baseline
+features:
+  columns:
+  - bidirectional_packets
+  - bidirectional_bytes
+  - duration_ms
+  - src2dst_packets
+  - src2dst_bytes
+  - dst2src_packets
+  - dst2src_bytes
+  - src2dst_mean_piat_ms
+  - dst2src_mean_piat_ms
+  - dst_port
+fl:
+  fraction_evaluate: 1.0
+  fraction_fit: 1.0
+  min_clients: 2
+  rounds: 100
+labeling:
+  dos_duration_threshold_ms: 2000
+mlops:
+  mode: production
+  production_strategy: resume
+  registered_model_name: CyberDefenseNet
+model:
+  dropout: 0.2
+  hidden_layers:
+  - 64
+  - 32
+  input_dim: 32
+  num_classes: 5
+  prune_fraction: 0.2
+  type: cnn
+notifications:
+  telegram:
+    enabled: true
+security:
+  aggregation_strategy: FedAvg
+  dp_enabled: false
+  dp_max_grad_norm: 1.0
+  dp_noise_multiplier: 0.1
+  poison_client_ids:
+  - A
+  poison_enabled: false
+  poison_from_class: 0
+  poison_rate: 0.2
+  poison_to_class: 4
+  trimmed_mean_beta: 0.1
+simulation:
+  attack_duration_seconds: 90
+  stages:
+  - mode: benign
+  - mode: ssh
+  - mode: slowloris
+  - mode: dns_exfil
+  - mode: botnet
+topology:
+  aggregator: 10.10.130.10
+  defender_a: 10.10.130.11
+  defender_b: 10.10.130.12
+  flower_port: 8080
+  mlflow_port: 5000
+  target_a: 10.10.110.15
+  target_b: 10.10.120.15
+  traffic_gen: 10.10.140.10
+training:
+  batch_size: 32
+  class_weights:
+  - 1.0
+  - 250.0
+  - 2.0
+  - 5.0
+  - 50.0
+  epochs_per_round: 1
+  lr: 0.003
+  momentum: 0.9
+  optimizer: SGD

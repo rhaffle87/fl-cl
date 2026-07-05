@@ -82,7 +82,7 @@ def main():
         sys.exit(1)
 
     df = pd.concat(dfs, ignore_index=True)
-    df["label"] = df.apply(client.assign_label, axis=1, dos_threshold_ms=args.dos_threshold_ms)
+    df["label"] = client.assign_labels_vectorized(df, dos_threshold_ms=args.dos_threshold_ms)
 
     counts = df["label"].value_counts().to_dict()
     counts_full = {i: int(counts.get(i, 0)) for i in range(5)}

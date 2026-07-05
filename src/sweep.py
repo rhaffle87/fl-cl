@@ -119,12 +119,12 @@ def main():
             print(f"[*] Parameters: {param_map}")
             print(f"==================================================")
             
-            # Map parameters to orchestrate.py arguments
-            cmd = ["python", "src/orchestrate.py"]
+            cmd = ["python", "src/orchestrate.py", "--mlops-mode", "experimental"]
             if args.key:
                 cmd.extend(["--key", args.key])
             if parent_run_id:
                 cmd.extend(["--parent-run-id", parent_run_id])
+
                 
             for k, val in param_map.items():
                 if k == "cl.ewc_lambda":
@@ -142,6 +142,8 @@ def main():
                     cmd.extend(["--model-type", str(val)])
                 elif k == "model.prune_fraction":
                     cmd.extend(["--prune-fraction", str(val)])
+                elif k == "simulation.duration":
+                    cmd.extend(["--duration", str(val)])
             
             print(f"[*] Command: {' '.join(cmd)}")
             try:

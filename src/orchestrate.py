@@ -110,7 +110,7 @@ def validate_sanitized_inputs(
     assert isinstance(duration, int) and 0 < duration <= 3600, f"Invalid simulation duration: {duration}"
     
     # 2. Check string patterns via regex
-    # class_weights must be a comma-separated list of positive floats/ints: "12.0,3.0,3.0,15.0,1.0"
+    # class_weights must be a comma-separated list of positive floats/ints: "1.0,250.0,2.0,5.0,50.0"
     if not re.match(r"^\d+(\.\d+)?(,\d+(\.\d+)?)*$", weights_str):
         raise ValueError(f"Invalid class weights format: {weights_str}")
         
@@ -439,19 +439,19 @@ def main():
 
     rounds = args.rounds or get_config_value(config, "fl", "rounds", default=10)
     cl_strategy = args.cl_strategy or get_config_value(config, "cl", "strategy", default="EWC")
-    lambda_ewc = args.lambda_ewc or get_config_value(config, "cl", "ewc_lambda", default=0.4)
+    lambda_ewc = args.lambda_ewc if args.lambda_ewc is not None else get_config_value(config, "cl", "ewc_lambda", default=0.8)
     gem_patterns = args.gem_patterns or get_config_value(config, "cl", "gem_patterns_per_exp", default=256)
-    gem_memory_strength = args.gem_memory_strength or get_config_value(config, "cl", "gem_memory_strength", default=0.5)
+    gem_memory_strength = args.gem_memory_strength if args.gem_memory_strength is not None else get_config_value(config, "cl", "gem_memory_strength", default=0.5)
     duration = args.duration or get_config_value(config, "simulation", "attack_duration_seconds", default=30)
     
     if args.class_weights:
         weights_str = args.class_weights
     else:
-        class_weights = get_config_value(config, "training", "class_weights", default=[12.0, 3.0, 3.0, 15.0, 1.0])
+        class_weights = get_config_value(config, "training", "class_weights", default=[1.0, 250.0, 2.0, 5.0, 50.0])
         weights_str = ",".join(map(str, class_weights))
         
     lr = args.lr or get_config_value(config, "training", "lr", default=0.01)
-    momentum = args.momentum or get_config_value(config, "training", "momentum", default=0.9)
+    momentum = args.momentum if args.momentum is not None else get_config_value(config, "training", "momentum", default=0.9)
     batch_size = args.batch_size or get_config_value(config, "training", "batch_size", default=32)
     
     experiment_name = get_config_value(config, "experiment", "name", default="FL-CL-Run")
@@ -510,7 +510,7 @@ def main():
     key_path = args.key or os.environ.get("SSH_KEY_PATH") or default_key
 
     # Theme H Configs
-    model_type = args.model_type or get_config_value(config, "model", "type", default="mlp")
+    model_type = args.model_type or get_config_value(config, "model", "type", default="cnn")
     prune_fraction = args.prune_fraction if args.prune_fraction is not None else get_config_value(config, "model", "prune_fraction", default=0.2)
 
     # Define node IPs to pass to the validator
@@ -581,7 +581,7 @@ def main():
             node.cleanup(kill_mlflow=True)
             if node.name in ["defender-a", "defender-b"]:
                 print(f"[{node.name}] Cleaning up ramdisk flows directory...")
-                node.run_cmd("rm -rf /mnt/ramdisk/flows/* || true")
+                node.run_cmd("find /mnt/ramdisk/flows/ -maxdepth 1 -type f -delete || rm -rf /mnt/ramdisk/flows/* || true")
 
     try:
         print("\n=== Phase 2: Synchronizing source code to remote nodes ===")
@@ -699,7 +699,7 @@ def main():
         # 3. Slowloris DoS — extended wait to generate more DoS (class 4) samples
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_a_ip} --duration {duration} --port 80", background=True)
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_b_ip} --duration {duration} --port 80", background=True)
-        time.sleep(duration)  # Full duration wait for DoS flows to accumulate
+        time.sleep(duration * 2)  # Extended wait (2x) — DoS flows need longer accumulation due to duration_ms > 2000 threshold filter
 
         # 4. DNS Exfiltration — shortened wait to avoid over-dominating dataset
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target {target_a_ip} --duration {duration}", background=True)
@@ -709,13 +709,13 @@ def main():
         # 5. C2 Botnet Beaconing
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode botnet --target {target_a_ip} --duration {duration}", background=True)
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode botnet --target {target_b_ip} --duration {duration}", background=True)
-        time.sleep(duration)
+        time.sleep(duration * 2)  # Extended wait (2x) — Botnet beaconing generates extremely sparse flows (1-3 per window)
 
         print("\n=== Phase 6b: Waiting for flow data to accumulate on ramdisk ===")
         print("[*] Polling defender-a ramdisk until at least one CSV appears (timeout: 120s)...")
         ramdisk_ready = False
         for _ in range(24):
-            check = def_a.run_cmd("ls /mnt/ramdisk/flows/*.csv 2>/dev/null | wc -l")
+            check = def_a.run_cmd("find /mnt/ramdisk/flows/ -maxdepth 1 -name '*.csv' 2>/dev/null | wc -l")
             count = check.stdout.strip()
             if count and int(count) > 0:
                 print(f"[OK] Ramdisk ready - {count} CSV file(s) found on defender-a. Proceeding.")

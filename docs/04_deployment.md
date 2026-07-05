@@ -399,7 +399,7 @@ if __name__ == "__main__":
 
 ### Layer 5: Local Continual Learning Engine
 
-Inside the Defender VMs, model training uses the Avalanche library. The network model (`CyberDefenseNet`) is a 3-layer Multi-Layer Perceptron (MLP) that maps a 32-feature vector (representing network traffic properties) to 5 threat classes:
+Inside the Defender VMs, model training uses the Avalanche library. The network model (`CyberDefenseNet`) supports multiple backbones (MLP, 1D-CNN, Transformer) selected via `model.type` in `configs/experiment.yaml`. The production configuration uses the **1D-CNN** (`CyberDefenseCNN`), which maps a 32-feature vector (representing network traffic properties) to 5 threat classes:
 
 1. `0`: Normal (benign traffic)
 2. `1`: Botnet (C2 beaconing on ports 8080/8888/9000)
@@ -418,9 +418,9 @@ from torch.nn import CrossEntropyLoss
 from torch.optim import SGD
 from avalanche.training.supervised import EWC
 
-def get_continual_learner(model, device, ewc_lambda=0.25, class_weights=None):
+def get_continual_learner(model, device, ewc_lambda=0.8, class_weights=None):
     if class_weights is None:
-        class_weights = [8.0, 20.0, 3.0, 15.0, 10.0]
+        class_weights = [1.0, 250.0, 2.0, 5.0, 50.0]
     weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
     return EWC(
         model=model,
@@ -481,9 +481,9 @@ from model import get_model
 from cl_strategy import get_cl_strategy
 
 class CyberDefenseClient(fl.client.NumPyClient):
-    def __init__(self, client_id, model_type="mlp"):
+    def __init__(self, client_id, model_type="cnn"):
         self.model = get_model(model_type, input_dim=32, num_classes=5)
-        self.strategy = get_cl_strategy(self.model, ewc_lambda=150.0)
+        self.strategy = get_cl_strategy(self.model, ewc_lambda=0.8)
         self.client_id = client_id
 
     def get_parameters(self, config):

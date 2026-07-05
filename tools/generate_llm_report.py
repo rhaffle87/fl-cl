@@ -161,7 +161,7 @@ if __name__ == "__main__":
     parser.add_argument("--run-dir", required=True, help="Path to the run export directory containing run_summary.md")
     parser.add_argument("--run-id", required=True, help="Active MLflow Run ID")
     parser.add_argument("--metrics-json", required=True, help="JSON string representing final metrics dictionary")
-    parser.add_argument("--lambda-ewc", type=float, default=0.1, help="EWC lambda configuration")
+    parser.add_argument("--lambda-ewc", type=float, default=0.8, help="EWC lambda configuration")
     parser.add_argument("--cl-strategy", default="EWC", help="Continual Learning Strategy")
     parser.add_argument("--gem-patterns", type=int, default=256, help="GEM patterns per exp")
     parser.add_argument("--gem-memory-strength", type=float, default=0.5, help="GEM memory strength")

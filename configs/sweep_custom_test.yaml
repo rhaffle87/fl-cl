@@ -1,0 +1,13 @@
+# ─────────────────────────────────────────────────────────────
+# FL-CL Sweep Custom Test Configuration (Fast Multi-Parameter Sweep)
+# ─────────────────────────────────────────────────────────────
+experiment:
+  name: "FCL-Parameter-Analysis-Sweep"
+  description: "Test run evaluating MLP vs CNN backbones and Naive vs EWC Continual Learning strategies."
+
+sweep:
+  parameters:
+    simulation.duration: [5]
+    fl.rounds: [2]
+    model.type: ["mlp", "cnn"]
+    cl.ewc_lambda: [0.0, 0.8]

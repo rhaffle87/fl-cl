@@ -14,6 +14,7 @@ fl-cl/
 ├── configs/                      ← Experiment configurations
 │   ├── experiment.yaml           ← Reproducible hyperparams, topology, notifications
 │   ├── sweep_grid.yaml           ← Hyperparameter sweep configuration grid
+│   ├── sweep_custom_test.yaml    ← Custom multi-parameter sweep (MLP vs CNN × EWC λ)
 │   └── sweep_verify.yaml         ← Fast hyperparameter sweep verification config
 │
 ├── docs/                         ← Research documentation
@@ -23,7 +24,9 @@ fl-cl/
 │   ├── 03_workarounds.md         ← Cluster-specific fixes & deployment
 │   ├── 04_deployment.md          ← Step-by-step cluster setup
 │   ├── 05_orchestration.md       ← Training and attack execution
-│   └── 06_fcl.md                 ← End-to-end FCL technical explanation
+│   ├── 06_fcl.md                 ← End-to-end FCL technical explanation
+│   ├── 07_training_guide.md      ← Training guidebook, CLI flags, MLOps perks
+│   └── reports/                  ← Experiment reports, sweep results, plots
 │
 ├── infra/                        ← Infrastructure-as-Code (shell scripts)
 │   ├── 01_host_config/           ← PVE hypervisor-level configuration
@@ -166,7 +169,7 @@ The sweep controller will:
 | **BWT Evaluation Suite** | `tools/bwt_eval_suite.py` — computes BWT deltas with SHA-256 validation signing |
 | **Generalization Benchmark** | `tools/cross_dataset_benchmark.py` — cross-dataset validation under simulated covariate shift |
 | **Confusion Matrix Tracking** | Per-round 5x5 matrix summation at aggregator with automated MLflow heatmap plots |
-| **Class-Weighted Loss** | Per-class weights `[8.0, 20.0, 3.0, 15.0, 10.0]` for imbalanced data |
+| **Class-Weighted Loss** | Per-class weights `[1.0, 250.0, 2.0, 5.0, 50.0]` for imbalanced data |
 | **Experiment Tracking** | MLflow at `http://10.10.130.10:5000` with git hash tagging, parameters, and metrics tracking |
 | **Notifications** | Telegram bot for start/complete/fail alerts |
 
@@ -228,4 +231,7 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/cross_dataset_benchmark.py --ch
 | [Deployment](docs/04_deployment.md) | Step-by-step cluster setup, provisioning, and installations |
 | [Orchestration](docs/05_orchestration.md) | Detailed guide to training and attack execution |
 | [FCL Explained](docs/06_fcl.md) | End-to-end technical explanation of how FCL works |
+| [Training Guide](docs/07_training_guide.md) | Training guidebook, CLI reference, MLOps behaviors |
 | [Tech Stack](TECH_STACK.md) | Full technology inventory per layer |
+| [Parameter Sweep Report](docs/reports/parameter_sweep_report.md) | Comparative analysis of MLP vs CNN × EWC λ sweep |
+| [Production Training Report](docs/reports/training_results_report.md) | Consolidated 100-round production run results |

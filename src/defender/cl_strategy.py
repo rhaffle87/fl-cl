@@ -4,7 +4,7 @@ cl_strategy.py — Elastic Weight Consolidation (EWC) Continual Learning Strateg
 Wraps the CyberDefenseNet model with Avalanche's EWC strategy to prevent
 catastrophic forgetting when training on sequential attack tasks.
 
-The ewc_lambda parameter (default: 0.4) balances:
+The ewc_lambda parameter (default: 0.8) balances:
   - Plasticity: ability to learn new attack patterns
   - Stability: retention of previously learned attack signatures
 
@@ -25,7 +25,7 @@ def get_continual_learner(
     model,
     device,
     strategy_name: str = "EWC",
-    ewc_lambda: float = 0.4,
+    ewc_lambda: float = 0.8,
     patterns_per_exp: int = 256,
     memory_strength: float = 0.5,
     class_weights=None,
@@ -58,7 +58,7 @@ def get_continual_learner(
         Avalanche training strategy object with train() and eval() methods.
     """
     if class_weights is None:
-        class_weights = [12.0, 3.0, 3.0, 15.0, 1.0]
+        class_weights = [1.0, 250.0, 2.0, 5.0, 50.0]
     
     weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
     # Normalize class weights so they sum to the number of classes, preventing gradient explosion/NaNs

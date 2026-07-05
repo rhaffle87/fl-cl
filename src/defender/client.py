@@ -431,18 +431,40 @@ class CyberDefenseClient(NumPyClientClass):
                 fisher_diagonals = {}
                 all_importances = []
                 
-                for (task_id, param), imp_tensor in ewc_plugin.importances.items():
-                    if param in param_to_name:
-                        name = param_to_name[param]
-                        imp_np = imp_tensor.cpu().numpy()
-                        fisher_diagonals[name] = imp_np.tolist()
-                        all_importances.append(imp_np)
-                        
-                        # Log histogram and mean to TensorBoard
-                        if hasattr(self, "writer") and self.writer is not None:
-                            tb_tag = f"fisher/{name.replace('.', '/')}_task_{task_id}"
-                            self.writer.add_histogram(tb_tag, imp_tensor, global_step=current_round)
-                            self.writer.add_scalar(f"fisher_mean/{name.replace('.', '/')}_task_{task_id}", float(imp_np.mean()), global_step=current_round)
+                for key, val in ewc_plugin.importances.items():
+                    # Case 1: Key is a tuple (task_id, param) - used by mock or some Avalanche versions
+                    if isinstance(key, tuple) and len(key) == 2:
+                        task_id, param = key
+                        imp_tensor = val.data if hasattr(val, "data") else val
+                        if param in param_to_name:
+                            name = param_to_name[param]
+                            imp_np = imp_tensor.cpu().numpy()
+                            fisher_diagonals[name] = imp_np.tolist()
+                            all_importances.append(imp_np)
+                            if hasattr(self, "writer") and self.writer is not None:
+                                tb_tag = f"fisher/{name.replace('.', '/')}_task_{task_id}"
+                                self.writer.add_histogram(tb_tag, imp_tensor, global_step=current_round)
+                                self.writer.add_scalar(f"fisher_mean/{name.replace('.', '/')}_task_{task_id}", float(imp_np.mean()), global_step=current_round)
+                    
+                    # Case 2: Key is task_id (int) and val is dict of {param_name/param: imp_data} - used by actual Avalanche
+                    elif isinstance(key, int) and isinstance(val, dict):
+                        task_id = key
+                        for p_key, imp_data in val.items():
+                            imp_tensor = imp_data.data if hasattr(imp_data, "data") else imp_data
+                            name = None
+                            if isinstance(p_key, str):
+                                name = p_key
+                            elif p_key in param_to_name:
+                                name = param_to_name[p_key]
+                            
+                            if name is not None and isinstance(imp_tensor, torch.Tensor):
+                                imp_np = imp_tensor.cpu().numpy()
+                                fisher_diagonals[name] = imp_np.tolist()
+                                all_importances.append(imp_np)
+                                if hasattr(self, "writer") and self.writer is not None:
+                                    tb_tag = f"fisher/{name.replace('.', '/')}_task_{task_id}"
+                                    self.writer.add_histogram(tb_tag, imp_tensor, global_step=current_round)
+                                    self.writer.add_scalar(f"fisher_mean/{name.replace('.', '/')}_task_{task_id}", float(imp_np.mean()), global_step=current_round)
                 
                 if all_importances:
                     flat_importances = np.concatenate([arr.flatten() for arr in all_importances])
@@ -562,10 +584,10 @@ def main():
     parser.add_argument("--client-id", default="A", help="Client identifier (A or B)")
     parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory")
     parser.add_argument("--cl-strategy", default="EWC", help="Continual Learning strategy (EWC, GEM, Naive)")
-    parser.add_argument("--ewc-lambda", type=float, default=0.4, help="EWC regularization strength")
+    parser.add_argument("--ewc-lambda", type=float, default=0.8, help="EWC regularization strength")
     parser.add_argument("--gem-patterns", type=int, default=256, help="GEM patterns per experience")
     parser.add_argument("--gem-memory-strength", type=float, default=0.5, help="GEM memory strength")
-    parser.add_argument("--class-weights", default="12.0,3.0,3.0,15.0,1.0", help="Comma-separated class weights")
+    parser.add_argument("--class-weights", default="1.0,250.0,2.0,5.0,50.0", help="Comma-separated class weights")
     parser.add_argument("--lr", type=float, default=0.01, help="SGD learning rate")
     parser.add_argument("--momentum", type=float, default=0.9, help="SGD momentum")
     parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
@@ -573,7 +595,7 @@ def main():
     parser.add_argument("--traffic-gen-ip", default=os.environ.get("TRAFFIC_GEN_IP", "10.10.140.10"), help="Traffic Generator IP address")
     parser.add_argument("--baseline", default=None, help="Comma-separated baseline distribution (e.g. 2,150,3,7,18)")
     parser.add_argument("--js-threshold", type=float, default=0.6, help="JSD threshold for rejecting batch")
-    parser.add_argument("--model-type", default="mlp", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
+    parser.add_argument("--model-type", default="cnn", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
     
     # Security parameters
     parser.add_argument("--poison-enabled", action="store_true", help="Enable label poisoning attack simulation")

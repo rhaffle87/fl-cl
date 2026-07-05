@@ -58,7 +58,7 @@ These packages run inside VM 310 and VM 320.
 | Package | Version | Purpose | Install |
 | :--- | :--- | :--- | :--- |
 | **Python** | 3.11+ | Runtime | `apt install python3 python3-venv` |
-| **PyTorch** | 2.x | Deep learning framework (CyberDefenseNet MLP) | `pip install torch --index-url .../cpu` |
+| **PyTorch** | 2.x | Deep learning framework (CyberDefenseNet MLP, 1D-CNN, Transformer) | `pip install torch --index-url .../cpu` |
 | **Avalanche** | 0.5+ | Continual Learning library (EWC strategy) | `pip install avalanche-lib` |
 | **Flower (flwr)** | 1.x | Federated Learning client | `pip install flwr` |
 | **Opacus** | 1.x | Client-side Differential Privacy (DP-SGD) | `pip install opacus` |

@@ -796,10 +796,10 @@ def main():
     parser.add_argument("--lr", type=float, default=0.01, help="Training learning rate")
     parser.add_argument("--batch-size", type=int, default=32, help="Training batch size")
     parser.add_argument("--cl-strategy", default="EWC", help="Continual Learning strategy (EWC, GEM, Naive)")
-    parser.add_argument("--ewc-lambda", type=float, default=0.4, help="EWC lambda")
+    parser.add_argument("--ewc-lambda", type=float, default=0.8, help="EWC lambda")
     parser.add_argument("--gem-patterns", type=int, default=256, help="GEM patterns per experience")
     parser.add_argument("--gem-memory-strength", type=float, default=0.5, help="GEM memory strength")
-    parser.add_argument("--class-weights", default="12.0,3.0,3.0,15.0,1.0", help="Comma-separated class weights")
+    parser.add_argument("--class-weights", default="1.0,250.0,2.0,5.0,50.0", help="Comma-separated class weights")
     
     # Task sequence & Governance parameters
     parser.add_argument("--cl-task-sequence", default="", help="CL task sequence trained (comma-separated)")
@@ -813,7 +813,7 @@ def main():
     parser.add_argument("--aggregation-strategy", default="FedAvg", choices=["FedAvg", "FedMedian", "Krum", "TrimmedMean"],
                         help="FL aggregation strategy to use")
     parser.add_argument("--trimmed-mean-beta", type=float, default=0.1, help="Beta parameter for TrimmedMean strategy")
-    parser.add_argument("--model-type", default="mlp", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
+    parser.add_argument("--model-type", default="cnn", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
     parser.add_argument("--prune-fraction", type=float, default=0.2, help="Export-time prune fraction parameter")
     args = parser.parse_args()
 

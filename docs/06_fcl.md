@@ -194,9 +194,9 @@ The `load_ramdisk_flows()` function:
 The EWC strategy is configured in [`cl_strategy.py`](../src/defender/cl_strategy.py):
 
 ```python
-def get_continual_learner(model, device, ewc_lambda=0.4, class_weights=None):
+def get_continual_learner(model, device, ewc_lambda=0.8, class_weights=None):
     if class_weights is None:
-        class_weights = [12.0, 3.0, 3.0, 15.0, 1.0]  # Overridden by configs/experiment.yaml
+        class_weights = [1.0, 250.0, 2.0, 5.0, 50.0]  # Overridden by configs/experiment.yaml
     weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
     return EWC(
         model=model,
@@ -243,10 +243,10 @@ The `CrossEntropyLoss` is configured with per-class weights from the experiment 
 ```yaml
 # configs/experiment.yaml
 training:
-  class_weights: [8.0, 20.0, 3.0, 15.0, 10.0]
+  class_weights: [1.0, 250.0, 2.0, 5.0, 50.0]
 ```
 
-This tells the optimizer to pay **20× more attention** to misclassifying Botnet (class 1) compared to **3× for Exfiltration** (class 2). Without these weights, the model would ignore rare attack classes in favor of maximizing accuracy on the dominant Normal class.
+This tells the optimizer to pay **250× more attention** to misclassifying Botnet (class 1) compared to **1× for Normal** (class 0). Without these weights, the model would ignore rare attack classes in favor of maximizing accuracy on the dominant Normal class.
 
 ---
 
@@ -540,7 +540,7 @@ All tunable parameters are centralized in [`configs/experiment.yaml`](../configs
 | Parameter | Config Path | Default | Effect |
 | :---------- | :----------- | :-------- | :------- |
 | Strategy | `cl.strategy` | `EWC` | Dynamic selection of `EWC`, `GEM`, or `Naive` |
-| EWC Lambda | `cl.ewc_lambda` | 0.25 | Penalty scale for deviation from older parameters (EWC specific) |
+| EWC Lambda | `cl.ewc_lambda` | 0.8 | Penalty scale for deviation from older parameters (EWC specific) |
 | Patterns Per Experience | `cl.patterns_per_exp` | 256 | Replay buffer pattern limit (GEM specific) |
 | Memory Strength | `cl.memory_strength` | 0.5 | Strength of memory constraint (GEM specific) |
 
@@ -559,10 +559,10 @@ All tunable parameters are centralized in [`configs/experiment.yaml`](../configs
 
 | Parameter | Config Path | Default | Effect |
 | :---------- | :----------- | :-------- | :------- |
-| Learning Rate | `training.lr` | 0.01 | Step size for SGD optimizer |
+| Learning Rate | `training.lr` | 0.003 | Step size for SGD optimizer |
 | Batch Size | `training.batch_size` | 32 | Samples per mini-batch |
 | Epochs/Round | `training.epochs_per_round` | 1 | Local epochs before sending weights |
-| Class Weights | `training.class_weights` | `[8.0, 20.0, 3.0, 15.0, 10.0]` | Loss multiplier per class |
+| Class Weights | `training.class_weights` | `[1.0, 250.0, 2.0, 5.0, 50.0]` | Loss multiplier per class |
 
 ### Tuning Guidelines
 
