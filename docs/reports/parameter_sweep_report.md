@@ -6,10 +6,12 @@ This report summarizes the verification testing and parameter sweep results cond
 
 ## 1. Context: The 24-Round Confusion Matrix Explanation
 
-### The Question:
+### The Question
+>
 > *"Why was the previous report's confusion matrix documentation only 24 rounds?"*
 
-### The Explanation:
+### The Explanation
+
 The production run of the FCL training procedure was configured for **100 total rounds** (`fl.rounds: 100`) as part of a multi-stage execution pipeline. Rather than training from scratch every time, the orchestration pipeline is equipped with an **MLOps warm-start and checkpointing mechanism** that resumes from the latest registered champion model (`champion` model version `v15`), which had already completed **76 rounds** of training.
 
 * **Warm-Start Execution**: The orchestrator detected the checkpoint at round 76 and initiated a resumed training cycle to finish the remaining **24 rounds** (bringing the total to 100 rounds).
@@ -40,16 +42,19 @@ All runs successfully completed the network simulation, traffic generation, feat
 ## 3. Analytical Insights
 
 ### 3.1. Backbone Architecture Comparison (MLP vs. CNN)
+
 * **Representation Capacity**: The **1D-CNN backbone** outperformed the MLP backbone, achieving a top accuracy of **85.36%** (naive) and **70.76%** (EWC), compared to the MLP's peak of **45.35%**. The convolutional layers are significantly better at capturing localized spatial correlations in network packet flows (e.g., packet sequences, bytes sent/received over time).
 * **Model Footprint**: The MLP model is highly compact, compiling to only **19.8 KB** quantized. The CNN backbone is larger at **46.4 KB** quantized, but still remains extremely lightweight and suitable for micro-appliance deployment.
 
 ### 3.2. Elastic Weight Consolidation (EWC) Impact
+
 * **Stability vs. Plasticity Dilemma**:
   * For the **MLP Backbone**: Enabling EWC ($\lambda = 0.8$) improved accuracy from **41.02% to 45.35%** and helped preserve detection capability for Class 3 (SSH Brute Force) at **100%** vs. **0%** in the naive run.
   * For the **CNN Backbone**: The naive run achieved **85.36%** accuracy but failed to classify Class 2 (DNS Exfil) due to catastrophic forgetting. Enabling EWC ($\lambda = 0.8$) restored Class 2 accuracy to **100%**, although it resulted in a minor trade-off in Class 0 (Normal) accuracy, dropping global accuracy to **70.76%**.
 * **Conclusion**: EWC behaves exactly as theoretically predicted—adding parameter constraints prevents catastrophic forgetting of minority attack types (exfiltration, brute force) at the cost of slight regularization-induced plasticity limits on the majority class.
 
 ### 3.3. Data Gate & Feature Drift Observations
+
 * **JSD Safety Gates**: Both clients passed their Jensen-Shannon Divergence (JSD) gate with JSD values $< 0.01$ (well below the abort threshold of `0.6`), ensuring that the incoming traffic flows stayed statistically valid relative to the baseline.
 * **Drift Alerts**: Significant statistical drift ($Z\text{-score} > 30$) was flagged on both client nodes for `dst2src_packets` and `dst2src_bytes` during DoS simulations. This was logged to MLflow as a diagnostic warning, showing the drift analysis engine is operating correctly.
 
@@ -57,8 +62,8 @@ All runs successfully completed the network simulation, traffic generation, feat
 
 ## 4. Academic Audit Checklist
 
-- [x] Forced isolation of experimental parameters via `--mlops-mode experimental` flags.
-- [x] Evaluated neural network backbones (`mlp` vs. `cnn`) across two parameterization dimensions.
-- [x] Verified automatic compression (8-bit quantization) and scripting capabilities.
-- [x] Confirmed JSD data safety gates and feature drift reporting.
-- [x] Explained resumed confusion matrix lengths (24 rounds) based on checkpointing.
+* [x] Forced isolation of experimental parameters via `--mlops-mode experimental` flags.
+* [x] Evaluated neural network backbones (`mlp` vs. `cnn`) across two parameterization dimensions.
+* [x] Verified automatic compression (8-bit quantization) and scripting capabilities.
+* [x] Confirmed JSD data safety gates and feature drift reporting.
+* [x] Explained resumed confusion matrix lengths (24 rounds) based on checkpointing.
