@@ -4,6 +4,12 @@ model.py — CyberDefenseNet: Multi-Layer Perceptron for Encrypted Traffic Class
 Maps 32 scaled ETA features (JA3 fingerprints, SPLT statistics, flow entropy)
 to 5 threat classes: Normal, Botnet, Exfiltration, BruteForce, DoS.
 
+Research Citations:
+- [8] Jin, et al. (2024). FL-IIDS: Incremental Intrusion Detection.
+  (Primary comparative baseline architecture. Theirs uses Replay Memory, ours uses EWC).
+- [10] [Anonymous] (2025). Dataset-centric FL-IDS study on CIC-IDS2017.
+  (Baseline feature space and structural topology mapping for the MLP/CNN models).
+
 Deploy on: Defender VMs (VM 310, VM 320)
 Input:     Feature vectors from extractor.py → /mnt/ramdisk/flows/
 Output:    Class predictions for network flow classification

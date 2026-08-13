@@ -465,11 +465,15 @@ This section provides the generic execution sequence. For cluster-specific provi
 
 The hybrid FL-CL system's performance, stability, and resistance to catastrophic forgetting are validated using a three-tier benchmarking suite:
 
-1. **Per-Round Confusion Matrix Tracking (I3):**
-   * **Mechanism:** Defender clients compute local 5x5 confusion matrices on their validation sets and return flattened counts (`cm_t_p`) to the aggregator.
+1. **Client-Side Plasticity Evaluation (80/20 Ephemeral Split):**
+   * **Mechanism:** Defender clients automatically split their incoming ephemeral RAM disk batch holding out 20% for local validation.
+   * **Metrics:** This enables real-time evaluation of plasticity (ability to learn the current task) immediately after the EWC training hook.
+
+2. **Per-Round Confusion Matrix Tracking (I3):**
+   * **Mechanism:** Defender clients compute local 5x5 confusion matrices on their 20% validation sets and return flattened counts (`cm_t_p`) to the aggregator.
    * **Aggregation & Visualization:** The aggregator server sums the counts in `weighted_avg` and automatically plots a styled, headless `matplotlib` heatmap logged under `confusion_matrices/confusion_round_{round}.png` in MLflow for every round.
 
-2. **Standardized BWT Evaluation Suite & Cryptographic Lineage (I1):**
+3. **Standardized BWT Evaluation Suite & Cryptographic Lineage (I1):**
    * **Tool:** `tools/bwt_eval_suite.py` evaluates candidate TorchScript checkpoints (`.pt`) against ground-truth validation datasets.
    * **Metrics:** Computes overall accuracy, macro/class-wise F1, and Backward Transfer (BWT) delta profiles relative to historical peak performance.
    * **Governance:** Signs the results cryptographically with a SHA-256 signature chain combining the model binary hash, the validation dataset flow hash, and the evaluation performance stats, exporting them as a signed CSV to MLflow.

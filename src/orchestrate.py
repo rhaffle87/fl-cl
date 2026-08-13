@@ -726,58 +726,6 @@ def main():
         if not ramdisk_ready:
             print("[!] WARNING: Ramdisk still empty after 120s. Clients will train on empty data this round.")
 
-        print("\n=== Phase 6c: Data Quality Gate ===")
-        quality_gate_failed = False
-        for node_name, node in [("defender-a", def_a), ("defender-b", def_b)]:
-            # Run check_dataset.py with --baseline and --js-threshold to calculate JSD drift
-            cmd = f"~/fl-cl-env/bin/python3 ~/check_dataset.py --json --dos-threshold-ms {dos_threshold} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}"
-            result = node.run_cmd(cmd)
-            try:
-                import json
-                output = result.stdout.strip()
-                if output:
-                    res_dict = json.loads(output)
-                    label_counts = res_dict.get("counts", {})
-                    jsd_val = res_dict.get("js_divergence")
-                    status = res_dict.get("status", "PASS")
-
-                    label_names = {0: "Normal", 1: "Botnet", 2: "Exfil", 3: "SSH-BF", 4: "DoS"}
-                    total = sum(label_counts.values()) if label_counts else 0
-                    print(f"[{node_name}] Flow distribution ({total} total):")
-                    for label in range(5):
-                        count = label_counts.get(str(label), label_counts.get(label, 0))
-                        name = label_names.get(label, "?")
-                        print(f"  Class {label} ({name:>7s}): {count}")
-                    
-                    if jsd_val is not None:
-                        print(f"[{node_name}] Jensen-Shannon Divergence: {jsd_val:.4f} (Threshold: {jsd_threshold})")
-                    
-                    if status == "FAIL":
-                        jsd_str = f"{jsd_val:.4f}" if jsd_val is not None else "N/A"
-                        print(f"[{node_name}] [FAIL] DATA QUALITY GATE FAILED: JSD {jsd_str} exceeds threshold {jsd_threshold}")
-                        quality_gate_failed = True
-                    else:
-                        print(f"[{node_name}] [PASS] DATA QUALITY GATE PASSED")
-                else:
-                    print(f"[{node_name}] [!] WARNING: Empty response from data quality check")
-                    quality_gate_failed = True
-            except Exception as e:
-                print(f"[{node_name}] [!] Error parsing data quality gate output: {e}")
-                print(f"[{node_name}] stdout:")
-                safe_print(result.stdout)
-                print(f"[{node_name}] stderr:")
-                safe_print(result.stderr)
-                quality_gate_failed = True
-
-        if quality_gate_failed:
-            if gate_action == "abort":
-                print(f"\n[!] CRITICAL: Data quality gate failed on pre-flight check. (Action: abort). Halting training pipeline.")
-                notifier.notify_failure(experiment_name, "Data quality gate failed on pre-flight check (Action: abort)")
-                for node in nodes:
-                    node.cleanup(kill_mlflow=False)
-                sys.exit(2)
-            else:
-                print(f"\n[!] WARNING: Data quality gate failed, but gate_action is set to '{gate_action}'. Proceeding with warnings.")
 
         print("\n=== Phase 6d: Computing Dataset Checksums for Provenance Lineage ===")
         hash_a = get_dataset_hash(def_a)
@@ -797,20 +745,20 @@ def main():
             local_script_path = "log_dataset_temp.py"
             with open(local_script_path, "w") as sf:
                 sf.write(f"""import mlflow, json
-mlflow.set_tracking_uri('http://localhost:5000')
-client = mlflow.tracking.MlflowClient()
-client.log_param('{active_run_id}', 'dataset_hash', '{dataset_hash}')
-client.log_param('{active_run_id}', 'defender_a_hash', '{hash_a}')
-client.log_param('{active_run_id}', 'defender_b_hash', '{hash_b}')
-metadata = {{
-    "defender_a_dataset_hash": "{hash_a}",
-    "defender_b_dataset_hash": "{hash_b}",
-    "combined_dataset_hash": "{dataset_hash}"
-}}
-with open('/tmp/dataset_lineage.json', 'w') as f:
-    json.dump(metadata, f, indent=4)
-client.log_artifact('{active_run_id}', '/tmp/dataset_lineage.json')
-""")
+                    mlflow.set_tracking_uri('http://localhost:5000')
+                    client = mlflow.tracking.MlflowClient()
+                    client.log_param('{active_run_id}', 'dataset_hash', '{dataset_hash}')
+                    client.log_param('{active_run_id}', 'defender_a_hash', '{hash_a}')
+                    client.log_param('{active_run_id}', 'defender_b_hash', '{hash_b}')
+                    metadata = {{
+                        "defender_a_dataset_hash": "{hash_a}",
+                        "defender_b_dataset_hash": "{hash_b}",
+                        "combined_dataset_hash": "{dataset_hash}"
+                    }}
+                    with open('/tmp/dataset_lineage.json', 'w') as f:
+                        json.dump(metadata, f, indent=4)
+                    client.log_artifact('{active_run_id}', '/tmp/dataset_lineage.json')
+                    """)
             aggregator.scp_file(local_script_path, "~/log_dataset.py")
             aggregator.run_cmd("/opt/flower-env/bin/python3 ~/log_dataset.py")
             try:
@@ -821,21 +769,6 @@ client.log_artifact('{active_run_id}', '/tmp/dataset_lineage.json')
         else:
             print("[orchestrator] Warning: Could not retrieve active MLflow run ID. Skipping logging dataset hashes.")
 
-        # Phase 6e: Run per-class feature drift diagnostics
-        print("\n=== Phase 6e: Per-Class Feature Drift Diagnostic ===")
-        for node_name, node in [("defender-a", def_a), ("defender-b", def_b)]:
-            mlflow_args = ""
-            if active_run_id:
-                mlflow_args = f"--mlflow --run-id {active_run_id} --mlflow-uri http://{aggregator.ip}:5000"
-            cmd = f"~/fl-cl-env/bin/python3 ~/check_features.py --baseline-json ~/baseline_stats.json {mlflow_args}"
-            print(f"[{node_name}] Running feature drift diagnosis...")
-            feat_res = node.run_cmd(cmd)
-            safe_print(feat_res.stdout)
-            if feat_res.stderr:
-                print(f"[{node_name}] stderr:")
-                safe_print(feat_res.stderr)
-            if feat_res.returncode == 2:
-                print(f"[{node_name}] [WARNING] FEATURE DRIFT WARNING: Significant statistical skew observed in features.")
 
         print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
         # Security arguments logic for client A

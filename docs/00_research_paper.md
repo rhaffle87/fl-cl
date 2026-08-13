@@ -841,16 +841,18 @@ $$\text{F1} = 2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precisio
 
 Monitor gRPC payload sizes between clients and aggregator to quantify the bandwidth cost of federated synchronization. This metric informs decisions about aggregation frequency and gradient compression.
 
-### 8.3 MLOps Observability Stack
+### 8.3 MLOps Observability Stack and Model Registry
 
-Tracking model behavior across distributed, continually-learning nodes requires centralized experiment tracking:
+Tracking model behavior across distributed, continually-learning nodes requires a robust, centralized MLOps pipeline. The testbed standardizes on **MLflow**, which operates not just as a metric tracker, but as a fully automated Model Registry and Validation Gate.
 
-* **MLflow**: Deploy a local MLflow tracking server on the aggregator LXC. Each defender VM logs per-round metrics (loss, accuracy per task, BWT) to the central server. The aggregator automatically aggregates 5x5 confusion matrix counts returned by clients and logs styled heatmap figures to MLflow every round.
-* **Evaluation & Benchmarking Utilities**: Standalone validation scripts augment the runtime telemetry:
-  * `tools/bwt_eval_suite.py` calculates overall and class-wise performance, hashes model weights and dataset states, and generates cryptographically signed CSV reports for audit provenance.
-  * `tools/cross_dataset_benchmark.py` validates model generalization on target distributions (e.g., USTC-TFC2016) by applying a covariate shift simulation engine if physical datasets are offline.
-* **Weights & Biases (W&B)**: Alternative cloud-hosted tracker for teams preferring managed infrastructure. Particularly useful for visualizing how Client A's accuracy on Task 1 changes when Client B introduces Task 2 through federated aggregation.
-* **TensorBoard**: Standard local visualizer for monitoring weight distributions, gradient norms, and per-layer activation statistics during CL training.
+* **Client-Side Evaluation (80/20 Split)**: During each round, the client splits its ephemeral RAM disk batch (80% training / 20% validation). This allows real-time evaluation of plasticity (the ability to learn the current task) immediately after the EWC training hook.
+* **Server-Side MLflow Tracking**: The aggregator receives evaluation metrics and dynamically aggregates them. It automatically logs styled performance artifacts (loss/accuracy curves, forgetting curves, and 5x5 confusion matrix heatmaps) directly to the MLflow run.
+* **Automated Model Registry & Validation Gates**: The server manages the model lifecycle through `mlflow.register_model()`. After aggregating weights, the server evaluates them against strict operational gates:
+  1. **Performance Gate**: Per-Class F1-Scores must meet baseline thresholds (e.g., Normal $\ge 0.50$, Botnet $\ge 0.60$, Exfiltration $\ge 0.70$, BruteForce $\ge 0.50$, DoS $\ge 0.70$).
+  2. **Stability Gate**: Backward Transfer (BWT) must be $\ge 0.0$ (ensuring no catastrophic forgetting).
+  3. **Efficiency Gate**: Communication payload size must remain under budget (e.g., $\le 200$ MB).
+  If the aggregated model passes all gates, it is promoted to the **`champion`** alias in the MLflow Model Registry. If it fails, it is assigned the **`challenger`** alias, and the rejection reason is logged.
+* **State Sanitization**: Before pushing model artifacts to the registry, the server sanitizes the weights (zeroing out NaNs/Infs) and enforces strict filesystem permissions (`0600`) to prevent local credential harvesting or model poisoning at rest.
 
 The observability stack closes the feedback loop: metrics from Chapter 8 inform tuning decisions (e.g., adjusting `ewc_lambda` in Chapter 6, modifying aggregation frequency in Chapter 6.4, or rebalancing training data ratios in Chapter 5.1).
 

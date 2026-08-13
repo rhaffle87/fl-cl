@@ -1,0 +1,360 @@
+
+<style>
+*{box-sizing:border-box}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.25rem;padding-bottom:.75rem;border-bottom:.5px solid var(--border)}
+.tab{font-size:12px;font-weight:500;padding:5px 12px;border-radius:6px;border:.5px solid var(--border);background:none;cursor:pointer;color:var(--text-secondary);transition:all .15s}
+.tab.active{background:var(--surface-1);color:var(--text-primary);border-color:var(--border-strong)}
+.tab-content{display:none}.tab-content.active{display:block}
+.card{background:var(--surface-2);border:.5px solid var(--border);border-radius:12px;padding:1rem 1.25rem;margin-bottom:10px}
+.card-accent{border-left:3px solid}
+.accent-red{border-left-color:#E24B4A}.accent-amber{border-left-color:#EF9F27}.accent-teal{border-left-color:#1D9E75}.accent-blue{border-left-color:#378ADD}.accent-purple{border-left-color:#7F77DD}.accent-coral{border-left-color:#D85A30}
+.label{font-size:11px;font-weight:500;padding:2px 8px;border-radius:4px;display:inline-block;margin-right:4px;margin-bottom:4px}
+.l-gap{background:#FCEBEB;color:#791F1F} .l-gap-d{background:#501313;color:#F7C1C1}
+.l-meth{background:#E6F1FB;color:#0C447C} .l-meth-d{background:#042C53;color:#85B7EB}
+.l-prior{background:#FAEEDA;color:#633806} .l-prior-d{background:#412402;color:#FAC775}
+.l-comp{background:#EAF3DE;color:#3B6D11} .l-comp-d{background:#173404;color:#C0DD97}
+.l-open{background:#EEEDFE;color:#3C3489} .l-open-d{background:#26215C;color:#AFA9EC}
+@media(prefers-color-scheme:dark){
+  .l-gap{background:#501313;color:#F7C1C1}
+  .l-meth{background:#042C53;color:#85B7EB}
+  .l-prior{background:#412402;color:#FAC775}
+  .l-comp{background:#173404;color:#C0DD97}
+  .l-open{background:#26215C;color:#AFA9EC}
+}
+.h{font-size:14px;font-weight:500;color:var(--text-primary);margin:0 0 6px}
+.p{font-size:13px;color:var(--text-secondary);line-height:1.65;margin:0 0 6px}
+.ul{margin:4px 0 6px 1rem;padding:0}
+.li{font-size:13px;color:var(--text-secondary);line-height:1.65;margin-bottom:3px}
+.sec{font-size:12px;font-weight:500;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;margin:1.25rem 0 .5rem;padding-bottom:4px;border-bottom:.5px solid var(--border)}
+.ref{font-size:11px;color:var(--text-muted);font-style:italic;margin-top:4px}
+.ask{font-size:12px;color:var(--text-accent);border:.5px solid var(--border-accent);border-radius:4px;padding:3px 10px;background:none;cursor:pointer;margin-top:6px}
+.ask:hover{background:var(--bg-accent)}
+.matrix-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+.matrix-table th{text-align:left;padding:6px 8px;font-weight:500;color:var(--text-secondary);border-bottom:.5px solid var(--border);font-size:11px}
+.matrix-table td{padding:6px 8px;border-bottom:.5px solid var(--border);color:var(--text-secondary);vertical-align:top}
+.matrix-table tr:last-child td{border-bottom:none}
+.matrix-table td:first-child{font-weight:500;color:var(--text-primary);white-space:nowrap}
+.tick{color:#1D9E75;font-size:14px}.cross{color:#E24B4A;font-size:14px}.half{color:#EF9F27;font-size:14px}
+</style>
+
+<h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Comprehensive research framework for fl-cl project: literature, gaps, methodology, comparisons, and decisions</h2>
+
+<div class="tabs">
+  <button class="tab active" onclick="show('gap',this)">Research gaps</button>
+  <button class="tab" onclick="show('lit',this)">Prior literature</button>
+  <button class="tab" onclick="show('comp',this)">Comparison matrix</button>
+  <button class="tab" onclick="show('meth',this)">Methodology</button>
+  <button class="tab" onclick="show('metric',this)">Metrics framework</button>
+  <button class="tab" onclick="show('decision',this)">Decision map</button>
+</div>
+
+<!-- TAB 1: RESEARCH GAPS -->
+<div id="gap" class="tab-content active">
+  <div class="sec">Critical gaps your project directly addresses</div>
+
+  <div class="card card-accent accent-red">
+    <span class="label l-gap">Gap #1 — Most critical</span>
+    <div class="h">No prior work combines EWC + FedAvg in a live, reproducible IDS testbed</div>
+    <p class="p">FL-IIDS (Jin et al., 2024) uses incremental FL but relies on example replay + custom loss — not EWC. Surveys confirm EWC has not been empirically evaluated inside a federated IDS pipeline with real network flow data. Your project is the first to do this in an end-to-end reproducible environment (6-VM Proxmox cluster, NFStream live extraction, MLflow tracking).</p>
+    <p class="ref">Supporting: Jin et al. (Future Gen. Comp. Sys., 2024), Hernandez-Ramos et al. (ACM Comp. Surv., 2025), Incremental FL IoT (arxiv 2603.10776)</p>
+    <button class="ask" onclick="sendPrompt('What should my research contribution statement say about the EWC + FedAvg gap in IDS literature? ↗')">Draft contribution statement ↗</button>
+  </div>
+
+  <div class="card card-accent accent-red">
+    <span class="label l-gap">Gap #2 — Critical</span>
+    <div class="h">Static attack distribution assumption dominates FL-IDS literature</div>
+    <p class="p">The vast majority of FL-IDS papers assume static, pre-labelled datasets (CIC-IDS2017, NSL-KDD, UNSW-NB15). Almost none model the reality that new attack classes emerge over time. Your CL framing — where each new attack type is a new task — directly plugs this gap. The 2026 incremental FL IoT survey explicitly states: "very few studies have investigated the IL paradigm within this domain."</p>
+    <p class="ref">Supporting: Survey of FLIDS (ScienceDirect, 2024), Incremental FL IoT (arxiv 2603.10776), Privacy-preserving FL IDS (Springer 2026)</p>
+    <button class="ask" onclick="sendPrompt('How do I frame the static attack distribution assumption gap in my related works section? ↗')">Frame this in related work ↗</button>
+  </div>
+
+  <div class="card card-accent accent-amber">
+    <span class="label l-gap">Gap #3 — High</span>
+    <div class="h">Non-IID traffic heterogeneity across FL clients is underexplored in IDS</div>
+    <p class="p">Most FL-IDS work assumes IID data across clients. In reality, defender-a and defender-b see different attack mixes (your synthetic traffic generator explicitly simulates this). The FCL survey (ScienceDirect, 2025) identifies non-IID + continual learning as an open challenge. Your 2-client setup with deliberately heterogeneous traffic is a direct experimental contribution to this gap.</p>
+    <p class="ref">Supporting: AFCL (arxiv 2505.12245), FCL survey (ScienceDirect 2025), Communication-efficient FCL (Zhang et al., 2023)</p>
+  </div>
+
+  <div class="card card-accent accent-amber">
+    <span class="label l-gap">Gap #4 — High</span>
+    <div class="h">Privacy-utility trade-off in federated IDS is empirically unmeasured</div>
+    <p class="p">The 2026 Springer FL-IDS survey identifies that DP, HE, and secure aggregation are "well established conceptually" but empirical adoption in IDS is thin. No paper has measured the ε (privacy budget) vs. F1 vs. BWT three-way trade-off in a federated incremental IDS. Your Plan E2 (Opacus DP) and Plan J3 (TenSEAL HE) directly produce this missing empirical curve.</p>
+    <p class="ref">Supporting: Privacy-preserving FL IDS (Springer 2026), DP in FCL (Chen et al., CANDAR 2024)</p>
+  </div>
+
+  <div class="card card-accent accent-teal">
+    <span class="label l-gap">Gap #5 — Medium</span>
+    <div class="h">Backward transfer weight (BWT) is rarely used as primary metric in FL-IDS</div>
+    <p class="p">Most FL-IDS papers report overall accuracy or F1 only. BWT — the canonical CL forgetting metric — is almost never reported in IDS papers. This means you can directly compare against prior work's F1 while adding a forgetting dimension they don't have, making your evaluation richer without requiring them to re-run experiments.</p>
+    <p class="ref">Supporting: FCL survey (ScienceDirect 2025), FL-IIDS (Jin et al., 2024)</p>
+  </div>
+
+  <div class="card card-accent accent-teal">
+    <span class="label l-gap">Gap #6 — Medium</span>
+    <div class="h">Cross-dataset generalization of federated IDS models is almost never tested</div>
+    <p class="p">A 2025 dataset-centric FL-IDS study found that "most evaluations rely on a single dataset, which risks overfitting to site-specific traffic." Training on CIC-IDS2017 and evaluating on USTC-TFC2016 (your Plan I2) fills this gap and directly replicates the cross-environment generalization test that prior work skips.</p>
+    <p class="ref">Supporting: Dataset-centric FL-IDS (PMC 2025), Survey FLIDS (ScienceDirect 2024)</p>
+  </div>
+</div>
+
+<!-- TAB 2: PRIOR LITERATURE -->
+<div id="lit" class="tab-content">
+  <div class="sec">Closest prior works — what they did and what they missed</div>
+
+  <div class="card card-accent accent-blue">
+    <span class="label l-prior">Closest competitor</span>
+    <div class="h">FL-IIDS — Jin et al., Future Generation Computer Systems (2024)</div>
+    <p class="p">The single most relevant prior work. Proposes a federated incremental IDS using: (1) improved example memory for replay, (2) class gradient balance loss + label smoothing loss. Focuses on class-incremental problem under IID data assumption. Uses static datasets only.</p>
+    <ul class="ul">
+      <li class="li"><span class="tick">✓</span> Does: federated + incremental + IDS</li>
+      <li class="li"><span class="cross">✗</span> Does NOT: use EWC/regularization (uses replay), test non-IID clients, use live traffic, measure BWT, provide reproducible testbed</li>
+      <li class="li"><b>Your advantage:</b> EWC avoids the privacy risk of storing raw traffic samples that replay-based methods require — a meaningful difference in the IDS domain</li>
+    </ul>
+    <button class="ask" onclick="sendPrompt('Write a comparison paragraph between fl-cl and FL-IIDS for a related works section ↗')">Write comparison paragraph ↗</button>
+  </div>
+
+  <div class="card card-accent accent-blue">
+    <span class="label l-prior">Methodological foundation</span>
+    <div class="h">FedSI / CFedSI — Zhang et al., Science China (2023)</div>
+    <p class="p">Adapts Synaptic Intelligence (SI, a regularization-based CL method similar to EWC) to federated learning. Proposes bidirectional compression (BCEC) for communication efficiency. Demonstrates FCL on non-IID data. Does not apply to IDS or security domain.</p>
+    <ul class="ul">
+      <li class="li"><span class="tick">✓</span> Strong theoretical grounding for regularization-based FCL on non-IID data</li>
+      <li class="li"><span class="cross">✗</span> No IDS application, no live traffic, no BWT analysis</li>
+      <li class="li"><b>Your angle:</b> cite as motivation that regularization-based FCL (EWC is in the same family as SI) works on non-IID data</li>
+    </ul>
+  </div>
+
+  <div class="card card-accent accent-blue">
+    <span class="label l-prior">Survey foundation</span>
+    <div class="h">Federated Continual Learning for Edge-AI — Survey (arxiv 2411.13740, 2024)</div>
+    <p class="p">Comprehensive FCL survey covering 200+ papers. Classifies approaches by CL strategy (regularization, replay, architecture), FL aggregation method, and application domain. Identifies IDS/security as an underexplored FCL application domain — directly validating your niche.</p>
+    <ul class="ul">
+      <li class="li"><b>Key citation:</b> use this as the "map" reference that positions your work in the FCL landscape</li>
+      <li class="li">Confirms no prior work applies EWC specifically in federated IDS</li>
+    </ul>
+  </div>
+
+  <div class="card card-accent accent-blue">
+    <span class="label l-prior">Security/robustness anchor</span>
+    <div class="h">GFCL — Talpur & Gurusamy (2022), GRU-based FCL against data poisoning in IoV</div>
+    <p class="p">One of the few FCL papers that explicitly addresses security attacks (data poisoning) within the federated continual learning loop. Uses GRU for sequence modeling in vehicle networks. Provides a robustness framing you can reference when describing Plan E1 (your poisoning simulation).</p>
+    <ul class="ul">
+      <li class="li"><span class="cross">✗</span> GRU-based (sequence), IoV domain, no EWC</li>
+      <li class="li"><b>Your advantage:</b> you test poisoning on a real 6-VM cluster with network flow traffic — not simulated/dataset replay</li>
+    </ul>
+  </div>
+
+  <div class="card card-accent accent-purple">
+    <span class="label l-prior">EWC baseline</span>
+    <div class="h">Kirkpatrick et al. — EWC original (NeurIPS 2017) + EWC empirical evaluation (NeurIPS 2025 workshop)</div>
+    <p class="p">The original EWC paper is your primary methodological citation. The 2025 NeurIPS workshop paper on EWC for knowledge graphs confirms EWC reduces forgetting by 45.7% vs. naive sequential training (λ=10 optimal). Also shows task construction strategy significantly affects forgetting magnitude — directly relevant to your attack scenario ordering research (Plan B2).</p>
+    <button class="ask" onclick="sendPrompt('Summarize the key EWC findings from the 2025 NeurIPS workshop paper and how they apply to fl-cl ↗')">Apply EWC findings to fl-cl ↗</button>
+  </div>
+
+  <div class="card card-accent accent-coral">
+    <span class="label l-prior">Dataset reference</span>
+    <div class="h">Dataset-centric FL-IDS evaluation (PMC, 2025)</div>
+    <p class="p">Benchmarks FedAvg, FedProx, FedNova with LSTM and Transformer backbones across 3 contemporary IoT datasets (Edge-IIoTset, CIC-IoT2023, TII-SSRC-23). Explicitly finds that single-dataset evaluation risks overfitting. Use as direct motivation for your cross-dataset generalization plan (I2).</p>
+    <ul class="ul">
+      <li class="li">Benchmark comparison point: their FedAvg + DNN results on CIC-IDS2017 are directly comparable to your setup</li>
+      <li class="li">Your addition: CL dimension (BWT) on top of their static benchmark</li>
+    </ul>
+  </div>
+</div>
+
+<!-- TAB 3: COMPARISON MATRIX -->
+<div id="comp" class="tab-content">
+  <div class="sec">Your work vs. the field — feature comparison</div>
+  <p class="p" style="margin-bottom:12px">How fl-cl positions against the 5 most comparable prior systems across 10 dimensions. Use this directly as a Table in your paper.</p>
+  <div style="overflow-x:auto">
+  <table class="matrix-table">
+    <thead>
+      <tr>
+        <th>Feature / System</th>
+        <th>fl-cl (yours)</th>
+        <th>FL-IIDS<br><span style="font-weight:400;font-style:italic">Jin 2024</span></th>
+        <th>FedSI<br><span style="font-weight:400;font-style:italic">Zhang 2023</span></th>
+        <th>GFCL<br><span style="font-weight:400;font-style:italic">Talpur 2022</span></th>
+        <th>Dataset-centric<br><span style="font-weight:400;font-style:italic">PMC 2025</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Federated Learning</td><td><span class="tick">✓</span> Flower/FedAvg</td><td><span class="tick">✓</span></td><td><span class="tick">✓</span> + compression</td><td><span class="tick">✓</span></td><td><span class="tick">✓</span> 3 variants</td></tr>
+      <tr><td>Continual Learning strategy</td><td><span class="tick">✓</span> EWC (regularization)</td><td><span class="tick">✓</span> Replay + loss</td><td><span class="tick">✓</span> SI (regularization)</td><td><span class="tick">✓</span> GRU-incremental</td><td><span class="cross">✗</span> Static only</td></tr>
+      <tr><td>IDS / security domain</td><td><span class="tick">✓</span></td><td><span class="tick">✓</span></td><td><span class="cross">✗</span> General</td><td><span class="half">~</span> IoV</td><td><span class="tick">✓</span></td></tr>
+      <tr><td>Live traffic (not replay)</td><td><span class="tick">✓</span> NFStream live</td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td></tr>
+      <tr><td>Non-IID client data</td><td><span class="tick">✓</span> by design</td><td><span class="cross">✗</span> IID assumed</td><td><span class="tick">✓</span></td><td><span class="half">~</span> partial</td><td><span class="half">~</span> partial</td></tr>
+      <tr><td>BWT forgetting metric</td><td><span class="tick">✓</span></td><td><span class="cross">✗</span></td><td><span class="half">~</span> SI-based</td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td></tr>
+      <tr><td>Reproducible physical testbed</td><td><span class="tick">✓</span> Proxmox 6-VM</td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td></tr>
+      <tr><td>MLOps / experiment tracking</td><td><span class="tick">✓</span> MLflow 3.x</td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td></tr>
+      <tr><td>Privacy mechanism (DP/HE)</td><td><span class="half">~</span> planned</td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td></tr>
+      <tr><td>Poisoning robustness test</td><td><span class="tick">✓</span> planned</td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td><span class="tick">✓</span></td><td><span class="cross">✗</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="ref" style="margin-top:10px">✓ = fully implemented/tested &nbsp;|&nbsp; ~ = partially / planned &nbsp;|&nbsp; ✗ = absent</p>
+  <button class="ask" style="margin-top:8px" onclick="sendPrompt('Convert this comparison matrix into a LaTeX table for a research paper ↗')">Convert to LaTeX table ↗</button>
+</div>
+
+<!-- TAB 4: METHODOLOGY -->
+<div id="meth" class="tab-content">
+  <div class="sec">Methodology decisions — what to justify and how</div>
+
+  <div class="card card-accent accent-teal">
+    <span class="label l-meth">Methodology choice #1</span>
+    <div class="h">Why EWC over GEM, iCaRL, or PackNet?</div>
+    <p class="p">This is the most likely reviewer question. Your justification should be threefold:</p>
+    <ul class="ul">
+      <li class="li"><b>Privacy:</b> GEM and iCaRL require storing raw training samples (episodic memory). In a federated IDS context, raw network flow data is sensitive — retaining it violates the same privacy principle that motivates FL in the first place. EWC stores only the Fisher matrix (parameter-space artifact), not data.</li>
+      <li class="li"><b>Communication efficiency:</b> EWC adds no communication overhead — the FIM is computed locally and never transmitted. Replay methods would require clients to share memory buffers.</li>
+      <li class="li"><b>Regulatory alignment:</b> GDPR and organizational data retention policies may prohibit raw traffic retention even locally. EWC sidesteps this entirely.</li>
+    </ul>
+    <p class="ref">Cite: FCL survey (arxiv 2411.13740) §replay methods; Talpur & Gurusamy 2022 §privacy in FCL</p>
+    <button class="ask" onclick="sendPrompt('Write a methodology justification paragraph for choosing EWC over GEM and iCaRL in the fl-cl IDS context ↗')">Write this justification ↗</button>
+  </div>
+
+  <div class="card card-accent accent-teal">
+    <span class="label l-meth">Methodology choice #2</span>
+    <div class="h">Why FedAvg and not FedProx, SCAFFOLD, or FedNova?</div>
+    <p class="p">FedAvg is the baseline against which all FL papers compare. Your research contribution is on the CL dimension — introducing EWC into the FL pipeline. Starting from FedAvg keeps the FL component simple and isolates your experimental variable (EWC). FedProx, SCAFFOLD, etc. address non-IID drift via different FL mechanisms — testing these is Plan F1 and E3 (future work / comparative studies). Justify FedAvg as: (1) the field standard baseline, (2) necessary to isolate CL contribution.</p>
+    <p class="ref">Cite: Li et al. FedProx (MLSys 2020) as known alternative; Dataset-centric FL-IDS PMC 2025 as benchmark using FedAvg</p>
+  </div>
+
+  <div class="card card-accent accent-teal">
+    <span class="label l-meth">Methodology choice #3</span>
+    <div class="h">Why class-incremental and not task-incremental or domain-incremental?</div>
+    <p class="p">In real IDS deployment, the model does not know which task (attack type) a flow belongs to at inference time — you cannot present a "task ID" at test time. This makes class-incremental learning (CIL) the correct CL setting. Task-incremental (TIL) is easier but unrealistic. Your 5-class setup where new attack classes arrive sequentially is precisely the CIL setting. Document this choice explicitly — FCL survey (ScienceDirect 2025) confirms CIL is harder than TIL and less studied.</p>
+    <p class="ref">Cite: FCL survey ScienceDirect 2025; Masana et al. class-incremental survey 2021</p>
+    <button class="ask" onclick="sendPrompt('Explain the difference between class-incremental, task-incremental, and domain-incremental learning and justify why fl-cl uses class-incremental ↗')">Write the CIL justification ↗</button>
+  </div>
+
+  <div class="card card-accent accent-teal">
+    <span class="label l-meth">Methodology choice #4</span>
+    <div class="h">Why synthetic live traffic and not benchmark dataset only?</div>
+    <p class="p">PCAP benchmark datasets (CIC-IDS2017) are static snapshots. In a continual learning study, temporal ordering of attacks matters — and benchmark datasets don't simulate real network conditions (interface queue, packet timing, concurrent flows). Your NFStream live capture captures real flow statistics as they would appear on a live network segment. This is a significant methodological upgrade over replay-only baselines.</p>
+    <p class="ref">Cite: Dataset-centric FL-IDS (PMC 2025) §limitations of static datasets</p>
+  </div>
+
+  <div class="card card-accent accent-amber">
+    <span class="label l-meth">Methodology decision needed</span>
+    <div class="h">How to handle the IID vs. non-IID axis in experiments</div>
+    <p class="p">Your current setup is non-IID by design (defender-a and defender-b see different attack mixes). But you haven't formalized this. You need to:</p>
+    <ul class="ul">
+      <li class="li">Quantify the degree of non-IID-ness: compute Dirichlet distribution parameter α that best describes your traffic split between the two clients</li>
+      <li class="li">Run one IID baseline (same traffic mix on both clients) to isolate the non-IID effect</li>
+      <li class="li">Report drift metrics (Plan B3) as the empirical measure of non-IID severity</li>
+    </ul>
+    <button class="ask" onclick="sendPrompt('How do I quantify the degree of non-IID data heterogeneity between fl-cl defender clients using a Dirichlet distribution parameter? ↗')">Help me quantify non-IID ↗</button>
+  </div>
+</div>
+
+<!-- TAB 5: METRICS FRAMEWORK -->
+<div id="metric" class="tab-content">
+  <div class="sec">Complete metrics framework — what to measure, log, and report</div>
+
+  <div class="card card-accent accent-purple">
+    <span class="label l-comp">Primary CL metrics</span>
+    <div class="h">Backward Transfer Weight (BWT) + Forward Transfer (FWT)</div>
+    <p class="p">These are the two canonical CL metrics. They must appear in every table in your paper.</p>
+    <ul class="ul">
+      <li class="li"><b>BWT</b> = R<sub>T,j</sub> − R<sub>j,j</sub> for j < T. Negative BWT = forgetting. Zero = perfect retention. Your target: BWT ≥ -0.05 after 4 attack tasks.</li>
+      <li class="li"><b>FWT</b> = R<sub>i-1,i</sub> − b<sub>i</sub> where b<sub>i</sub> is the random baseline. Positive FWT = the model generalized to task i before seeing it.</li>
+      <li class="li"><b>Intransigence</b> = the difficulty of learning new tasks due to over-regularization (EWC λ too high). Reported as R<sub>i,i</sub> − R*<sub>i</sub> where R*<sub>i</sub> is single-task upper bound.</li>
+    </ul>
+    <button class="ask" onclick="sendPrompt('Write the BWT and FWT calculation code for the fl-cl evaluation suite that logs to MLflow ↗')">Write the calculation code ↗</button>
+  </div>
+
+  <div class="card card-accent accent-purple">
+    <span class="label l-comp">Primary FL metrics</span>
+    <div class="h">Communication overhead + convergence speed + client drift</div>
+    <ul class="ul">
+      <li class="li"><b>Communication bytes per round:</b> gRPC payload size aggregator↔clients (log as MLflow metric)</li>
+      <li class="li"><b>Rounds to convergence:</b> number of FL rounds until global F1 plateaus within ε=0.01</li>
+      <li class="li"><b>Client drift (L2 norm):</b> ||w<sub>local</sub> − w<sub>global</sub>||₂ per client per round (Plan B3)</li>
+      <li class="li"><b>Staleness index:</b> how many rounds before the deployed champion model degrades below threshold F1</li>
+    </ul>
+  </div>
+
+  <div class="card card-accent accent-purple">
+    <span class="label l-comp">Classification metrics (per class)</span>
+    <div class="h">F1, precision, recall per attack class — not just macro average</div>
+    <p class="p">Report per-class F1 separately for: Benign, SSH Brute-force, Slowloris, DNS Exfiltration, Botnet. Macro F1 hides poor detection of rare classes. Reviewers in the security domain will look for per-class breakdown.</p>
+    <ul class="ul">
+      <li class="li">Also report: confusion matrix evolution (Plan I3)</li>
+      <li class="li">False negative rate on attack classes is more security-relevant than overall accuracy</li>
+      <li class="li">False positive rate on benign traffic matters for operational cost (alert fatigue)</li>
+    </ul>
+  </div>
+
+  <div class="card card-accent accent-teal">
+    <span class="label l-comp">Efficiency metrics</span>
+    <div class="h">Training time, memory, model size — important for edge IDS claims</div>
+    <ul class="ul">
+      <li class="li"><b>Seconds per local training epoch</b> (log per round)</li>
+      <li class="li"><b>FIM storage cost:</b> size of Fisher matrix per layer in bytes</li>
+      <li class="li"><b>Peak RAM per client</b> during EWC backward pass</li>
+      <li class="li"><b>Model size in bytes</b> (TorchScript export)</li>
+      <li class="li">These matter for the deployment narrative: can this run on a network appliance?</li>
+    </ul>
+  </div>
+
+  <div class="card card-accent accent-amber">
+    <span class="label l-comp">Metrics NOT to use as primary</span>
+    <div class="h">Accuracy — why it misleads in IDS</div>
+    <p class="p">Network traffic is heavily imbalanced — benign flows vastly outnumber attack flows. A model that classifies everything as benign gets 95%+ accuracy but 0% attack detection. Use weighted F1 as primary, accuracy only as secondary context. Most prior FL-IDS papers use accuracy as primary metric — this is a known weakness. Flagging it in your paper is a direct critique of the field's evaluation practice.</p>
+    <button class="ask" onclick="sendPrompt('Write the evaluation section for the fl-cl paper explaining why accuracy is insufficient for imbalanced IDS evaluation ↗')">Write the evaluation rationale ↗</button>
+  </div>
+</div>
+
+<!-- TAB 6: DECISION MAP -->
+<div id="decision" class="tab-content">
+  <div class="sec">Key research decisions — what to commit to and why</div>
+
+  <div class="card card-accent accent-coral">
+    <span class="label l-open">Commit now</span>
+    <div class="h">Decision 1: Fix your CL problem setting as class-incremental (CIL)</div>
+    <p class="p">Do not change this. Class-incremental is harder, more realistic, and less studied than task-incremental. It also makes your comparison table clean: FL-IIDS (Jin 2024) is also CIL, so you can compare directly.</p>
+  </div>
+
+  <div class="card card-accent accent-coral">
+    <span class="label l-open">Commit now</span>
+    <div class="h">Decision 2: Use CIC-IDS2017 PCAP replay as your reproducible benchmark condition</div>
+    <p class="p">All comparative claims and ablations must be run on this fixed condition, not live synthetic traffic. Live traffic is your novelty demonstration; replay is your reproducible measurement. Both appear in the paper — one as the benchmark table, one as the deployment case study.</p>
+    <button class="ask" onclick="sendPrompt('How do I structure a paper that uses both CIC-IDS2017 replay and live synthetic traffic — what goes in which section? ↗')">Help me structure this ↗</button>
+  </div>
+
+  <div class="card card-accent accent-coral">
+    <span class="label l-open">Commit now</span>
+    <div class="h">Decision 3: EWC lambda ablation (Plan D1) is your core experimental result</div>
+    <p class="p">Every other experiment either motivates D1 (baselines), extends D1 (comparisons), or applies D1's findings (deployment). Structure the paper around this. The Pareto curve of BWT vs. F1 at different λ values is your Figure 1.</p>
+  </div>
+
+  <div class="card card-accent accent-amber">
+    <span class="label l-open">Decide before writing</span>
+    <div class="h">Decision 4: Scope — single paper or thesis chapter?</div>
+    <p class="p">If conference/journal paper: scope = Gaps #1 + #2 + core metrics. EWC λ ablation + BWT analysis + comparison matrix + reproducible testbed description. Aim for IEEE TIFS, IEEE TDSC, or NDSS workshop. If thesis chapter: include all gaps, all plans A–J, and position each as a sub-contribution. The infrastructure (Proxmox, MLflow, Flower) becomes a methods chapter, not just a setup footnote.</p>
+    <button class="ask" onclick="sendPrompt('Which IEEE or ACM venue is the best fit for the fl-cl research paper, and what are the submission requirements? ↗')">Find the best venue ↗</button>
+  </div>
+
+  <div class="card card-accent accent-amber">
+    <span class="label l-open">Decide before writing</span>
+    <div class="h">Decision 5: How to handle the non-IID axis</div>
+    <p class="p">Three options: (A) acknowledge it qualitatively and leave quantification as future work; (B) run the IID vs. non-IID baseline comparison (Plan B3 + one extra run); (C) introduce Dirichlet α parameterization and run a full non-IID severity sweep. Option B is the minimum viable contribution. Option C is publishable on its own.</p>
+  </div>
+
+  <div class="card card-accent accent-teal">
+    <span class="label l-open">Open question — research finding</span>
+    <div class="h">Does EWC λ interact with FL round count?</div>
+    <p class="p">This is an unexplored question: at low λ, does running more FL rounds compensate for forgetting (because the global model "reminds" local models of old tasks via FedAvg)? At high λ, do more FL rounds reduce plasticity further? This interaction effect, if found, is a novel empirical finding not reported in any prior FL-IDS or FCL paper.</p>
+    <button class="ask" onclick="sendPrompt('Design an experiment to test whether EWC lambda and FL round count interact in the fl-cl federated continual learning setting ↗')">Design this experiment ↗</button>
+  </div>
+</div>
+
+<script>
+function show(id, btn){
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+</script>

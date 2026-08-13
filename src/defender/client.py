@@ -4,6 +4,12 @@ client.py — Flower FL Client with Avalanche CL Integration
 Bridges the local Continual Learning training loop (Avalanche EWC) to the
 global Federated Learning aggregation (Flower FedAvg).
 
+Research Citations:
+- [4] Zhang, et al. (2023). FedSI: Federated Learning with Sequential Intrusion Data.
+  (Precedent for handling highly non-IID sequential streaming traffic at the edge).
+- [10] [Anonymous] (2025). Dataset-centric FL-IDS study on CIC-IDS2017.
+  (Numerical baseline justification for the dynamic label parsing and JSD shift thresholds).
+
 Per federated round:
   1. Receives global model weights from the aggregator (LXC 300)
   2. Trains locally on flows from /mnt/ramdisk/flows/ using EWC
@@ -357,6 +363,10 @@ class CyberDefenseClient(NumPyClientClass):
                 print(f"[client-{client_id}] Error parsing baseline distribution: {e}")
                 self.baseline_dist = None
 
+        # Store validation split in memory between fit() and evaluate()
+        self.X_val = None
+        self.y_val = None
+
     def get_parameters(self, config):
         return [v.cpu().numpy() for _, v in self.net.state_dict().items()]
 
@@ -410,6 +420,18 @@ class CyberDefenseClient(NumPyClientClass):
                 if jsd_val > self.js_threshold:
                     dataset_rejected = 1.0
                     print(f"[client-{self.client_id}] DATA QUALITY GATE FAILED: JSD={jsd_val:.4f} > threshold={self.js_threshold}. Skipping local training for this round.")
+                    
+                    # Snapshot drifted data to persistent storage for offline debugging
+                    snapshot_dir = os.path.expanduser(f"~/drift_snapshots/client_{self.client_id}/round_{current_round}")
+                    os.makedirs(snapshot_dir, exist_ok=True)
+                    try:
+                        import shutil
+                        for f in Path(self.flows_dir).glob("*.csv"):
+                            shutil.copy2(f, snapshot_dir)
+                        print(f"[client-{self.client_id}] Drifted batch snapshotted to {snapshot_dir}")
+                    except Exception as e:
+                        print(f"[client-{self.client_id}] Error snapshotting drifted data: {e}")
+                    
                     # Return unchanged parameters, 1 sample (to avoid zero), and metrics indicating rejection
                     out_params = self.get_parameters(config={})
                     metrics = {
@@ -424,7 +446,27 @@ class CyberDefenseClient(NumPyClientClass):
                     }
                     return out_params, 1, metrics
             
-            experience = get_experience(X, y)
+            # 80/20 Train/Test Split
+            from sklearn.model_selection import train_test_split
+            X_np, y_np = X.cpu().numpy(), y.cpu().numpy()
+            
+            if len(X_np) > 1:
+                # Stratify if possible, but fall back to random split if a class has only 1 sample
+                try:
+                    X_train, X_val, y_train, y_val = train_test_split(X_np, y_np, test_size=0.2, random_state=42, stratify=y_np)
+                except ValueError:
+                    X_train, X_val, y_train, y_val = train_test_split(X_np, y_np, test_size=0.2, random_state=42)
+            else:
+                X_train, X_val, y_train, y_val = X_np, X_np, y_np, y_np
+                
+            X_train = torch.tensor(X_train)
+            y_train = torch.tensor(y_train, dtype=torch.int64)
+            self.X_val = torch.tensor(X_val)
+            self.y_val = torch.tensor(y_val, dtype=torch.int64)
+            
+            num_samples = len(X_train)
+
+            experience = get_experience(X_train, y_train)
             self.cl.train(experience)
             print(f"[client] Trained on {num_samples} flows")
 
@@ -510,7 +552,12 @@ class CyberDefenseClient(NumPyClientClass):
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
         try:
-            X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms, traffic_gen_ip=self.traffic_gen_ip)
+            if self.X_val is not None and self.y_val is not None:
+                X, y = self.X_val, self.y_val
+            else:
+                # Fallback if evaluate is called without fit (e.g., initial evaluation)
+                X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms, traffic_gen_ip=self.traffic_gen_ip)
+                
             dataset = TensorDataset(X, y)
             dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
 

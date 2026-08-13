@@ -161,7 +161,7 @@ This dynamic labeling matches offensive simulated target traffic identifiers and
 
 This is the core of the Continual Learning component. When Flower calls `fit()` on each client:
 
-#### 3.3.1 Data Loading Pipeline
+#### 3.3.1 Data Loading Pipeline and Quality Gates
 
 ```python
 def fit(self, parameters, config):
@@ -171,23 +171,37 @@ def fit(self, parameters, config):
     # 2. Load fresh flow CSVs from the RAM disk
     X, y = load_ramdisk_flows(self.flows_dir)
 
-    # 3. Wrap into an Avalanche "experience" for CL training
-    experience = get_experience(X, y)
+    # 3. Data Quality Gate (JSD Check)
+    # If the batch distribution is too anomalous, skip training and snapshot for debugging
+    current_jsd = calculate_jsd(y, self.baseline_distribution)
+    if current_jsd > self.jsd_threshold:
+        snapshot_drifted_data(X, y)
+        return self.get_parameters(config={}), 0, {"dataset_rejected": 1.0, "dataset_jsd": current_jsd}
 
-    # 4. Train using EWC-regularized strategy
+    # 4. Ephemeral Train/Validation Split (80/20)
+    # Hold out 20% of the batch in memory to evaluate real-time plasticity
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
+    self.ephemeral_val_set = (X_val, y_val)
+
+    # 5. Wrap into an Avalanche "experience" for CL training
+    experience = get_experience(X_train, y_train)
+
+    # 6. Train using EWC-regularized strategy
     self.cl.train(experience)
 
-    # 5. Return updated weights (the "recipe") to the aggregator
-    return self.get_parameters(config={}), len(X), {}
+    # 7. Return updated weights (the "recipe") to the aggregator
+    return self.get_parameters(config={}), len(X_train), {}
 ```
 
-The `load_ramdisk_flows()` function:
+The data preparation pipeline:
 
 1. Reads all CSV files from `/mnt/ramdisk/flows/`
-2. Selects the 10 numeric feature columns
-3. Applies fixed baseline Z-score scaling (utilizing mean/std statistics from class 0 baseline configurations) to prevent covariate shift across client dynamic updates
+2. Selects the numeric feature columns
+3. Applies fixed baseline Z-score scaling to prevent covariate shift
 4. Pads or truncates to 32 dimensions (matching `CyberDefenseNet`'s input layer)
 5. Classifies whole batches using high-speed vectorized labeling (`assign_labels_vectorized`)
+6. Executes the **JSD Gate**, skipping training if the data is corrupted or out-of-distribution
+7. Performs an **80/20 split**, reserving 20% for the upcoming `evaluate()` pass
 
 #### 3.3.2 The EWC Regularization Mechanism
 
@@ -618,7 +632,6 @@ python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.
 | 5 | Start MLflow + Flower server on aggregator | ~5s |
 | 6 | Run sequential attack stages (benign → SSH → slowloris → DNS → botnet) | ~2.5 min |
 | 6b | Wait for flow CSVs to appear on ramdisk | up to 120s |
-| 6c | Data quality gate — check label distribution | ~5s |
 | 7 | Launch Flower clients on both defenders | ~3s |
 | 8 | Monitor convergence (wait for all rounds) | depends on `fl.rounds` |
 | 8b | Pull MLflow DB, generate plots & report | ~30s |

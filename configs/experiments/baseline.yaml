@@ -1,0 +1,148 @@
+# ─────────────────────────────────────────────────────────────
+# FL-CL Experiment Configuration
+# ─────────────────────────────────────────────────────────────
+# This file defines all tunable parameters for a single FL-CL
+# experiment run.  The orchestrator loads this YAML and logs it
+# as an MLflow artifact so every run is fully reproducible.
+# ─────────────────────────────────────────────────────────────
+
+experiment:
+  name: "FL-CL-EWC-Baseline"
+  description: "Federated Continual Learning with EWC on 5-class encrypted traffic"
+
+# ── Federated Learning ──────────────────────────────────────
+fl:
+  rounds: 100
+  min_clients: 2
+  fraction_fit: 1.0
+  fraction_evaluate: 1.0
+
+# ── Continual Learning (EWC) ────────────────────────────────
+cl:
+  strategy: "EWC"
+  ewc_lambda: 0.8
+  gem_patterns_per_exp: 256
+  gem_memory_strength: 0.5
+  task_sequence: "benign,ssh,slowloris,dns_exfil,botnet"
+  complexity_score: 1.4
+  comm_overhead_budget: 200000000 # 200MB in bytes
+
+# ── Security, Privacy & Byzantine Robustness ─────────────────
+security:
+  # 1. Data Poisoning Simulation
+  poison_enabled: false
+  poison_client_ids: ["A"] # List of clients to poison
+  poison_rate: 0.2 # Fraction of training samples poisoned
+  poison_from_class: 0 # Class to poison (0: Normal)
+  poison_to_class: 4 # Class to target (4: DoS)
+
+  # 2. Client-level Differential Privacy (DP-SGD)
+  dp_enabled: false
+  dp_noise_multiplier: 0.1 # Standard deviation factor
+  dp_max_grad_norm: 1.0 # Gradient clip norm
+
+  # 3. Robust Aggregation
+  # Options:
+  # "FedAvg",
+  # "FedMedian",
+  # "Krum",
+  # "TrimmedMean"
+  aggregation_strategy: "FedAvg"
+
+  trimmed_mean_beta: 0.1 # Percentage of outliers to trim (if TrimmedMean active)
+
+# ── Model Architecture ──────────────────────────────────────
+model:
+  type: "cnn"
+  prune_fraction: 0.2
+  input_dim: 32
+  num_classes: 5
+  hidden_layers: [64, 32]
+  dropout: 0.2
+
+# ── Training Hyperparameters ────────────────────────────────
+training:
+  optimizer: "SGD"
+  lr: 0.003
+  momentum: 0.9
+  batch_size: 32
+  epochs_per_round: 1
+  class_weights: [1.0, 250.0, 2.0, 5.0, 50.0]
+
+# ── Feature Engineering ─────────────────────────────────────
+features:
+  columns:
+    - bidirectional_packets
+    - bidirectional_bytes
+    - duration_ms
+    - src2dst_packets
+    - src2dst_bytes
+    - dst2src_packets
+    - dst2src_bytes
+    - src2dst_mean_piat_ms
+    - dst2src_mean_piat_ms
+    - dst_port
+
+# ── Traffic Simulation ──────────────────────────────────────
+simulation:
+  attack_duration_seconds: 90
+  stages:
+    - mode: benign
+    - mode: ssh
+    - mode: slowloris
+    - mode: dns_exfil
+    - mode: botnet
+
+# ── Network Topology (Proxmox Testbed) ──────────────────────
+topology:
+  aggregator: "10.10.130.10"
+  defender_a: "10.10.130.11"
+  defender_b: "10.10.130.12"
+  target_a: "10.10.110.15"
+  target_b: "10.10.120.15"
+  traffic_gen: "10.10.140.10"
+  flower_port: 8080
+  mlflow_port: 5000
+
+# ── Notifications ───────────────────────────────────────────
+notifications:
+  telegram:
+    enabled: true
+    # bot_token and chat_id are loaded from environment variables (e.g. .env).
+
+# ── Checkpointing ──────────────────────────────────────────
+checkpointing:
+  save_dir: "/opt/mlflow-artifacts/checkpoints"
+  save_best: true
+  export_torchscript: true
+
+# ── MLOps Mode Configuration ────────────────────────────────
+mlops:
+  # Mode options:
+  # "experimental" (cold start)
+  # "production" (warm start)
+  mode: "production"
+
+  # Production Strategy:
+  # "resume" (continue from latest checkpoint)
+  # "fresh" (new start)
+  production_strategy: "resume"
+
+  # Model registry reference name in MLflow
+  registered_model_name: "CyberDefenseNet"
+
+# ── Labeling Configuration ──────────────────────────────────
+labeling:
+  dos_duration_threshold_ms: 2000
+
+# ── Data Quality & Validation Gates ─────────────────────────
+data_quality:
+  jsd_threshold: 0.6
+
+  # Options:
+  # "abort",
+  # "warn"
+  gate_action: "abort"
+
+  baseline_stats_path: "configs/baseline_feature_stats.json"
+  baseline_class_distribution: "2000,10,200,50,100"

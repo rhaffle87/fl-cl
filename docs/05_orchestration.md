@@ -797,29 +797,25 @@ The gate checks the candidate model's validation metrics using three key dimensi
 
 To protect the federated continual learning pipeline from training on corrupted or out-of-distribution batches, the platform implements automated data quality gates.
 
-### 10.1 Pre-Flight Data Quality Checks (JSD Gate)
+### 10.1 In-Process Real-Time Training Gate (JSD Gate)
 
-Before launching the training loop in each round:
+Instead of relying on external scripts, the data quality gate operates directly inside the `client.py` node:
 
-1. The orchestrator calls `tools/check_dataset.py` on client nodes to calculate the label frequency counts.
-2. It measures the **Jensen-Shannon Divergence (JSD)** of the client's current flow distribution against the configured `baseline_class_distribution` (from `configs/experiment.yaml`).
-3. If the calculated JSD exceeds the `jsd_threshold` (default: 0.6) and the config specifies `gate_action: "abort"`, the orchestrator immediately alerts operators via Telegram and shuts down the pipeline with exit code 2.
+1. In the `fit()` hook, the client reads the flow CSVs and calculates the label frequency counts for the current ephemeral batch.
+2. It measures the **Jensen-Shannon Divergence (JSD)** of the client's current flow distribution against the configured `baseline_class_distribution`.
+3. If the calculated JSD exceeds the `js_threshold` (default: 0.6), the client aborts local training for that round to prevent poisoning the global model with out-of-distribution or corrupted data.
+4. When a batch is rejected, the client snapshots the drifted CSVs to persistent storage (`~/drift_snapshots/`) for later offline debugging.
+5. The client returns its un-modified parameters to the aggregator and sets the telemetry indicators `"dataset_rejected": 1.0` and `"dataset_jsd"` to report real-time drift metadata back to the Flower server.
 
-### 10.2 Client-Side Real-Time Training Gate
+### 10.2 Manual Pre-Flight Dataset Verification
 
-During active client execution:
-
-1. In the `fit()` hook, the client recalculates the current JSD drift before running the Avalanche training cycle.
-2. If the current batch JSD exceeds `js_threshold`, the client skips training for that round and immediately uploads its un-modified parameters to the aggregator.
-3. The client sets the telemetry indicators `"dataset_rejected": 1.0` and `"dataset_jsd"` to report real-time drift metadata back to the Flower server.
+If researchers need to inspect data distributions manually before a run, they can use the `tools/check_dataset.py` utility on the client nodes. This is a standalone diagnostic tool and is **not** automatically invoked by `orchestrate.py`.
 
 ### 10.3 Post-Flight Feature Drift Diagnostics (Z-Scores)
 
-To audit feature-level distributions:
+To audit feature-level distributions manually, researchers can use `tools/check_features.py`. This tool is used for deep statistical debugging after an anomalous run and is **not** executed automatically by the orchestrator:
 
-1. The orchestrator runs `tools/check_features.py` on the client nodes.
-2. It compares the mean/standard deviation of active features against `baseline_stats.json` on a per-class basis.
-3. It flags feature drift using standard **Z-scores**:
+1. It compares the mean/standard deviation of active features against `baseline_stats.json` on a per-class basis.
+2. It flags feature drift using standard **Z-scores**:
    $$Z_f = \frac{\mu_{\text{active}, f} - \mu_{\text{baseline}, f}}{\sigma_{\text{baseline}, f}}$$
-4. If $|Z_f| \ge 3.0$, a feature drift warning is logged.
-5. The statistics are pushed to MLflow, and feature distribution histograms are streamed to TensorBoard under `runs/feature_drift` for deep statistical debugging.
+3. If $|Z_f| \ge 3.0$, a feature drift warning is logged to help identify which specific flow features (e.g., packet sizes, timing) caused the JSD gate to trip.
