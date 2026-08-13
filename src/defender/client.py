@@ -224,8 +224,18 @@ def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: 
     elif X.shape[1] > 32:
         X = X[:, :32]
 
-    # Assign labels dynamically based on IP and port fields
-    y = assign_labels_vectorized(df, dos_threshold_ms=dos_threshold_ms, traffic_gen_ip=traffic_gen_ip)
+    # Assign labels: check if a ground-truth label column already exists in the benchmark CSV
+    label_col = None
+    for col in ["label", "class", "target", "Label", "Class", "Target"]:
+        if col in df.columns:
+            label_col = col
+            break
+            
+    if label_col is not None:
+        y = pd.to_numeric(df[label_col], errors="coerce").fillna(0).astype(np.int64).values
+    else:
+        # Assign labels dynamically based on IP and port fields (live traffic fallback)
+        y = assign_labels_vectorized(df, dos_threshold_ms=dos_threshold_ms, traffic_gen_ip=traffic_gen_ip)
 
     return torch.tensor(X), torch.tensor(y)
 

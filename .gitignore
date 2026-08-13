@@ -53,6 +53,7 @@ scratch/
 
 # Exported plots and reports
 exports/
+plots/
 
 # Python test, typing & coverage caches
 .pytest_cache/
@@ -60,3 +61,6 @@ exports/
 .coverage
 htmlcov/
 .ipynb_checkpoints/
+
+# Local static analysis configuration
+pyrightconfig.json

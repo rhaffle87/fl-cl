@@ -753,7 +753,8 @@ def main():
                         print(f"[{node_name}] Jensen-Shannon Divergence: {jsd_val:.4f} (Threshold: {jsd_threshold})")
                     
                     if status == "FAIL":
-                        print(f"[{node_name}] [FAIL] DATA QUALITY GATE FAILED: JSD {jsd_val:.4f} exceeds threshold {jsd_threshold}")
+                        jsd_str = f"{jsd_val:.4f}" if jsd_val is not None else "N/A"
+                        print(f"[{node_name}] [FAIL] DATA QUALITY GATE FAILED: JSD {jsd_str} exceeds threshold {jsd_threshold}")
                         quality_gate_failed = True
                     else:
                         print(f"[{node_name}] [PASS] DATA QUALITY GATE PASSED")
@@ -934,6 +935,19 @@ client.log_artifact('{active_run_id}', '/tmp/dataset_lineage.json')
             gem_patterns=gem_patterns,
             gem_memory_strength=gem_memory_strength
         )
+
+        # Trigger automated promotion gate validation
+        print("\n=== Phase 8d: Launching Model Validation and Promotion Gate ===")
+        try:
+            promote_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tools", "ci_cd_promote.py"))
+            # Execute tools/ci_cd_promote.py locally
+            res = subprocess.run([sys.executable, promote_script], capture_output=True, text=True, encoding="utf-8")
+            safe_print(res.stdout)
+            if res.stderr:
+                print("[!] Promotion Gate stderr:")
+                safe_print(res.stderr)
+        except Exception as e:
+            print(f"[!] Warning: Automated promotion gate execution failed: {e}")
 
     except KeyboardInterrupt:
         print("\n[!] User interrupted the execution. Starting cleanup.")

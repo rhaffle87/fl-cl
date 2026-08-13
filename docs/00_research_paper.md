@@ -879,3 +879,50 @@ Three extensions would strengthen the framework's security and scalability:
 3. **Hardware-Accelerated Trusted Execution Environments**: Leveraging AMD SEV-SNP or Intel SGX/TDX within Proxmox VMs would protect the training process itself—ensuring that even a compromised hypervisor cannot inspect model weights or training data in memory.
 
 These extensions would elevate the testbed from a research prototype to a deployment-ready framework for production multi-tenant cyber defense.
+
+---
+
+## References
+
+### I. EWC & Continual Learning — Core Methods
+* **[1]** Kirkpatrick, J., Pascanu, R., Rabinowitz, N., et al. (2017). Overcoming Catastrophic Forgetting in Neural Networks. *Proceedings of the National Academy of Sciences (PNAS)*, 114(13), 3521–3526. DOI: 10.1073/pnas.1611835114
+* **[2]** Anonymous (2025). EWC Done Right for Continual Learning (EWC-DR). *NeurIPS 2025 Workshop*. arXiv:2603.18596
+* **[3]** Jhajj, G. & Lin, F. (2025). Elastic Weight Consolidation for Knowledge Graph Continual Learning: An Empirical Evaluation. *NeurIPS 2025 Workshop on Knowledge Graphs & Agentic Systems*. arXiv:2512.01890
+* **[4]** Zhang, Z., Zhang, Y., Guo, D., Zhao, S. & Zhu, X. (2023). Communication-Efficient Federated Continual Learning for Distributed Learning System with Non-IID Data (FedSI / CFedSI). *Science China Information Sciences*, 66(2), 122102.
+* **[5]** Chen, C., Lian, Z., Su, C. & Sakurai, K. (2024). Evaluating Differential Privacy in Federated Continual Learning: A Catastrophic Forgetting–Performance Tradeoff Analysis. *12th Int. Symposium on Computing and Networking (CANDAR)*, IEEE, pp. 135–141.
+* **[6]** Tang, J. et al. (2025). AFCL: Analytic Federated Continual Learning for Spatio-Temporal Invariance of Non-IID Data. arXiv:2505.12245
+* **[7]** Talpur, A. & Gurusamy, M. (2022). GFCL: A GRU-Based Federated Continual Learning Framework Against Data Poisoning Attacks in IoV. arXiv:2204.11010
+* **[28]** Zhu, Y., Hu, M. & Wu, D. (2025). Federated Continual Graph Learning. *Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD '25)*. arXiv:2411.18919 [Local PDF](file:///e:/Projects/fl-cl/journal/2411.18919v3.pdf)
+* **[29]** Guo, H., Zeng, F., Zhu, F., et al. (2025). Federated Continual Instruction Tuning. arXiv:2503.12897 [Local PDF](file:///e:/Projects/fl-cl/journal/2503.12897v2.pdf)
+* **[30]** Arockiaraj, J., Parikh, D., Adivarahan, J., Kannan, R. & Prasanna, V. (2027). Accurate and Resource-Efficient Federated Continual Learning. arXiv:2606.11480 [Local PDF](file:///e:/Projects/fl-cl/journal/2606.11480v1.pdf)
+
+### II. Federated Learning for IDS — Direct Comparisons
+* **[8]** Jin, Z., Zhou, J., Li, B., Wu, X. & Duan, C. (2024). FL-IIDS: A Novel Federated Learning-Based Incremental Intrusion Detection System. *Future Generation Computer Systems*, 151, 57–70. DOI: 10.1016/j.future.2023.09.019
+* **[9]** (2026). Incremental Federated Learning for Intrusion Detection in IoT Networks under Evolving Threat Landscape. arXiv:2603.10776
+* **[10]** (2025). Dataset-Centric Evaluation of Federated Intrusion Detection Models in IoT Networks. *PMC / NCBI*. PMC12824137
+* **[11]** (2025). Federated Transfer Learning for Rare Attack Class Detection in Network Intrusion Detection Systems. *PMC / NCBI*. PMC12484838
+* **[12]** Zhang, H. et al. (2025). Survey of Federated Learning in Intrusion Detection. *Journal of Parallel and Distributed Computing*. DOI: 10.1016/j.jpdc.2024.104976
+* **[13]** Fares, I.A. et al. (2025). Federated Learning Framework for IoT Intrusion Detection Using Tab Transformer and Nature-Inspired Hyperparameter Optimization. *PMC*. PMC12116512
+* **[14]** Alazab, M. et al. (2024). Survey on Federated Learning for IDS: Concept, Architectures, Aggregation Strategies, Challenges, and Future Directions. *ACM Computing Surveys*. DOI: 10.1145/3687124
+* **[15]** (2025). Mist-Assisted Federated Learning for Intrusion Detection in Heterogeneous IoT Networks. arXiv:2511.00271
+
+### III. Federated Continual Learning — Surveys
+* **[16]** Wang, Z. et al. (2024). Federated Continual Learning for Edge-AI: A Comprehensive Survey. arXiv:2411.13740. Submitted to ACM Computing Surveys.
+* **[17]** Hamedi, P., Razavi-Far, R. & Hallaji, E. (2025). Federated Continual Learning: Concepts, Challenges, and Solutions. *Neurocomputing*, 651, 130844. DOI: 10.1016/j.neucom.2025.130844 [Local PDF](file:///e:/Projects/fl-cl/journal/2502.07059v2.pdf)
+* **[18]** (2026). Federated Continual Learning: A Comprehensive Survey on Lifelong and Privacy-Preserving Learning over Distributed and Non-Stationary Data. arXiv:2606.11272 [Local PDF](file:///e:/Projects/fl-cl/journal/2606.11272v1.pdf)
+* **[19]** (2024). Unleashing the Power of Continual Learning on Non-Centralized Devices: A Survey. arXiv:2412.13840
+* **[20]** Hernandez-Ramos, J.L. et al. (2025). Intrusion Detection Based on Federated Learning: A Systematic Review. *ACM Computing Surveys*, 57(12), Article 309. DOI: 10.1145/3731596
+* **[21]** (2026). A Survey of Privacy-Preserving Federated Learning for Intrusion Detection Systems. *Artificial Intelligence Review*, Springer. DOI: 10.1007/s10462-026-11519-4
+* **[22]** (2025). Federated Continual Learning for Task-Incremental and Class-Incremental Problems: A Survey. *Expert Systems with Applications*, ScienceDirect. DOI: 10.1016/j.eswa.2025.028945
+
+### IV. Core FL Framework Papers
+* **[23]** McMahan, B., Moore, E., Ramage, D., Hampson, S. & Aguera y Arcas, B. (2017). Communication-Efficient Learning of Deep Networks from Decentralized Data (FedAvg). *Proceedings of AISTATS 2017*, pp. 1273–1282. PMLR.
+* **[24]** Beutel, D.J., Topal, T., Mathur, A., Qiu, X., Parcollet, T. et al. (2022). Flower: A Friendly Federated Learning Research Framework. arXiv:2007.14390. Published in *IEEE Pervasive Computing*, 23(1), 45–54, 2024.
+* **[25]** Lomonaco, V., Pellegrini, L., Cossu, A., Carta, A. et al. (2021). Avalanche: An End-to-End Library for Continual Learning. *IEEE/CVF CVPR Workshops (CLVision)*, pp. 3595–3605. DOI: 10.1109/CVPRW53098.2021.00399
+
+### V. Benchmark Datasets
+* **[26]** Sharafaldin, I., Habibi Lashkari, A. & Ghorbani, A.A. (2018). Toward Generating a New Intrusion Detection Dataset and Intrusion Traffic Characterization (CIC-IDS2017). *4th Int. Conf. on Information Systems Security and Privacy (ICISSP)*, pp. 108–116.
+* **[27]** Wang, W. et al. (2017). USTC-TFC2016: An Encrypted Traffic Dataset. *IEEE INFOCOM WKSHPS*. University of Science and Technology of China.
+
+### VI. Cluster & Cloud Virtualization Infrastructure
+* **[31]** Ulya, M. N. (2025). Perancangan Private Cloud dan Implementasi Infrastructure as a Service untuk Skala Kampus. *Institut Teknologi Sepuluh Nopember*. [Local PDF](file:///e:/Projects/fl-cl/journal/5048221016_Muhammad%20Nabil%20Ulya.pdf) [Local Source Markdown](file:///e:/Projects/fl-cl/journal/5048221016_Muhammad%20Nabil%20Ulya.md)
