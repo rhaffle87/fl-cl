@@ -1,1 +1,0 @@
-{"columns":["class_id","class_name","accuracy","status"],"data":[[0,"Normal",0.9921746347,"Acceptable"],[1,"Botnet",1.0,"Perfect"],[2,"DNS Exfiltration",0.9985936907,"Acceptable"],[3,"SSH Brute Force",1.0,"Perfect"],[4,"DoS",0.9703635761,"Needs Improvement"]]}

@@ -169,27 +169,7 @@ Initially, the research architecture isolated nodes using tagged VLANs (110, 120
 
 With the network harmonized, VMs are distributed across nodes based on available capacity. The two high-memory compute nodes (`its`: 34.63 GB free; `node2`: 56.21 GB free) host the resource-intensive defender VMs and traffic generators. The lighter node (`pve`: 25.46 GB free) hosts only the aggregator, which performs no training—only weight averaging.
 
-```mermaid
-graph TD
-    subgraph cluster ["PVE Cluster – Workload Allocation"]
-        subgraph its ["Node 'its' (Free: 34.63 GB)"]
-            DA["Defender A (VM 310) - 8 vCPU · 16 GB · 10.10.130.11/16"]
-            TA["Target A1 (VM 311) - 1 vCPU · 1 GB · 10.10.110.15/16"]
-        end
-        subgraph node2 ["Node 'node2' (Free: 56.21 GB)"]
-            DB["Defender B (VM 320) - 8 vCPU · 16 GB · 10.10.130.12/16"]
-            TB["Target B1 (VM 321) - 1 vCPU · 1 GB · 10.10.120.15/16"]
-            TG["Traffic Gen (VM 400) - 4 vCPU · 4 GB · 10.10.140.10/16"]
-        end
-        subgraph pve ["Node 'pve' (Free: 25.46 GB)"]
-            AG["FL Aggregator (LXC 300) - 4 vCPU · 8 GB · 10.10.130.10/16"]
-        end
-    end
-    TG -.->|Attacks + Benign Traffic| TA
-    TG -.->|Attacks + Benign Traffic| TB
-    DA <-->|gRPC FL Updates| AG
-    DB <-->|gRPC FL Updates| AG
-```
+![Proxmox VE 3-Node Cluster Topology](figures/fig2_cluster.png){#fig:cluster width=95%}
 
 | Hypervisor | ID | Hostname | OS | vCPU | RAM | Disk | Flat L2 IP Address | Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -835,7 +815,7 @@ After training on $K$ sequential attack tasks, BWT measures how much accuracy on
 
 $$\text{BWT} = \frac{1}{K-1} \sum_{i=1}^{K-1} (A_{K,i} - A_{i,i})$$
 
-$A_{K,i}$ is accuracy on Task $i$ after completing Task $K$. BWT ≈ 0 indicates successful forgetting resistance; BWT ≪ 0 indicates severe forgetting.
+$A_{K,i}$ is accuracy on Task $i$ after completing Task $K$. $\text{BWT} \approx 0$ indicates successful forgetting resistance; $\text{BWT} \ll 0$ indicates severe forgetting.
 
 #### Collaborative Generalization — Cross-Organization Knowledge Transfer
 
@@ -947,8 +927,6 @@ The 4-tier benchmarking suite evaluates continuous execution under escalating te
 | Normal | 99.63% | 0.9979 | 0.50 | 8,577 | [PASS] PASS |
 | Botnet | 100.00% | 0.7097 | 0.60 | 33 | [PASS] PASS |
 | Exfiltration | 100.00% | 0.9994 | 0.70 | 1,784 | [PASS] PASS |
-| BruteForce | 100.00% | 0.9949 | 0.50 | 390 | [PASS] PASS |
-| DoS | 96.35% | 0.9814 | 0.70 | 137 | [PASS] PASS |
 | BruteForce | 100.00% | 0.9949 | 0.50 | 390 | [PASS] **PASS** |
 | DoS | 97.12% | 0.9783 | 0.70 | 139 | [PASS] **PASS** |
 
@@ -1014,11 +992,11 @@ graph TD
 #### 10.1.1 Structural Divergence (Volumetric vs. Low-Volume Tunnels)
 The selection of these specific classes is particularly strong because they represent two fundamentally different traffic profiles, creating a realistic classification challenge:
 * **Volumetric & Rate-Based Attacks (DoS & SSH Brute Force)**:
-  * *Characteristics*: High packet rate, short flow durations, high bytes-per-second, and highly repetitive port access signatures.
-  * *ML impact*: Extremely easy for models to classify based on statistical flow features (duration, packet counts).
+  * **Characteristics**: High packet rate, short flow durations, high bytes-per-second, and highly repetitive port access signatures.
+  * **ML impact**: Extremely easy for models to classify based on statistical flow features (duration, packet counts).
 * **Low-Volume, Stealthy Attacks (DNS Exfiltration & Botnet C2)**:
-  * *Characteristics*: Low packet frequency, low throughput, masqueraded inside standard application layer protocols (DNS/HTTPS).
-  * *ML impact*: Their statistical footprint is close to benign traffic (Class 0). The model must learn complex correlations (e.g., variance of packet sizes, entropy of domains, flow idle times) to distinguish them.
+  * **Characteristics**: Low packet frequency, low throughput, masqueraded inside standard application layer protocols (DNS/HTTPS).
+  * **ML impact**: Their statistical footprint is close to benign traffic (Class 0). The model must learn complex correlations (e.g., variance of packet sizes, entropy of domains, flow idle times) to distinguish them.
 
 ---
 
@@ -1048,19 +1026,19 @@ Training intrusion detection models in a centralized fashion presents massive **
 While the current model is highly effective for a robust proof of concept, SOTA cybersecurity journals highlight several gaps between simulated testbeds and real-world production networks:
 
 #### 10.4.1 Concept Drift vs. Class-Incremental Drift
-* *Current project setup*: Implements **Class-Incremental Learning** (Task 1 = Normal + Botnet, Task 2 = DNS Exfil, Task 3 = DoS).
-* *SOTA literature consensus*: Real network drift is often **Domain/Concept Drift**, where the *same* attack class changes its behavior. For example:
+* **Current project setup**: Implements **Class-Incremental Learning** (Task 1 = Normal + Botnet, Task 2 = DNS Exfil, Task 3 = DoS).
+* **SOTA literature consensus**: Real network drift is often **Domain/Concept Drift**, where the *same* attack class changes its behavior. For example:
   * A botnet command-and-control channel switches from unencrypted HTTP to encrypted HTTPS, or implements jitter (random delay intervals) to avoid detection.
-  * *Opportunity*: Future research iterations could test a model's ability to generalize to new variants of the same threat without retraining from scratch.
+  * **Opportunity**: Future research iterations could test a model's ability to generalize to new variants of the same threat without retraining from scratch.
 
 #### 10.4.2 Feature Dependency on Encryption (TLS 1.3 & DoH)
-* *Current project setup*: Uses **NFStream** to capture standard flow characteristics (duration, bytes, protocol ports).
-* *SOTA literature consensus*: Standard port-based features (e.g., port 80/443/53) are increasingly useless due to **DNS-over-HTTPS (DoH)** and payload encryption (TLS 1.3). Real-world attackers hide DNS exfiltration within standard HTTPS sessions.
-* *Sufficiency status*: **High**. By including **JA3 and JA3S fingerprint hashes** (which capture the TLS client-hello and server-hello handshakes), your model is resilient to encryption changes because it learns connection negotiate signatures rather than readable payloads.
+* **Current project setup**: Uses **NFStream** to capture standard flow characteristics (duration, bytes, protocol ports).
+* **SOTA literature consensus**: Standard port-based features (e.g., port 80/443/53) are increasingly useless due to **DNS-over-HTTPS (DoH)** and payload encryption (TLS 1.3). Real-world attackers hide DNS exfiltration within standard HTTPS sessions.
+* **Sufficiency status**: **High**. By including **JA3 and JA3S fingerprint hashes** (which capture the TLS client-hello and server-hello handshakes), your model is resilient to encryption changes because it learns connection negotiate signatures rather than readable payloads.
 
 #### 10.4.3 Zero-Day / Out-of-Distribution (OOD) Detection
-* *Current project setup*: A closed-world system classifying flows into 5 predetermined classes.
-* *SOTA literature consensus*: Modern network IDSs must handle **Open-World Scenarios** where unknown threat classes arrive. A model should flag OOD traffic as "Anomalous" (using autoencoders, isolation forests, or soft-max thresholding) rather than forcing it into one of the 5 known categories.
+* **Current project setup**: A closed-world system classifying flows into 5 predetermined classes.
+* **SOTA literature consensus**: Modern network IDSs must handle **Open-World Scenarios** where unknown threat classes arrive. A model should flag OOD traffic as "Anomalous" (using autoencoders, isolation forests, or soft-max thresholding) rather than forcing it into one of the 5 known categories.
 
 ---
 
@@ -1114,9 +1092,9 @@ These extensions would elevate the testbed from a research prototype to a deploy
 * [5] Chen, C., Lian, Z., Su, C. & Sakurai, K. (2024). Evaluating Differential Privacy in Federated Continual Learning: A Catastrophic Forgetting–Performance Tradeoff Analysis. *12th Int. Symposium on Computing and Networking (CANDAR)*, IEEE, pp. 135–141.
 * [6] Tang, J. et al. (2025). AFCL: Analytic Federated Continual Learning for Spatio-Temporal Invariance of Non-IID Data. arXiv:2505.12245
 * [7] Talpur, A. & Gurusamy, M. (2022). GFCL: A GRU-Based Federated Continual Learning Framework Against Data Poisoning Attacks in IoV. arXiv:2204.11010
-* [28] Zhu, Y., Hu, M. & Wu, D. (2025). Federated Continual Graph Learning. *Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD '25)*. arXiv:2411.18919 [Local PDF](file:///e:/Projects/fl-cl/docs/references/papers/2411.18919v3.pdf)
-* [29] Guo, H., Zeng, F., Zhu, F., et al. (2025). Federated Continual Instruction Tuning. arXiv:2503.12897 [Local PDF](file:///e:/Projects/fl-cl/docs/references/papers/2503.12897v2.pdf)
-* [30] Arockiaraj, J., Parikh, D., Adivarahan, J., Kannan, R. & Prasanna, V. (2027). Accurate and Resource-Efficient Federated Continual Learning. arXiv:2606.11480 [Local PDF](file:///e:/Projects/fl-cl/docs/references/papers/2606.11480v1.pdf)
+* [8] Zhu, Y., Hu, M. & Wu, D. (2025). Federated Continual Graph Learning. *Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD '25)*. arXiv:2411.18919
+* [9] Guo, H., Zeng, F., Zhu, F., et al. (2025). Federated Continual Instruction Tuning. arXiv:2503.12897
+* [10] Arockiaraj, J., Parikh, D., Adivarahan, J., Kannan, R. & Prasanna, V. (2027). Accurate and Resource-Efficient Federated Continual Learning. arXiv:2606.11480
 
 ### II. Federated Learning for IDS — Direct Comparisons
 * [8] Jin, Z., Zhou, J., Li, B., Wu, X. & Duan, C. (2024). FL-IIDS: A Novel Federated Learning-Based Incremental Intrusion Detection System. *Future Generation Computer Systems*, 151, 57–70. DOI: 10.1016/j.future.2023.09.019
@@ -1130,8 +1108,8 @@ These extensions would elevate the testbed from a research prototype to a deploy
 
 ### III. Federated Continual Learning — Surveys
 * [16] Wang, Z. et al. (2024). Federated Continual Learning for Edge-AI: A Comprehensive Survey. arXiv:2411.13740. Submitted to ACM Computing Surveys.
-* [17] Hamedi, P., Razavi-Far, R. & Hallaji, E. (2025). Federated Continual Learning: Concepts, Challenges, and Solutions. *Neurocomputing*, 651, 130844. DOI: 10.1016/j.neucom.2025.130844 [Local PDF](file:///e:/Projects/fl-cl/docs/references/papers/2502.07059v2.pdf)
-* [18] (2026). Federated Continual Learning: A Comprehensive Survey on Lifelong and Privacy-Preserving Learning over Distributed and Non-Stationary Data. arXiv:2606.11272 [Local PDF](file:///e:/Projects/fl-cl/docs/references/papers/2606.11272v1.pdf)
+* [17] Hamedi, P., Razavi-Far, R. & Hallaji, E. (2025). Federated Continual Learning: Concepts, Challenges, and Solutions. *Neurocomputing*, 651, 130844. DOI: 10.1016/j.neucom.2025.130844
+* [18] (2026). Federated Continual Learning: A Comprehensive Survey on Lifelong and Privacy-Preserving Learning over Distributed and Non-Stationary Data. arXiv:2606.11272
 * [19] (2024). Unleashing the Power of Continual Learning on Non-Centralized Devices: A Survey. arXiv:2412.13840
 * [20] Hernandez-Ramos, J.L. et al. (2025). Intrusion Detection Based on Federated Learning: A Systematic Review. *ACM Computing Surveys*, 57(12), Article 309. DOI: 10.1145/3731596
 * [21] (2026). A Survey of Privacy-Preserving Federated Learning for Intrusion Detection Systems. *Artificial Intelligence Review*, Springer. DOI: 10.1007/s10462-026-11519-4
@@ -1147,4 +1125,4 @@ These extensions would elevate the testbed from a research prototype to a deploy
 * [27] Wang, W. et al. (2017). USTC-TFC2016: An Encrypted Traffic Dataset. *IEEE INFOCOM WKSHPS*. University of Science and Technology of China.
 
 ### VI. Cluster & Cloud Virtualization Infrastructure
-* [31] Ulya, M. N. (2025). Perancangan Private Cloud dan Implementasi Infrastructure as a Service untuk Skala Kampus. *Institut Teknologi Sepuluh Nopember*. [Local PDF](file:///e:/Projects/fl-cl/docs/references/papers/5048221016_Muhammad%20Nabil%20Ulya.pdf) [Local Source Markdown](file:///e:/Projects/fl-cl/docs/references/papers/5048221016_Muhammad%20Nabil%20Ulya.md)
+* [31] Ulya, M. N. (2025). Perancangan Private Cloud dan Implementasi Infrastructure as a Service untuk Skala Kampus. *Institut Teknologi Sepuluh Nopember*.
