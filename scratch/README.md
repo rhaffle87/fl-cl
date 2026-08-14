@@ -14,6 +14,7 @@ This directory contains utility scripts for testbed deployment, local architectu
 * **`test_local_train.py`**: End-to-end training convergence verification suite on synthetic 5-class network flow data.
 * **`debug_local_training.py`**: Diagnostic harness for debugging EWC penalty calculations and Avalanche strategy hooks locally.
 * **`test_comprehensive_suite.py`**: Multi-scenario local validation harness testing DP noise limits and label-poisoning sensitivity.
+* **`ewc_sensitivity_sweep.py`**: Fine-grained EWC regularization penalty lambda sensitivity analysis script.
 * **`test_confusion_matrix.py`**: Generates 5x5 confusion matrix heatmaps from evaluation outputs.
 
 ### 3. MLflow Database & Registry Utilities

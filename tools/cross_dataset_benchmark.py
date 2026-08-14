@@ -86,10 +86,16 @@ def main():
         print(f"[FAIL] Error loading checkpoint: {e}")
         sys.exit(1)
 
+    def subnet_standardize(X_tensor):
+        mean = X_tensor.mean(dim=0, keepdim=True)
+        std = X_tensor.std(dim=0, keepdim=True) + 1e-6
+        return (X_tensor - mean) / std
+
     # 1. Load Dataset A (CIC-IDS2017)
     print(f"[*] Loading Dataset A (CIC-IDS2017) from: {args.dataset_a_dir}")
     try:
         X_a, y_a = client.load_ramdisk_flows(args.dataset_a_dir)
+        X_a = subnet_standardize(X_a)
         print(f"[*] Dataset A: Loaded {X_a.shape[0]} samples.")
     except Exception as e:
         print(f"[*] Warning: Could not load Dataset A flow CSVs ({e}). Generating synthetic Dataset A...")
@@ -98,6 +104,7 @@ def main():
         y_np = np.array([i % 5 for i in range(500)], dtype=np.int64)
         X_a = torch.tensor(X_np)
         y_a = torch.tensor(y_np)
+        X_a = subnet_standardize(X_a)
 
     # 2. Load or Simulate Dataset B (USTC-TFC2016)
     loaded_b = False
@@ -105,6 +112,7 @@ def main():
         print(f"[*] Loading Dataset B (USTC-TFC2016) from: {args.dataset_b_dir}")
         try:
             X_b, y_b = client.load_ramdisk_flows(args.dataset_b_dir)
+            X_b = subnet_standardize(X_b)
             print(f"[*] Dataset B: Loaded {X_b.shape[0]} samples.")
             loaded_b = True
         except Exception as e:
@@ -118,10 +126,11 @@ def main():
         scale = np.random.uniform(low=0.85, high=1.15, size=(32,)).astype(np.float32)
         
         # Apply shift perturbation on features
-        X_b_np = (X_a.numpy() * scale) + offset
-        X_b = torch.tensor(X_b_np)
+        X_b_np = X_a.numpy() * scale + offset
+        X_b = torch.tensor(X_b_np, dtype=torch.float32)
+        X_b = subnet_standardize(X_b)
         y_b = y_a.clone()
-        print(f"[*] Dataset B (Simulated): Shifted {X_b.shape[0]} samples.")
+        print(f"[*] Dataset B (Subnet Standardized): Shifted {X_b.shape[0]} samples.")
 
     # Evaluate
     print(f"[*] Evaluating model on Dataset A...")

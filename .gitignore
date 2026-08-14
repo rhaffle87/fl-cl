@@ -46,6 +46,7 @@ checkpoints/
 runs/
 deploy.log
 src/log_dataset_temp.py
+scratch/
 
 # Local environment variables
 .env
