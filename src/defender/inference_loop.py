@@ -163,6 +163,7 @@ def main():
     parser.add_argument("--poll-interval", type=float, default=1.0, help="Polling interval in seconds")
     parser.add_argument("--alerts-log", default="/mnt/ramdisk/flows/alerts.json", help="Output file path for security alerts")
     parser.add_argument("--stats-path", default="/root/baseline_stats.json", help="Path to baseline stats JSON file for fixed standardization")
+    parser.add_argument("--duration", type=int, default=0, help="Optional maximum duration in seconds (0 = infinite)")
     args = parser.parse_args()
 
     # Dynamic fallback check if path does not exist
@@ -193,12 +194,17 @@ def main():
     os.makedirs(args.flows_dir, exist_ok=True)
     os.makedirs(os.path.dirname(os.path.abspath(args.alerts_log)), exist_ok=True)
 
-    # Track already processed files to avoid duplicate alert triggers
-    processed_files = set(Path(args.flows_dir).glob("flows_*.csv"))
-    print(f"[inference] Monitoring started. Initialized with {len(processed_files)} existing files.")
-
+    # Track processed files
+    processed_files = set()
+    stats_path = args.stats_path if os.path.exists(args.stats_path) else None
+    
+    start_time = time.time()
     try:
         while True:
+            if args.duration > 0 and (time.time() - start_time) >= args.duration:
+                print(f"[inference] Duration limit ({args.duration}s) reached. Exiting gracefully.")
+                break
+
             # 1. Check for model updates (dynamic hot-reloading)
             try:
                 current_mtime = os.path.getmtime(args.checkpoint)
