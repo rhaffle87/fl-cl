@@ -6,9 +6,11 @@
 # as an MLflow artifact so every run is fully reproducible.
 # ─────────────────────────────────────────────────────────────
 
+experiment_name: "FL-CL-RobustAgg"
+
 experiment:
-  name: "FL-CL-EWC-Baseline"
-  description: "Federated Continual Learning with EWC on 5-class encrypted traffic"
+  name: "FL-CL-RobustAgg"
+  description: "Byzantine-robust Federated Continual Learning under TrimmedMean (beta=0.1) aggregation against 20% label poisoning attack"
 
 # ── Federated Learning ──────────────────────────────────────
 fl:

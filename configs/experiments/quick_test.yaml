@@ -6,9 +6,11 @@
 # as an MLflow artifact so every run is fully reproducible.
 # ─────────────────────────────────────────────────────────────
 
+experiment_name: "FL-CL-QuickTest"
+
 experiment:
-  name: "FL-CL-EWC-Baseline"
-  description: "Federated Continual Learning with EWC on 5-class encrypted traffic"
+  name: "FL-CL-QuickTest"
+  description: "Quick 30-second verification tier for rapid FL-CL pipeline validation"
 
 # ── Federated Learning ──────────────────────────────────────
 fl:

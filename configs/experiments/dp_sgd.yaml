@@ -6,9 +6,11 @@
 # as an MLflow artifact so every run is fully reproducible.
 # ─────────────────────────────────────────────────────────────
 
+experiment_name: "FL-CL-DP-SGD"
+
 experiment:
-  name: "FL-CL-EWC-Baseline"
-  description: "Federated Continual Learning with EWC on 5-class encrypted traffic"
+  name: "FL-CL-DP-SGD"
+  description: "Privacy-preserving Federated Continual Learning with Differentially Private SGD (sigma=0.3, max_grad_norm=5.0)"
 
 # ── Federated Learning ──────────────────────────────────────
 fl:
