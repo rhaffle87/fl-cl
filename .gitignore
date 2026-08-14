@@ -42,11 +42,10 @@ id_rsa.pub
 checkpoints/
 *.pt
 
-# Dynamic target credentials (containing SSH password/metadata)
-runs/target_credentials.json
-
-# Scratch scripts/temporary code
-scratch/
+# Dynamic target credentials & temporary files
+runs/
+deploy.log
+src/log_dataset_temp.py
 
 # Local environment variables
 .env

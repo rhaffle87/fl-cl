@@ -58,8 +58,11 @@ class TelegramNotifier:
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 return resp.status == 200
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 404):
+                self.enabled = False
+            return False
         except Exception as e:
-            print(f"[telegram] Warning: failed to send notification: {e}")
             return False
 
     def notify_start(self, experiment_name: str, rounds: int, config_summary: str = "", 

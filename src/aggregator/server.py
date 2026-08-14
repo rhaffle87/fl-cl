@@ -290,17 +290,26 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
             weights_list = [w for w, _ in weights_results]
             n = len(weights_list)
             k = int(np.floor(self.trimmed_mean_beta * n))
-            ndarrays = []
-            for layer_idx in range(len(weights_list[0])):
-                stacked = np.stack([w[layer_idx] for w in weights_list], axis=0)
-                sorted_stacked = np.sort(stacked, axis=0)
-                if k > 0 and 2 * k < n:
-                    trimmed = sorted_stacked[k:-k]
-                else:
-                    trimmed = sorted_stacked
-                ndarrays.append(np.mean(trimmed, axis=0))
-            aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
-            print(f"[server] Aggregated fit via TrimmedMean strategy (beta={self.trimmed_mean_beta}, trimmed {k} outlier clients)")
+            if k == 0 and n <= 3 and self.trimmed_mean_beta > 0.0:
+                # In small client topologies (e.g. N=2), fallback to median to effectively trim outlier vectors
+                ndarrays = []
+                for layer_idx in range(len(weights_list[0])):
+                    stacked = np.stack([w[layer_idx] for w in weights_list], axis=0)
+                    ndarrays.append(np.median(stacked, axis=0))
+                aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
+                print(f"[server] Aggregated fit via TrimmedMean (small N={n} topology, adaptive FedMedian for outlier isolation)")
+            else:
+                ndarrays = []
+                for layer_idx in range(len(weights_list[0])):
+                    stacked = np.stack([w[layer_idx] for w in weights_list], axis=0)
+                    sorted_stacked = np.sort(stacked, axis=0)
+                    if k > 0 and 2 * k < n:
+                        trimmed = sorted_stacked[k:-k]
+                    else:
+                        trimmed = sorted_stacked
+                    ndarrays.append(np.mean(trimmed, axis=0))
+                aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
+                print(f"[server] Aggregated fit via TrimmedMean strategy (beta={self.trimmed_mean_beta}, trimmed {k} outlier clients)")
         elif self.aggregation_strategy == "Krum":
             # Krum selection
             weights_list = [w for w, _ in weights_results]

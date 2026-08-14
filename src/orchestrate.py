@@ -128,7 +128,7 @@ def validate_sanitized_inputs(
     assert mlops_mode in ("experimental", "production"), f"Invalid mlops_mode: {mlops_mode}"
     
     production_strategy = str(production_strategy).lower()
-    assert production_strategy in ("resume", "scratch"), f"Invalid production_strategy: {production_strategy}"
+    assert production_strategy in ("resume", "fresh"), f"Invalid production_strategy: {production_strategy}"
     
     assert isinstance(jsd_threshold, (int, float)) and 0.0 <= jsd_threshold <= 1.0, f"Invalid jsd_threshold: {jsd_threshold}"
     
@@ -231,10 +231,10 @@ class RemoteNode:
 
     def cleanup(self, kill_mlflow=False):
         opts = self._get_ssh_opts()
-        pattern = "server.py|client.py|extractor.py|attack_flow.py|busybox httpd|normal_traffic_loop|curl|simple_httpd.sh|nc"
+        pattern = "server.py|client.py|extractor.py|attack_flow.py|busybox httpd|normal_traffic_loop|curl|simple_httpd.sh"
         if kill_mlflow:
             pattern += "|mlflow"
-        kill_cmd = f"pkill -f '{pattern}' || killall -9 nc || true"
+        kill_cmd = f"pkill -f '{pattern}' || pkill -x nc || true"
         print(f"[{self.name}] Cleaning up background processes...")
         ssh_cmd = ["ssh", "-n"] + opts + [f"{self.username}@{self.ip}", kill_cmd]
         subprocess.run(ssh_cmd, capture_output=True)

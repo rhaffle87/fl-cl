@@ -29,31 +29,22 @@ cl:
 
 # ── Security, Privacy & Byzantine Robustness ─────────────────
 security:
-  # 1. Data Poisoning Simulation
   poison_enabled: false
-  poison_client_ids: ["A"] # List of clients to poison
-  poison_rate: 0.2 # Fraction of training samples poisoned
-  poison_from_class: 0 # Class to poison (0: Normal)
-  poison_to_class: 4 # Class to target (4: DoS)
+  poison_client_ids: ["A"]
+  poison_rate: 0.2
+  poison_from_class: 0
+  poison_to_class: 4
 
-  # 2. Client-level Differential Privacy (DP-SGD)
   dp_enabled: false
-  dp_noise_multiplier: 0.1 # Standard deviation factor
-  dp_max_grad_norm: 1.0 # Gradient clip norm
+  dp_noise_multiplier: 0.1
+  dp_max_grad_norm: 1.0
 
-  # 3. Robust Aggregation
-  # Options:
-  # "FedAvg",
-  # "FedMedian",
-  # "Krum",
-  # "TrimmedMean"
   aggregation_strategy: "FedAvg"
-
-  trimmed_mean_beta: 0.1 # Percentage of outliers to trim (if TrimmedMean active)
+  trimmed_mean_beta: 0.1
 
 # ── Model Architecture ──────────────────────────────────────
 model:
-  type: "mlp"
+  type: "cnn"
   prune_fraction: 0.2
   input_dim: 32
   num_classes: 5
@@ -63,11 +54,11 @@ model:
 # ── Training Hyperparameters ────────────────────────────────
 training:
   optimizer: "SGD"
-  lr: 0.003
+  lr: 0.005
   momentum: 0.9
   batch_size: 32
   epochs_per_round: 1
-  class_weights: [1.0, 250.0, 2.0, 5.0, 50.0]
+  class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
 
 # ── Feature Engineering ─────────────────────────────────────
 features:
@@ -85,7 +76,7 @@ features:
 
 # ── Traffic Simulation ──────────────────────────────────────
 simulation:
-  attack_duration_seconds: 15
+  attack_duration_seconds: 30
   stages:
     - mode: benign
     - mode: ssh
@@ -108,7 +99,6 @@ topology:
 notifications:
   telegram:
     enabled: true
-    # bot_token and chat_id are loaded from environment variables (e.g. .env).
 
 # ── Checkpointing ──────────────────────────────────────────
 checkpointing:
@@ -118,15 +108,8 @@ checkpointing:
 
 # ── MLOps Mode Configuration ────────────────────────────────
 mlops:
-  # Mode options:
-  # "experimental" (cold start)
-  # "production" (warm start)
-  mode: "production"
-
-  # Production Strategy:
-  # "resume" (continue from latest checkpoint)
-  # "fresh" (new start)
-  production_strategy: "resume"
+  mode: "experimental"
+  production_strategy: "fresh"
 
   # Model registry reference name in MLflow
   registered_model_name: "CyberDefenseNet"

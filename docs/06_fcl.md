@@ -241,12 +241,12 @@ Where:
 ```mermaid
 graph LR
     subgraph WithoutEWC ["Without EWC"]
-        W1["Round 1: Learns SSH-BF ✓"] --> W2["Round 2: Learns DoS ✓ <br/> (Forgets SSH-BF ✗)"]
-        W2 --> W3["Round 3: Learns Botnet ✓ <br/> (Forgets DoS ✗)"]
+        W1["Round 1: Learns SSH-BF [PASS]"] --> W2["Round 2: Learns DoS [PASS] <br/> (Forgets SSH-BF [FAIL])"]
+        W2 --> W3["Round 3: Learns Botnet [PASS] <br/> (Forgets DoS [FAIL])"]
     end
     subgraph WithEWC ["With EWC"]
-        E1["Round 1: Learns SSH-BF ✓"] --> E2["Round 2: Learns DoS ✓ <br/> (Retains SSH-BF ✓)"]
-        E2 --> E3["Round 3: Learns Botnet ✓ <br/> (Retains SSH-BF + DoS ✓)"]
+        E1["Round 1: Learns SSH-BF [PASS]"] --> E2["Round 2: Learns DoS [PASS] <br/> (Retains SSH-BF [PASS])"]
+        E2 --> E3["Round 3: Learns Botnet [PASS] <br/> (Retains SSH-BF + DoS [PASS])"]
     end
 ```
 
@@ -257,7 +257,7 @@ The `CrossEntropyLoss` is configured with per-class weights from the experiment 
 ```yaml
 # configs/experiment.yaml
 training:
-  class_weights: [1.0, 250.0, 2.0, 5.0, 50.0]
+  class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
 ```
 
 This tells the optimizer to pay **250× more attention** to misclassifying Botnet (class 1) compared to **1× for Normal** (class 0). Without these weights, the model would ignore rare attack classes in favor of maximizing accuracy on the dominant Normal class.
