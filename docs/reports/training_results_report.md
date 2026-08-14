@@ -1,62 +1,50 @@
-# FCL Production Training Results Report
+# FCL Production Training & Benchmarking Results Report
 
-**Experiment**: FL-CL-EWC-Baseline
-**Date**: July 2026
-**Infrastructure**: 3-Node Proxmox VE Cluster (`10.10.130.10`)
-**MLflow Run ID**: `b774d90b4a304dce9ca2393f0af2f4a9`
+**Execution Date**: August 14, 2026  
+**Infrastructure**: 3-Node Physical Proxmox VE Cluster (`10.10.130.10`)  
+**Git Commit**: `91eb7e1`  
+**Formatting Standard**: Standard Markdown Tables (strictly emoji-free)
 
 ---
 
-## 1. Experiment Configuration
+## 1. Executive Summary
 
-The production training run was executed with the following validated configuration:
+This report documents the finalized empirical performance of the 5 core experiment series (`quick_test.yaml`, `baseline.yaml`, `dp_sgd.yaml`, `data_poisoning.yaml`, `robust_agg.yaml`) and the 4-tier benchmark suite (`benchmark_quick.yaml`, `benchmark_balanced.yaml`, `benchmark_stressed.yaml`, `benchmark_realworld.yaml`) executed directly on the physical 3-node Proxmox VE testbed (`10.10.130.10`).
 
 | Parameter | Value |
 | :--- | :--- |
 | **Model Backbone** | 1D-CNN (`CyberDefenseCNN`) |
-| **Input Dimensions** | 32 (10 NFStream features, padded) |
+| **Input Dimensions** | 32 scaled ETA features |
 | **Output Classes** | 5 (Normal, Botnet, DNS Exfil, SSH Brute Force, DoS) |
 | **CL Strategy** | Elastic Weight Consolidation (EWC) |
-| **EWC $\lambda$** | `0.8` |
-| **Federated Rounds** | 100 (warm-started from round 76, 24 active rounds) |
-| **Aggregation Strategy** | FedAvg (Federated Averaging) |
-| **Learning Rate** | `0.003` |
-| **SGD Momentum** | `0.9` |
-| **Batch Size** | `32` |
-| **Class Weights** | `[1.0, 250.0, 2.0, 5.0, 50.0]` |
-| **MLOps Mode** | Production (`resume` strategy) |
-| **Resumed From** | Run `82020f81b9064636aa8d49a5a22d18bf` (Model Version `v15`) |
-| **Registered Model Version** | `v16` |
-| **Git Commit** | `2ecf09433a53a785884cd66ed4aad0929bc92c58` |
-
-### Class Weight Rationale
-
-The class weights `[1.0, 250.0, 2.0, 5.0, 50.0]` were calibrated to counteract extreme class imbalance in live encrypted network traffic. Botnet C2 beaconing flows (class 1) are exceedingly rare compared to Normal traffic (class 0), requiring a 250× penalty amplification to prevent the optimizer from ignoring them entirely.
+| **EWC $\lambda$** | `0.8` – `2.0` |
+| **Aggregation Strategies** | FedAvg & TrimmedMean ($\beta=0.1$) with Adaptive `FedMedian` Fallback |
+| **Class Weights** | `[1.0, 15.0, 2.0, 4.0, 15.0]` |
+| **Telegram Notifications** | Configured & Live Verified (`HTTP 200 OK`) |
 
 ---
 
-## 2. Production Run Performance Summary
+## 2. Core Experiments Master Scorecard
 
-### 2.1 Global Metrics (Best Round: 18)
+| Experiment Config | FL Aggregation | Security & Privacy Settings | Server Acc | Val Acc | DoS F1 Score | Validation Gate | MLflow Version & CI/CD Action |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **`quick_test.yaml`** | FedAvg | Clean Baseline | 99.59% | 99.48% | 0.9951 | [PASS] PASS | Promoted Version 19 (`champion`) |
+| **`baseline.yaml`** | FedAvg | Clean Baseline | 99.72% | 99.64% | 0.9815 | [PASS] PASS | Promoted Version 20 (`champion`) |
+| **`dp_sgd.yaml`** | FedAvg | DP ($\sigma=0.3$, Clip 5.0) | 99.51% | 99.59% | 0.9776 | [PASS] PASS | Promoted Version 21 (`champion`) |
+| **`data_poisoning.yaml`** | FedAvg | 20% Defender A Poison | 92.45% | 99.69% | 0.9891 | [PASS] PASS | Promoted Version 22 (`champion`) |
+| **`robust_agg.yaml`** | **TrimmedMean** ($\beta=0.1$) | 20% Defender A Poison | 92.31% | **99.64%** | **0.9675** | [PASS] PASS | **Promoted Version 23 (`champion`)** |
 
-| Metric | Value |
-| :--- | :--- |
-| **Global Accuracy** | 99.37% |
-| **Global Loss** | 0.4225 |
-| **Crucial Performance Index (CPI)** | 0.8830 |
-| **Communication Overhead** | 294,480 bytes/round (well within 200 MB budget) |
+---
 
-### 2.2 Class-wise Detailed Metrics
+## 3. Automated 4-Tier Benchmark Suite Master Scorecard
 
-| Class | Class Name | Accuracy | F1-Score | BWT $\Delta$ | Status |
-| :---: | :--- | :---: | :---: | :---: | :--- |
-| 0 | Normal | 99.22% | 0.9957 | −0.0019 | Acceptable |
-| 1 | Botnet | 100.00% | 0.6817 | −0.2081 | Perfect accuracy, low F1 due to sample scarcity |
-| 2 | DNS Exfiltration | 99.86% | 0.9993 | −0.0000 | Acceptable |
-| 3 | SSH Brute Force | 100.00% | 0.9936 | −0.0000 | Perfect |
-| 4 | DoS | 97.04% | 0.9617 | −0.0071 | Needs Improvement |
+| Benchmark Tier | Config File | Capture Window | FL Rounds | EWC $\lambda$ | Aggregation | Security / DP Settings | Val Acc | Validation Gate Result | MLflow Version |
+|---|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Tier 1 (Quick)** | `benchmark_quick.yaml` | 30s | 2 | 0.5 | FedAvg | Clean Baseline | **99.44%** | [PASS] PASS | Promoted Version 24 (`champion`) |
+| **Tier 2 (Balanced)** | `benchmark_balanced.yaml` | 60s | 5 | 0.8 | FedAvg | Clean Baseline | 99.40% | [FAIL] FAIL | Candidate Version 25 (`challenger`) |
+| **Tier 3 (Stressed)** | `benchmark_stressed.yaml` | 90s | 15 | 2.0 | FedAvg | Clean Baseline | **99.66%** | [PASS] PASS | Promoted Version 26 (`champion`) |
+| **Tier 4 (Real-World)** | `benchmark_realworld.yaml` | 90s | 10 | 2.0 | TrimmedMean | DP ($\sigma=0.15$), 20% Poison | 78.30% | [FAIL] FAIL | Candidate Version 27 (`challenger`) |
 
-### 2.3 Interpretation
 
 - **Classes 0, 2, 3**: Near-perfect detection with negligible backward transfer degradation ($|\text{BWT}| < 0.002$). EWC regularization successfully preserved learned representations across all 100 rounds.
 - **Class 1 (Botnet)**: Achieves 100% accuracy but exhibits a lower F1-score (0.6817), indicating the model correctly identifies all true Botnet flows but generates some false positives. The moderate BWT regression (−0.2081) signals ongoing catastrophic forgetting pressure on this minority class, partially mitigated by the 250× class weight.
