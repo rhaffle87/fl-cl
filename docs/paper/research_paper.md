@@ -90,23 +90,23 @@ The three pillars compose naturally. Each defender node runs an ETA pipeline tha
 
 ```mermaid
 graph TD
- %% Horizontal top flow
- A["[ Encrypted Packets ]"] --> B["[ NFStream ETA ]"]
- B --> C["[ Feature Vectors ]"]
+    %% Top Horizontal Ingestion Flow
+    A["Encrypted Packet Stream<br/>(Live Mirror ens19)"] --> B["NFStream ETA Engine<br/>(18 Flow Features)"]
+    B --> C["Normalized Tensor Batch<br/>(Z-Score Scaled, 32-dim)"]
 
- %% Vertical down flow
- C --> D["PyTorch MLP"]
- D --> E["Avalanche EWC"]
- E --> F["Flower Client"]
+    %% Local Continual Learning Flow
+    C --> D["PyTorch Backbone<br/>(MLP / 1D-CNN / Transformer)"]
+    D --> E["Avalanche CL Strategy<br/>(EWC / GEM Memory Projection)"]
+    E --> F["Flower Edge Client<br/>(Local Training & Weight Delta)"]
 
- %% Side annotations
- G["Local CL"] --> E
- F --> H["gRPC to Aggregator"]
+    %% Distributed Federated Synchronization
+    G["Local Continual Updates<br/>(Plasticity / Forgetting Defense)"] --> E
+    F -->|gRPC Encrypted Sync| H["Flower Aggregator Server<br/>(MLflowFedAvg / TrimmedMean)"]
 
- %% Styling to mimic the dashed look and layout
- style D stroke-dasharray: 5 5
- style E stroke-dasharray: 5 5
- style F stroke-dasharray: 5 5
+    %% Styling
+    style D stroke-dasharray: 5 5,stroke-width:2px
+    style E stroke-dasharray: 5 5,stroke-width:2px
+    style F stroke-dasharray: 5 5,stroke-width:2px
 ```
 
 This integration is the core contribution: CL prevents each node from forgetting locally, while FL prevents each organization from being blind globally.
@@ -142,18 +142,19 @@ Node `pve` resolves cluster members via management IPs on `192.168.x.x`, while n
 
 **Resolution**: Standardize `/etc/hosts` across all three hypervisors. Route all cluster-internal and FL-CL training traffic over the secondary network (`10.10.10.x`), which benefits from physical LACP bonds on `its` and `node2`. Reserve `vmbr0` management IPs for out-of-band access only:
 
-```text
-127.0.0.1 localhost
+```ini
+# /etc/hosts — Proxmox Cluster Unified Resolution Mapping
+127.0.0.1       localhost
 
-# Cluster & FL-CL Traffic (vmbr1 – Secondary Network)
-10.10.10.11 its
-10.10.10.12 node2
-10.10.10.13 pve
+# --- FL-CL High-Speed Interconnect & Corosync (vmbr1 - Secondary LACP) ---
+10.10.10.11     its         # Hypervisor Node 2 (Dell PowerEdge)
+10.10.10.12     node2       # Hypervisor Node 3 (Dell PowerEdge)
+10.10.10.13     pve         # Hypervisor Node 1 (Aggregator Host)
 
-# Out-of-Band Management (vmbr0)
-192.168.10.2 its-mgmt
-192.168.20.2 node2-mgmt
-192.168.30.2 pve-mgmt
+# --- Out-of-Band Physical Management (vmbr0) ---
+192.168.10.2    its-mgmt
+192.168.20.2    node2-mgmt
+192.168.30.2    pve-mgmt
 ```
 
 #### B. Split DNS for `its.ac.id`
@@ -906,9 +907,14 @@ Table 9.1 consolidates the empirical findings across the 5 primary research and 
 | **Track D: GEM Precision Tuning** | `CyberDefenseCNN` | GEM ($P=512, s=0.2$) | FedAvg | **99.67%** | **100.00%** (24/24) | **0.6905** | **0.0119** (R8) | Peak Precision | `gem-v34` |
 | **Track E: 20% Poisoning Defense** | `CyberDefenseCNN` | EWC ($\lambda=0.8$) | **TrimmedMean** | **99.53%** | **100.00%** (21/21) | **0.6667** | 0.5551 (R1) | **100% Gated Pass** | **`champion` (v35)** |
 
-```
-[Convergence & Loss Trajectory]
-fig1_convergence_curves: Loss dropped from 0.4412 -> 0.0257 at Round 51, maintaining 99.88% global accuracy across 100 rounds.
+```text
++---------------------------------------------------------------------------------------------------+
+| FIGURE 1 SUMMARY: 100-ROUND COLD-START TRAJECTORY (docs/paper/figures/fig1_convergence_curves.pdf) |
++---------------------------------------------------------------------------------------------------+
+| Loss Convergence:  0.4412 (Round 1)  -->  0.0257 (Round 51)  -->  0.0310 (Round 100)               |
+| Global Accuracy:   99.40% (Round 1)  -->  99.88% (Peak)      -->  99.88% (Final Test Accuracy)     |
+| Forgetting Status: Majoritarian classes preserved (|BWT| <= 0.014); Botnet requires GEM buffer.   |
++---------------------------------------------------------------------------------------------------+
 ```
 
 ---
