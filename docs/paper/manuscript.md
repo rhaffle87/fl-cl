@@ -1,8 +1,10 @@
 # Decentralized Continual Cyber Defense: Overcoming Catastrophic Forgetting and Byzantine Label Poisoning in Encrypted Traffic Intrusion Detection
 
-**Author**: Rafli Alif 
-**Affiliation**: Department of Computer Science and Engineering, Enterprise Infrastructure Security Lab 
-**Repository**: [github.com/rhaffle87/fl-cl](file:///e:/Projects/fl-cl/README.md) 
+**Author**: Rafli Alif Ihza Hartono  
+**Topic**: Undergraduate Thesis in Telecommunications Engineering  
+**Department**: Department of Electrical Engineering, Faculty of Intelligent Electrical and Informatics Technology (F-ELECTICS)  
+**Institution**: Institut Teknologi Sepuluh Nopember (ITS), Surabaya, East Java, Indonesia  
+**Repository**: [github.com/rhaffle87/fl-cl](file:///e:/Projects/fl-cl/README.md)  
 **Date**: August 15, 2026 
 
 ---

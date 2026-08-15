@@ -77,19 +77,19 @@ class TelegramNotifier:
         time_esc = escape_html(timestamp)
         
         msg = (
-            f"📊 <b>[MLOps Pipeline] FL-CL Training Initiated</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"<b>🔹 Environment:</b> <code>Proxmox-Testbed</code>\n"
-            f"<b>🔹 Experiment:</b> <code>{name_esc}</code>\n"
-            f"<b>🔹 MLOps Mode:</b> <code>{mode_esc}</code>\n"
-            f"<b>🔹 Federated Rounds:</b> <code>{rounds_esc}</code>\n"
-            f"<b>🔹 Git Commit:</b> <code>{commit_esc}</code>\n"
-            f"<b>🔹 Started At:</b> <code>{time_esc}</code>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>[MLOps Pipeline] FL-CL Training Initiated</b>\n"
+            f"----------------------------------------\n"
+            f"<b>Environment:</b> <code>Proxmox-Testbed</code>\n"
+            f"<b>Experiment:</b> <code>{name_esc}</code>\n"
+            f"<b>MLOps Mode:</b> <code>{mode_esc}</code>\n"
+            f"<b>Federated Rounds:</b> <code>{rounds_esc}</code>\n"
+            f"<b>Git Commit:</b> <code>{commit_esc}</code>\n"
+            f"<b>Started At:</b> <code>{time_esc}</code>\n"
+            f"----------------------------------------\n"
         )
         if config_summary:
             config_esc = escape_html(config_summary)
-            msg += f"⚙️ <b>Execution Parameters:</b>\n<pre>{config_esc}</pre>\n"
+            msg += f"<b>Execution Parameters:</b>\n<pre>{config_esc}</pre>\n"
             
         return self.send(msg, parse_mode="HTML")
 
@@ -107,41 +107,41 @@ class TelegramNotifier:
         run_esc = escape_html(run_id[:8] if run_id else "N/A")
         
         msg = (
-            f"🟢 <b>[MLOps Pipeline] FL-CL Training Completed</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"<b>🔹 Environment:</b> <code>Proxmox-Testbed</code>\n"
-            f"<b>🔹 Experiment:</b> <code>{name_esc}</code>\n"
-            f"<b>🔹 Status:</b> <code>SUCCESS</code>\n\n"
-            f"📊 <b>Global Evaluation Metrics:</b>\n"
-            f"• <b>Overall Accuracy:</b> <code>{acc_esc}</code>\n"
-            f"• <b>Final Aggregated Loss:</b> <code>{loss_esc}</code>\n"
-            f"• <b>Total Duration:</b> <code>{duration_esc}</code>\n"
-            f"• <b>MLflow Run ID:</b> <code>{run_esc}</code>\n\n"
+            f"<b>[MLOps Pipeline] FL-CL Training Completed</b>\n"
+            f"----------------------------------------\n"
+            f"<b>Environment:</b> <code>Proxmox-Testbed</code>\n"
+            f"<b>Experiment:</b> <code>{name_esc}</code>\n"
+            f"<b>Status:</b> <code>SUCCESS</code>\n\n"
+            f"<b>Global Evaluation Metrics:</b>\n"
+            f"- <b>Overall Accuracy:</b> <code>{acc_esc}</code>\n"
+            f"- <b>Final Aggregated Loss:</b> <code>{loss_esc}</code>\n"
+            f"- <b>Total Duration:</b> <code>{duration_esc}</code>\n"
+            f"- <b>MLflow Run ID:</b> <code>{run_esc}</code>\n\n"
         )
         
         if class_accuracies:
             names = {0: "Normal", 1: "Botnet", 2: "Exfil", 3: "SSH-BF", 4: "DoS"}
-            msg += "📈 <b>Per-Class Accuracy Breakdown:</b>\n"
+            msg += "<b>Per-Class Accuracy Breakdown:</b>\n"
             for cls, acc in sorted(class_accuracies.items()):
                 name = names.get(cls, f"Class {cls}")
                 percent = acc * 100
                 bar_len = int(acc * 10)
-                bar = "█" * bar_len + "░" * (10 - bar_len)
+                bar = "#" * bar_len + "." * (10 - bar_len)
                 name_padded = f"{name:<8s}"
-                msg += f"• <code>{escape_html(name_padded)}</code>: <code>{percent:6.2f}%</code> <code>[{bar}]</code>\n"
+                msg += f"- <code>{escape_html(name_padded)}</code>: <code>{percent:6.2f}%</code> <code>[{bar}]</code>\n"
             msg += "\n"
             
         if run_id and mlflow_uri and experiment_id:
             base_uri = mlflow_uri.rstrip("/")
             run_url = f"{base_uri}/#/experiments/{experiment_id}/runs/{run_id}"
             msg += (
-                f"🔗 <b>Dashboard Link:</b>\n"
-                f"• <a href=\"{run_url}\">Open MLflow Dashboard</a>\n\n"
+                f"<b>Dashboard Link:</b>\n"
+                f"- <a href=\"{run_url}\">Open MLflow Dashboard</a>\n\n"
             )
             
         msg += (
-            f"📅 <b>Completed At:</b> <code>{time_esc}</code>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>Completed At:</b> <code>{time_esc}</code>\n"
+            f"----------------------------------------\n"
         )
         return self.send(msg, parse_mode="HTML")
 
@@ -152,22 +152,22 @@ class TelegramNotifier:
         name_esc = escape_html(experiment_name)
         time_esc = escape_html(timestamp)
         
-        round_info = f"• <b>Failed at Round:</b> <code>{round_num}</code>\n" if round_num > 0 else ""
-        duration_info = f"• <b>Elapsed Time:</b> <code>{duration_min:.1f} minutes</code>\n" if duration_min > 0 else ""
+        round_info = f"- <b>Failed at Round:</b> <code>{round_num}</code>\n" if round_num > 0 else ""
+        duration_info = f"- <b>Elapsed Time:</b> <code>{duration_min:.1f} minutes</code>\n" if duration_min > 0 else ""
         
         error_esc = escape_html(error[:800])
         msg = (
-            f"🔴 <b>[MLOps Pipeline] FL-CL Training Failed</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"<b>🔹 Environment:</b> <code>Proxmox-Testbed</code>\n"
-            f"<b>🔹 Experiment:</b> <code>{name_esc}</code>\n"
-            f"<b>🔹 Status:</b> <code>FAILED</code>\n"
+            f"<b>[MLOps Pipeline] FL-CL Training Failed</b>\n"
+            f"----------------------------------------\n"
+            f"<b>Environment:</b> <code>Proxmox-Testbed</code>\n"
+            f"<b>Experiment:</b> <code>{name_esc}</code>\n"
+            f"<b>Status:</b> <code>FAILED</code>\n"
             f"{round_info}"
             f"{duration_info}\n"
-            f"💥 <b>Failure Diagnostics & Stacktrace:</b>\n"
+            f"<b>Failure Diagnostics & Stacktrace:</b>\n"
             f"<pre>{error_esc}</pre>\n\n"
-            f"📅 <b>Failed At:</b> <code>{time_esc}</code>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>Failed At:</b> <code>{time_esc}</code>\n"
+            f"----------------------------------------\n"
         )
         return self.send(msg, parse_mode="HTML")
 
@@ -180,13 +180,13 @@ class TelegramNotifier:
         time_esc = escape_html(timestamp)
         
         msg = (
-            f"🏆 <b>[Model Governance] Champion Model Promoted</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"<b>🔹 Model:</b> <code>{model_esc}</code>\n"
-            f"<b>🔹 New Version:</b> <code>v{ver_esc}</code>\n"
-            f"<b>🔹 Alias:</b> <code>champion</code> (Active in Production)\n"
-            f"<b>🔹 Timestamp:</b> <code>{time_esc}</code>\n\n"
-            f"📊 <b>Gated Promotion Metrics:</b>\n"
+            f"<b>[Model Governance] Champion Model Promoted</b>\n"
+            f"----------------------------------------\n"
+            f"<b>Model:</b> <code>{model_esc}</code>\n"
+            f"<b>New Version:</b> <code>v{ver_esc}</code>\n"
+            f"<b>Alias:</b> <code>champion</code> (Active in Production)\n"
+            f"<b>Timestamp:</b> <code>{time_esc}</code>\n\n"
+            f"<b>Gated Promotion Metrics:</b>\n"
         )
         for key, val in metrics.items():
             key_esc = escape_html(key)
@@ -194,12 +194,12 @@ class TelegramNotifier:
                 val_esc = escape_html(f"{float(val):.4f}")
             except (ValueError, TypeError):
                 val_esc = escape_html(str(val))
-            msg += f"• <b>{key_esc}:</b> <code>{val_esc}</code>\n"
+            msg += f"- <b>{key_esc}:</b> <code>{val_esc}</code>\n"
             
         msg += (
-            f"\n📝 <b>Promotion Rationale:</b>\n"
+            f"\n<b>Promotion Rationale:</b>\n"
             f"<pre>{rat_esc}</pre>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"----------------------------------------\n"
         )
         return self.send(msg, parse_mode="HTML")
 
@@ -212,13 +212,13 @@ class TelegramNotifier:
         time_esc = escape_html(timestamp)
         
         msg = (
-            f"⚠️ <b>[Model Governance] Promotion Gate Failed</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"<b>🔹 Model:</b> <code>{model_esc}</code>\n"
-            f"<b>🔹 Candidate Version:</b> <code>v{ver_esc}</code>\n"
-            f"<b>🔹 Action:</b> <code>Retaining Incumbent Champion</code>\n"
-            f"<b>🔹 Timestamp:</b> <code>{time_esc}</code>\n\n"
-            f"📊 <b>Gated Candidate Metrics:</b>\n"
+            f"<b>[Model Governance] Promotion Gate Failed</b>\n"
+            f"----------------------------------------\n"
+            f"<b>Model:</b> <code>{model_esc}</code>\n"
+            f"<b>Candidate Version:</b> <code>v{ver_esc}</code>\n"
+            f"<b>Action:</b> <code>Retaining Incumbent Champion</code>\n"
+            f"<b>Timestamp:</b> <code>{time_esc}</code>\n\n"
+            f"<b>Gated Candidate Metrics:</b>\n"
         )
         for key, val in metrics.items():
             key_esc = escape_html(key)
@@ -226,11 +226,11 @@ class TelegramNotifier:
                 val_esc = escape_html(f"{float(val):.4f}")
             except (ValueError, TypeError):
                 val_esc = escape_html(str(val))
-            msg += f"• <b>{key_esc}:</b> <code>{val_esc}</code>\n"
+            msg += f"- <b>{key_esc}:</b> <code>{val_esc}</code>\n"
             
         msg += (
-            f"\n❌ <b>Failure Reason:</b>\n"
+            f"\n<b>Failure Reason:</b>\n"
             f"<pre>{reason_esc}</pre>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"----------------------------------------\n"
         )
         return self.send(msg, parse_mode="HTML")
