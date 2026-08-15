@@ -2,7 +2,7 @@
 
 ## Hybrid Federated-Continual Learning (FL-CL) Cyber Defense Lab
 
-> **Role in the documentation set**: This document defines the cluster-specific workarounds, network reconciliation steps, and hardware resource allocation required to deploy the conceptual architecture from [02_architecture.md](02_architecture.md) on the actual 3-node Proxmox VE cluster. For hardware prerequisites and dataset preparation, see [01_prerequisites.md](01_prerequisites.md). For the fully integrated research paper, see [00_research_paper.md](00_research_paper.md) (this document corresponds to Paper Chapters 3, 4, and 7).
+> **Role in the documentation set**: This document defines the cluster-specific workarounds, network reconciliation steps, and hardware resource allocation required to deploy the conceptual architecture from [02_architecture.md](02_architecture.md) on the actual 3-node Proxmox VE cluster. For hardware prerequisites and dataset preparation, see [01_prerequisites.md](01_prerequisites.md). For the fully integrated research paper, see [paper/manuscript.md](paper/manuscript.md) (this document corresponds to Paper Chapters 3, 4, and 7).
 
 ---
 
@@ -18,17 +18,17 @@ Before any VMs can be provisioned, three infrastructure inconsistencies must be 
 * **Action:** Update `/etc/hosts` on all three hypervisors to match the template below:
 
 ```text
-127.0.0.1       localhost
+127.0.0.1 localhost
 
 # Cluster & FL-CL Traffic (vmbr1 – Secondary Network)
-10.10.10.11     its
-10.10.10.12     node2
-10.10.10.13     pve
+10.10.10.11 its
+10.10.10.12 node2
+10.10.10.13 pve
 
 # Out-of-Band Management (vmbr0)
-192.168.10.2    its-mgmt
-192.168.20.2    node2-mgmt
-192.168.30.2    pve-mgmt
+192.168.10.2 its-mgmt
+192.168.20.2 node2-mgmt
+192.168.30.2 pve-mgmt
 ```
 
 ### B. Mismapped Domain Resolver (`its.ac.id`)
@@ -43,9 +43,9 @@ Before any VMs can be provisioned, three infrastructure inconsistencies must be 
 * **The Impact:** Tagged VLAN traffic (VLAN 110 for Organization A, VLAN 120 for Organization B, VLAN 130 for aggregation, VLAN 140 for traffic generation) will be stripped or dropped on non-VLAN-aware bridges, breaking the network isolation design from [02_architecture.md](02_architecture.md) Section 2.
 * **The Workaround:** Enable **VLAN Awareness** on `vmbr1` across all three nodes.
 * **Action:**
-  1. Open the Proxmox Web GUI on `its` and `pve`.
-  2. Navigate to **System → Network**, select `vmbr1`, and check the **VLAN Aware** box.
-  3. Apply network configuration (requires `ifupdown2` installed on hosts) or reboot.
+ 1. Open the Proxmox Web GUI on `its` and `pve`.
+ 2. Navigate to **System → Network**, select `vmbr1`, and check the **VLAN Aware** box.
+ 3. Apply network configuration (requires `ifupdown2` installed on hosts) or reboot.
 
 ### D. Physical Interface Promiscuous Transition Shock on LACP Bonds
 
@@ -54,18 +54,18 @@ Before any VMs can be provisioned, three infrastructure inconsistencies must be 
 * **The Workaround:** Pre-stage and enforce permanent promiscuous mode on physical NICs, the bond, and the bridge at the host boot level. This eliminates the transition shock during VM runtime.
 * **Action:** Deploy the `promisc-bond.service` systemd service on both `its` and `node2` hosts:
 
-  ```bash
-  /usr/bin/bash /root/fl-cl/infra/01_host_config/enable_promisc.sh
-  ```
+ ```bash
+ /usr/bin/bash /root/fl-cl/infra/01_host_config/enable_promisc.sh
+ ```
 
 ### E. VLAN Assignment Trade-offs & Transition to Flat L2 Network
 
 * **The Conflict:** Initially, the research architecture isolated nodes using tagged VLANs (VLAN 110, 120, 130, 140) on `vmbr1`. However, the unmanaged physical switch connecting the Proxmox hosts (`its`, `node2`, `pve`) did not support 802.1Q VLAN trunking, resulting in dropped packets and completely blocking cross-host communication.
 * **The Resolution:**
-  To bypass physical switch trunking constraints while preserving the logical structure of the testbed, the network topology on `vmbr1` has been migrated to a **Flat, Untagged L2 Network** utilizing a `/16` subnet mask (`10.10.0.0/16`).
-  * **Logical Isolation via Subnetting:** Nodes maintain their original IP prefixes (`10.10.110.x` for Organization A, `10.10.120.x` for Organization B, `10.10.130.x` for the Aggregator/Defenders, and `10.10.140.x` for the Traffic Generator).
-  * **Broad Range L3 Reachability:** By using a `/16` network mask (instead of `/24`), all guests on the L2 bridge can communicate directly across nodes, bypassing the switch's inability to route VLAN-tagged traffic.
-  * **Port Mirroring Security:** Hypervisor-level port mirroring via `tc` operates directly on VM interfaces (`tap` queues) and remains fully functional, as it is independent of bridge VLAN filtering.
+ To bypass physical switch trunking constraints while preserving the logical structure of the testbed, the network topology on `vmbr1` has been migrated to a **Flat, Untagged L2 Network** utilizing a `/16` subnet mask (`10.10.0.0/16`).
+ * **Logical Isolation via Subnetting:** Nodes maintain their original IP prefixes (`10.10.110.x` for Organization A, `10.10.120.x` for Organization B, `10.10.130.x` for the Aggregator/Defenders, and `10.10.140.x` for the Traffic Generator).
+ * **Broad Range L3 Reachability:** By using a `/16` network mask (instead of `/24`), all guests on the L2 bridge can communicate directly across nodes, bypassing the switch's inability to route VLAN-tagged traffic.
+ * **Port Mirroring Security:** Hypervisor-level port mirroring via `tc` operates directly on VM interfaces (`tap` queues) and remains fully functional, as it is independent of bridge VLAN filtering.
 
 ---
 
@@ -75,26 +75,26 @@ The lab requires approximately **26 vCPUs, 46 GB RAM, and 320 GB Disk** to run 1
 
 ```mermaid
 graph TD
-    subgraph allocation ["PVE Cluster Workload Allocation"]
-        subgraph node_its ["Node 'its' (Used: 28.14 GB, Free: 34.63 GB)"]
-            clientA["Defender Node A (VM 310)<br/>8 vCPU · 16 GB · 10.10.130.11/16"]
-            targetA["Target Host A1 (VM 311)<br/>1 vCPU · 1 GB · 10.10.110.15/16"]
-        end
+ subgraph allocation ["PVE Cluster Workload Allocation"]
+ subgraph node_its ["Node 'its' (Used: 28.14 GB, Free: 34.63 GB)"]
+ clientA["Defender Node A (VM 310)<br/>8 vCPU · 16 GB · 10.10.130.11/16"]
+ targetA["Target Host A1 (VM 311)<br/>1 vCPU · 1 GB · 10.10.110.15/16"]
+ end
 
-        subgraph node_node2 ["Node 'node2' (Used: 6.56 GB, Free: 56.21 GB)"]
-            clientB["Defender Node B (VM 320)<br/>8 vCPU · 16 GB · 10.10.130.12/16"]
-            targetB["Target Host B1 (VM 321)<br/>1 vCPU · 1 GB · 10.10.120.15/16"]
-            trafficGen["Traffic Generator (VM 400)<br/>4 vCPU · 4 GB · 10.10.140.10/16"]
-        end
+ subgraph node_node2 ["Node 'node2' (Used: 6.56 GB, Free: 56.21 GB)"]
+ clientB["Defender Node B (VM 320)<br/>8 vCPU · 16 GB · 10.10.130.12/16"]
+ targetB["Target Host B1 (VM 321)<br/>1 vCPU · 1 GB · 10.10.120.15/16"]
+ trafficGen["Traffic Generator (VM 400)<br/>4 vCPU · 4 GB · 10.10.140.10/16"]
+ end
 
-        subgraph node_pve ["Node 'pve' (Used: 5.40 GB, Free: 25.46 GB)"]
-            aggregator["FL Aggregator (LXC 300)<br/>4 vCPU · 8 GB · 10.10.130.10/16"]
-        end
-    end
-    trafficGen -.->|Attacks + Benign Traffic| targetA
-    trafficGen -.->|Attacks + Benign Traffic| targetB
-    clientA <-->|gRPC FL Updates| aggregator
-    clientB <-->|gRPC FL Updates| aggregator
+ subgraph node_pve ["Node 'pve' (Used: 5.40 GB, Free: 25.46 GB)"]
+ aggregator["FL Aggregator (LXC 300)<br/>4 vCPU · 8 GB · 10.10.130.10/16"]
+ end
+ end
+ trafficGen -.->|Attacks + Benign Traffic| targetA
+ trafficGen -.->|Attacks + Benign Traffic| targetB
+ clientA <-->|gRPC FL Updates| aggregator
+ clientB <-->|gRPC FL Updates| aggregator
 ```
 
 ### VM Resource Allocations
@@ -127,13 +127,13 @@ Continual traffic capture via NFStream (see [02_architecture.md](02_architecture
 * **Workaround:** Buffer flow records in a memory-mapped RAM disk (`tmpfs`) inside each defender VM. Batch writes to persistent storage at controlled intervals.
 * **Mounting a RAM disk (inside Defender VMs):**
 
-  ```bash
-  sudo mkdir -p /mnt/ramdisk
-  sudo mount -t tmpfs -o size=4G tmpfs /mnt/ramdisk
-  echo "tmpfs /mnt/ramdisk tmpfs size=4G 0 0" | sudo tee -a /etc/fstab
-  ```
+ ```bash
+ sudo mkdir -p /mnt/ramdisk
+ sudo mount -t tmpfs -o size=4G tmpfs /mnt/ramdisk
+ echo "tmpfs /mnt/ramdisk tmpfs size=4G 0 0" | sudo tee -a /etc/fstab
+ ```
 
-  Configure the `extractor.py` capture script to dump temporary `.csv` flows to `/mnt/ramdisk/flows/` to spare the Dell PERC controller.
+ Configure the `extractor.py` capture script to dump temporary `.csv` flows to `/mnt/ramdisk/flows/` to spare the Dell PERC controller.
 
 ---
 
@@ -161,8 +161,8 @@ For **Node `its`** and **Node `pve`** (already enabled on `node2`):
 
 ```bash
 if ! grep -q "bridge-vlan-aware yes" /etc/network/interfaces; then
-    sed -i '/iface vmbr1 inet manual/a \        bridge-vlan-aware yes' /etc/network/interfaces
-    ifup --force vmbr1
+ sed -i '/iface vmbr1 inet manual/a \ bridge-vlan-aware yes' /etc/network/interfaces
+ ifup --force vmbr1
 fi
 ```
 
@@ -189,11 +189,11 @@ pveam update
 pveam download local ubuntu-24.04-standard_24.04-1_amd64.tar.zst
 
 pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
-  -cores 4 -memory 8192 -swap 2048 \
-  -hostname fl-aggregator -ostype ubuntu -rootfs local:50 \
-  -net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  -net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
-  -onboot 1 -start 1
+ -cores 4 -memory 8192 -swap 2048 \
+ -hostname fl-aggregator -ostype ubuntu -rootfs local:50 \
+ -net0 name=eth0,bridge=vmbr0,ip=dhcp \
+ -net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
+ -onboot 1 -start 1
 ```
 
 #### Step 2.2: Deploy Defender Nodes (On Nodes `its` and `node2`)
@@ -204,22 +204,22 @@ Each defender has **two** network interfaces: `net0` on `vmbr0` (management/inte
 
 ```bash
 qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
-  --cpu host --sockets 1 --ostype l26 \
-  --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1 \
-  --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
-  --boot order=scsi0 --onboot 1 --start 0
+ --cpu host --sockets 1 --ostype l26 \
+ --net0 virtio,bridge=vmbr0 \
+ --net1 virtio,bridge=vmbr1 \
+ --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
+ --boot order=scsi0 --onboot 1 --start 0
 ```
 
 **On Node `node2` (Defender B – VM 320):**
 
 ```bash
 qm create 320 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
-  --cpu host --sockets 1 --ostype l26 \
-  --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1 \
-  --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
-  --boot order=scsi0 --onboot 1 --start 0
+ --cpu host --sockets 1 --ostype l26 \
+ --net0 virtio,bridge=vmbr0 \
+ --net1 virtio,bridge=vmbr1 \
+ --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
+ --boot order=scsi0 --onboot 1 --start 0
 ```
 
 #### Step 2.3: Deploy Target Hosts and Traffic Generator
@@ -228,25 +228,25 @@ qm create 320 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
 
 ```bash
 qm create 311 --name target-a1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1 \
-  --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
+ --net0 virtio,bridge=vmbr1 \
+ --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 ```
 
 **On Node `node2` (Target B1 – VM 321):**
 
 ```bash
 qm create 321 --name target-b1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1 \
-  --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
+ --net0 virtio,bridge=vmbr1 \
+ --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 ```
 
 **On Node `node2` (Traffic Generator – VM 400):**
 
 ```bash
 qm create 400 --name traffic-gen --cores 4 --memory 4096 \
-  --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1 \
-  --scsihw virtio-scsi-pci --scsi0 local:50,discard=on --start 0
+ --net0 virtio,bridge=vmbr0 \
+ --net1 virtio,bridge=vmbr1 \
+ --scsihw virtio-scsi-pci --scsi0 local:50,discard=on --start 0
 ```
 
 > **Flat L2 Network note:** Because we are on a Flat L2 network with a `/16` subnet mask, the traffic generator on `10.10.140.10/16` can communicate directly with target hosts on `10.10.110.15/16` and `10.10.120.15/16` without any inter-VLAN routing configuration.
@@ -267,18 +267,18 @@ vmid=$1; phase=$2
 
 # Target A1 (vmid 311) → Defender A (vmid 310)
 if [ "$vmid" = "311" ] && [ "$phase" = "post-start" ]; then
-    SOURCE="tap311i0"; MIRROR="tap310i1"
-    echo "Hook: VM 311 started. Configuring mirroring $SOURCE → $MIRROR..."
-    sleep 3  # Allow TAP interfaces to register in the bridge
-    ip link set dev $SOURCE promisc on
-    ip link set dev $MIRROR promisc on
-    tc qdisc add dev $SOURCE handle ffff: ingress
-    tc filter add dev $SOURCE parent ffff: protocol all u32 match u32 0 0 \
-      action mirred egress mirror dev $MIRROR
-    tc qdisc add dev $SOURCE root handle 1: prio
-    tc filter add dev $SOURCE parent 1: protocol all u32 match u32 0 0 \
-      action mirred egress mirror dev $MIRROR
-    echo "Hook: Port mirroring activated successfully."
+ SOURCE="tap311i0"; MIRROR="tap310i1"
+ echo "Hook: VM 311 started. Configuring mirroring $SOURCE → $MIRROR..."
+ sleep 3 # Allow TAP interfaces to register in the bridge
+ ip link set dev $SOURCE promisc on
+ ip link set dev $MIRROR promisc on
+ tc qdisc add dev $SOURCE handle ffff: ingress
+ tc filter add dev $SOURCE parent ffff: protocol all u32 match u32 0 0 \
+ action mirred egress mirror dev $MIRROR
+ tc qdisc add dev $SOURCE root handle 1: prio
+ tc filter add dev $SOURCE parent 1: protocol all u32 match u32 0 0 \
+ action mirred egress mirror dev $MIRROR
+ echo "Hook: Port mirroring activated successfully."
 fi
 EOF
 chmod +x /var/lib/vz/snippets/mirror-hook.sh
@@ -416,3 +416,17 @@ On the defender VM, confirm captured packets match target VM traffic:
 ```bash
 sudo tcpdump -i ens19 -c 10
 ```
+
+---
+
+## 7. Machine Learning & Application Failure Modes Ledger
+
+| Component | Failure Mode / Developer Trap | Root Cause & Resolution |
+| :--- | :--- | :--- |
+| `src/defender/model.py` | `CyberDefenseTransformer` dimension assertion fails. | **Trap**: `assert token_len * token_dim == input_dim`. Input dimension $32$ requires integer factors $8 \times 4$. If changing input dimensions, ensure token parameters factor exactly. |
+| `src/defender/model.py` | Modifying `CyberDefenseCNN` layers causes FC linear shape crashes. | **Resolution**: Always preserve the dummy forward pass `self.conv(torch.zeros(1, 1, input_dim))` in `__init__` rather than hardcoding linear input sizes. |
+| `src/defender/extractor.py` | Writing CSV flow streams to standard virtual disk causes RAID I/O lockup. | **Resolution**: Always set `--out-dir` to volatile `/mnt/ramdisk/flows` backed by `tmpfs` RAMDisk to ensure zero disk write contention. |
+| `src/defender/cl_strategy.py` | EWC fails on short-duration Botnet attack flows ($<60\text{s}$). | **Root Cause**: Sample scarcity causes near-zero Fisher diagonal values. **Resolution**: Deploy Gradient Episodic Memory (GEM, $P=512$) with quadratic programming gradient projection. |
+| `src/defender/inference_loop.py` | Dynamic INT8 CPU quantization slower than FP32 for small batches ($N \le 64$). | **Root Cause**: Runtime quantization/dequantization scaling overhead on AVX2 CPUs. **Resolution**: Use FP32 TorchScript or ONNX Runtime CPU execution provider for maximum edge throughput. |
+| Windows Host CLI | Python CLI crashes with `UnicodeEncodeError` under Windows default `cp1252`. | **Resolution**: Use pure ASCII safe strings (`->`, `us`, `[OK]`) in all CLI logging and monitoring scripts. |
+

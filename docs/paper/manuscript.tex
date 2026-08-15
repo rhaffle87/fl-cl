@@ -1,0 +1,124 @@
+\documentclass[journal,10pt,twocolumn]{IEEEtran}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{cite}
+
+\begin{document}
+
+\title{Decentralized Continual Cyber Defense: Overcoming Catastrophic Forgetting and Byzantine Label Poisoning in Encrypted Traffic Intrusion Detection}
+
+\author{Rafli~Alif,~\IEEEmembership{Graduate Student Member,~IEEE}
+\thanks{Manuscript received August 15, 2026. This work was supported by the Cyber Defense and Decentralized Intelligence Research Initiative.}
+\thanks{R. Alif is with the Department of Computer Science and Engineering, Enterprise Infrastructure Security Lab (e-mail: rhaffle87@fl-cl.org).}
+}
+
+\maketitle
+
+\begin{abstract}
+Network Intrusion Detection Systems (NIDS) deployed across decentralized enterprise gateways face two critical operational challenges: non-stationary streaming traffic patterns that cause catastrophic forgetting of historical threat signatures, and Byzantine adversarial poisoning attacks. Moreover, the ubiquitous adoption of TLS 1.3 encryption prevents traditional deep packet inspection. In this paper, we present \textbf{FL-CL}, a unified framework combining Federated Learning (FL) via Flower with Continual Learning (CL) via Avalanche on Encrypted Traffic Analysis (ETA) flow metadata. We investigate the degradation of Elastic Weight Consolidation (EWC) under extreme class imbalance and propose Gradient Episodic Memory (GEM) constraints to guarantee minority threat retention. Furthermore, we deploy coordinate-wise TrimmedMean aggregation to neutralize Byzantine label poisoning attacks. Evaluated on a physical 3-node Proxmox VE testbed processing live multi-gigabit traffic streams, our framework achieves 99.53\% global accuracy, 100\% recall on stealthy C2 Botnet flows, robustly mitigates 20\% Byzantine label poisoning attacks, and delivers an aggregate classification throughput of 101,258 flows/second with single-flow inference latency under 23 microseconds.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Federated Learning, Continual Learning, Encrypted Traffic Analysis, Catastrophic Forgetting, Byzantine Robustness, Elastic Weight Consolidation, Gradient Episodic Memory.
+\end{IEEEkeywords}
+
+\section{Introduction}
+\IEEEPARstart{M}{odern} enterprise network infrastructures are increasingly distributed across hybrid cloud and multi-site virtualized topologies. Intrusion detection systems (IDS) operating at edge gateways must continuously adapt to newly emerging cyber attack vectors without centralized raw packet aggregation, which is precluded by stringent data privacy regulations (e.g., GDPR, HIPAA) and multi-tenant isolation. 
+
+Furthermore, over 95\% of enterprise network traffic is encrypted via TLS 1.3, rendering traditional signature-based Deep Packet Inspection (DPI) obsolete. Network defenders must rely strictly on Encrypted Traffic Analysis (ETA) derived from flow metadata, packet length sequences, and inter-arrival timing dynamics.
+
+When edge defenders train local models on non-stationary, sequentially arriving threat streams (e.g., Normal $\rightarrow$ SSH Brute Force $\rightarrow$ Slowloris DoS $\rightarrow$ DNS Exfiltration $\rightarrow$ C2 Botnet), standard stochastic gradient descent incurs \textbf{catastrophic forgetting}---rapidly overwriting previously learned threat representations. While regularized continual learning algorithms like Elastic Weight Consolidation (EWC) protect majority classes, they collapse on rare minority classes when sample sizes during brief attack phases are limited.
+
+To address these compounding challenges, this paper presents \textbf{FL-CL}, an end-to-end framework integrating:
+\begin{enumerate}
+ \item \textbf{Decentralized Continual Learning}: Avalanche-powered EWC and Gradient Episodic Memory (GEM) to resolve catastrophic forgetting under non-IID edge traffic.
+ \item \textbf{Byzantine-Robust Federated Aggregation}: Coordinate-wise $\beta$-TrimmedMean aggregation filtering malicious parameter updates from compromised edge nodes.
+ \item \textbf{Zero-Contention In-Memory Flow Pipeline}: High-performance NFStream feature extraction streaming flow batches to volatile tmpfs RAMDisk buffers.
+ \item \textbf{Multi-Backbone Deployment Suite}: 1D-CNN, Transformer self-attention tokenizers, and lightweight MLP backbones compiled to TorchScript and ONNX runtimes.
+\end{enumerate}
+
+\section{System Architecture \& Threat Model}
+
+\subsection{Cluster Topology}
+The FL-CL system is implemented on an enterprise-grade 3-node Proxmox VE hypervisor cluster spanning three isolated logical VLANs:
+\begin{itemize}
+ \item \textbf{Aggregator Node} (\texttt{10.10.130.10}): Manages the Flower server coordinator, MLflow 3.x tracking server, and automated CI/CD model registry.
+ \item \textbf{Defender Nodes} (\texttt{10.10.130.11}, \texttt{10.10.130.12}): Execute NFStream packet capture on mirrored capture interfaces (\texttt{ens19}), train local Avalanche CL strategies, and run continuous inference daemons.
+ \item \textbf{Target VMs} (\texttt{10.10.110.15}, \texttt{10.10.120.15}): Host production HTTP/SSH network services.
+ \item \textbf{Traffic Generator} (\texttt{10.10.140.10}): Multi-threaded Kali offensive suite injecting benign and malicious multi-stage traffic.
+\end{itemize}
+
+\subsection{Threat Model}
+We model an active Byzantine threat environment where an arbitrary subset of edge defender nodes (e.g., Client B) may be compromised. The adversary executes a \textbf{20\% label poisoning attack}, dynamically flipping ground-truth labels of critical minority threats ($y=1$, Botnet) to benign traffic ($y=0$, Normal) in their local training batches to create silent detection blindspots in the aggregated global model.
+
+\section{Methodology}
+
+\subsection{Continual Learning: EWC vs. GEM Formulations}
+Under EWC, the local optimization objective for task experience $t$ penalizes parameter deviation weighted by the diagonal of the empirical Fisher Information Matrix $F_i$:
+\begin{equation}
+\mathcal{L}_{\text{EWC}}(\theta) = \mathcal{L}_{\text{current}}(\theta) + \sum_{i} \frac{\lambda_{\text{EWC}}}{2} F_i (\theta_i - \theta_{t-1, i}^*)^2
+\end{equation}
+where $F_i = \mathbb{E}_{(x,y)} \left[ \left(\frac{\partial \log p(y|x, \theta)}{\partial \theta_i}\right)^2 \right]$.
+
+Under extreme class imbalance, the Fisher diagonal values for minority classes vanish. We formulate Gradient Episodic Memory (GEM) to maintain an episodic buffer $\mathcal{M}_k$ of $P=512$ patterns per experience. The candidate gradient $g$ is projected to satisfy:
+\begin{equation}
+\langle g, g_k \rangle = \left\langle \frac{\partial \mathcal{L}(x, y)}{\partial \theta}, \frac{\partial \mathcal{L}(\mathcal{M}_k)}{\partial \theta} \right\rangle \ge 0 \quad \forall k < t
+\end{equation}
+If $\langle g, g_k \rangle < 0$, GEM solves a primal Quadratic Program (QP) to compute the closest projected gradient $\tilde{g}$:
+\begin{equation}
+\min_{\tilde{g}} \frac{1}{2} \|\tilde{g} - g\|_2^2 \quad \text{s.t.} \quad \langle \tilde{g}, g_k \rangle \ge 0
+\end{equation}
+
+\subsection{Byzantine Robust TrimmedMean Aggregation}
+To defend against label poisoning, the central Flower server collects client parameter updates $\{w_1, \dots, w_K\}$. For each coordinate $j \in [1, d]$, parameters are sorted:
+\begin{equation}
+w_{(1), j} \le w_{(2), j} \le \dots \le w_{(K), j}
+\end{equation}
+The server discards the top and bottom $\beta$ fraction of updates (production default: $\beta = 0.10$):
+\begin{equation}
+w_{\text{global}, j} = \frac{1}{(1 - 2\beta) K} \sum_{k = \lfloor \beta K \rfloor + 1}^{K - \lfloor \beta K \rfloor} w_{(k), j}
+\end{equation}
+
+\section{Experimental Results}
+
+\begin{table*}[t]
+\caption{Consolidated Experimental Benchmark Across 5 Production Research Tracks}
+\label{tab:main_results}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Experimental Track} & \textbf{Strategy} & \textbf{Aggregator} & \textbf{Global Acc.} & \textbf{Botnet Recall} & \textbf{Botnet F1} & \textbf{Best Loss} \\
+\midrule
+100-Round Cold-Start Baseline & EWC ($\lambda=0.8$) & FedAvg & 99.88\% & 0.00\% (Forgetting) & 0.0000 & 0.0257 (R51) \\
+Node Dropout Partition (50\%) & EWC ($\lambda=0.8$) & TrimmedMean & 99.27\% & 0.00\% (Sparse) & 0.0000 & 0.0381 (R4) \\
+GEM Botnet Recovery (v33) & GEM ($P=512, s=0.5$) & FedAvg & 99.45\% & 100.00\% (23/23) & 0.5275 & 0.0133 (R3) \\
+GEM Precision Tuning (v34) & GEM ($P=512, s=0.2$) & FedAvg & 99.67\% & 100.00\% (24/24) & \textbf{0.6905} & \textbf{0.0119} (R8) \\
+20\% Label Poisoning Defense (v35) & EWC ($\lambda=0.8$) & \textbf{TrimmedMean} & \textbf{99.53\%} & \textbf{100.00\%} (21/21) & \textbf{0.6667} & 0.5551 (R1) \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Convergence \& Long-Term Stability}
+As detailed in Table~\ref{tab:main_results}, the 100-round cold-start baseline verified long-term EWC stability, achieving 99.88\% global accuracy and a peak loss of 0.0257 at round 51. Majoritarian classes (Normal, Exfiltration, BruteForce, DoS) maintained near-zero backward transfer degradation ($|\text{BWT}| \le 0.014$).
+
+\subsection{Minority Threat Recall Restoration under GEM}
+Under EWC, Botnet recall collapsed due to sample sparsity during 60-second burst attack stages. Deploying GEM with $P=512$ patterns completely restored Botnet recall to \textbf{100.00\%} (24/24 true positive detections). Tuning the memory projection margin to $s=0.2$ boosted Botnet F1 score by +30.9\% to \textbf{0.6905} while cutting false positive alarms by 50\%.
+
+\subsection{Byzantine Label Poisoning Neutralization}
+Under active 20\% label poisoning on Client B, standard FedAvg suffered severe boundary skewing. Under TrimmedMean ($\beta = 0.10$), corrupted parameter coordinates were trimmed, preserving \textbf{99.53\% validation accuracy} and \textbf{0.6667 Botnet F1}, passing all CI/CD gates and winning production promotion (v35).
+
+\subsection{Real-Time Hardware Throughput \& ONNX Acceleration}
+Benchmarking dual-node edge deployment across \texttt{defender-a} and \texttt{defender-b} demonstrated an aggregate cluster throughput of \textbf{101,258 flows/second} with single-flow classification latency of \textbf{17.47--22.72 $\mu\text{s}$}. Exporting models to ONNX Runtime delivered up to a \textbf{9.64x speedup} for batched inference ($N=16$).
+
+\section{Conclusion}
+The FL-CL framework establishes a verifiable, high-throughput paradigm for collaborative intrusion detection across privacy-sensitive enterprise networks. By harmonizing Gradient Episodic Memory with robust TrimmedMean aggregation, the system overcomes catastrophic forgetting on sparse zero-day attack patterns while neutralizing active Byzantine poisoning attacks at line-rate speeds.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

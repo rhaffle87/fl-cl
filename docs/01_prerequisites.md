@@ -1,6 +1,6 @@
 # Prerequisites & Lab Preparation Guide: FL-CL Cyber Defense
 
-> **Role in the documentation set**: This document specifies the hardware, network equipment, benchmark datasets, traffic generation tools, and MLOps environment required *before* deploying the testbed. For the conceptual architecture these prerequisites support, see [02_architecture.md](02_architecture.md). For the cluster-specific deployment steps, see [03_workarounds.md](03_workarounds.md). For the fully integrated research paper, see [00_research_paper.md](00_research_paper.md) (this document corresponds to Paper Chapter 3 Section 3.1, Chapter 5 Section 5.1, and Chapter 8 Section 8.3).
+> **Role in the documentation set**: This document specifies the hardware, network equipment, benchmark datasets, traffic generation tools, and MLOps environment required *before* deploying the testbed. For the conceptual architecture these prerequisites support, see [02_architecture.md](02_architecture.md). For the cluster-specific deployment steps, see [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md). For the fully integrated research paper, see [paper/manuscript.md](paper/manuscript.md) (this document corresponds to Paper Chapter 3 Section 3.1, Chapter 5 Section 5.1, and Chapter 8 Section 8.3).
 
 ---
 
@@ -11,12 +11,12 @@ The testbed runs across a 3-node Proxmox VE cluster hosting 6 VMs/LXCs totaling 
 ### A. Compute & Acceleration (CPU/GPU)
 
 * **GPU Passthrough (Recommended):** Deep learning models used for Encrypted Traffic Analysis—particularly 1D-CNNs or LSTMs applied to SPLT (Sequence of Packet Lengths and Times) features—train significantly faster on GPUs.
-  * **Action:** Allocate a consumer GPU (e.g., NVIDIA RTX 3060/4060 or Tesla T4/P4) for PCIe passthrough to one of the defender VMs. Configure `vfio` drivers on the PVE host. The workload placement in [03_workarounds.md](03_workarounds.md) Section 2 allocates Defender A (VM 310) to node `its`, which is the recommended GPU passthrough host.
+ * **Action:** Allocate a consumer GPU (e.g., NVIDIA RTX 3060/4060 or Tesla T4/P4) for PCIe passthrough to one of the defender VMs. Configure `vfio` drivers on the PVE host. The workload placement in [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 2 allocates Defender A (VM 310) to node `its`, which is the recommended GPU passthrough host.
 * **RAM Capacity:**
-  * **Minimum:** 32 GB per node (PVE overhead + VM allocations).
-  * **Recommended:** 64 GB+ per node. Each defender VM requires 16 GB to load large network flow datasets into PyTorch memory during training.
+ * **Minimum:** 32 GB per node (PVE overhead + VM allocations).
+ * **Recommended:** 64 GB+ per node. Each defender VM requires 16 GB to load large network flow datasets into PyTorch memory during training.
 * **Storage Speed (SSD/NVMe):**
-  * Continuous flow extraction via NFStream (see [02_architecture.md](02_architecture.md) Section 4) and model checkpointing create sustained disk I/O. **Do not use HDDs.** Use NVMe SSDs or SSD arrays behind the RAID controller (Dell PERC H755 on the current cluster). The RAM disk buffer described in [03_workarounds.md](03_workarounds.md) Section 3.B further mitigates I/O contention.
+ * Continuous flow extraction via NFStream (see [02_architecture.md](02_architecture.md) Section 4) and model checkpointing create sustained disk I/O. **Do not use HDDs.** Use NVMe SSDs or SSD arrays behind the RAID controller (Dell PERC H755 on the current cluster). The RAM disk buffer described in [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 3.B further mitigates I/O contention.
 
 ---
 
@@ -25,7 +25,7 @@ The testbed runs across a 3-node Proxmox VE cluster hosting 6 VMs/LXCs totaling 
 The testbed operates entirely within virtualized Proxmox networks by default. However, if you plan to capture and defend against *real* physical network traffic (extending beyond synthetic VM-generated flows):
 
 * **Managed Network Switch:** A switch supporting **L2 Managed Port Mirroring / SPAN** and **802.1Q VLANs** (e.g., Ubiquiti UniFi, TP-Link JetStream, or Cisco Catalyst). This mirrors traffic from physical devices into a dedicated NIC on the Proxmox server, complementing the virtual `tc`-based port mirroring described in [02_architecture.md](02_architecture.md) Section 3.
-* **Multi-Port NIC on PVE Server:** An Intel-based dual-port or quad-port Gigabit Ethernet PCIe card (e.g., Intel i350-T4) configured in bridged mode, providing dedicated physical interfaces for each VLAN. The current cluster uses LACP-bonded interfaces (`bond0`) on nodes `its` and `node2`; see [03_workarounds.md](03_workarounds.md) Section 1.C for bridge reconciliation details.
+* **Multi-Port NIC on PVE Server:** An Intel-based dual-port or quad-port Gigabit Ethernet PCIe card (e.g., Intel i350-T4) configured in bridged mode, providing dedicated physical interfaces for each VLAN. The current cluster uses LACP-bonded interfaces (`bond0`) on nodes `its` and `node2`; see [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 1.C for bridge reconciliation details.
 * **Hardware TAP (Optional):** An inline network TAP (e.g., Throwing Star LAN Tap or Dualcomm) for passive capture between router and modem without requiring switch-level SPAN configuration.
 
 ---
@@ -109,7 +109,7 @@ pip install nfstream
 pip install scikit-learn pandas numpy
 ```
 
-For detailed installation steps inside each VM, see [03_workarounds.md](03_workarounds.md) Section 4, Phase 4.
+For detailed installation steps inside each VM, see [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 4, Phase 4.
 
 ### B. MLOps & Experiment Tracking
 
@@ -117,18 +117,18 @@ In a federated-continual learning environment, tracking model checkpoints, task 
 
 * **MLflow:** Deploy a local MLflow tracking server on the aggregator LXC (LXC 300). Each defender VM logs per-round metrics (loss, accuracy per task, Backward Transfer) to the central server, enabling side-by-side comparison of forgetting curves across organizations.
 
-    ```bash
-    # On aggregator (LXC 300):
-    pip install mlflow
-    mlflow server --host 0.0.0.0 --port 5000
-    ```
+ ```bash
+ # On aggregator (LXC 300):
+ pip install mlflow
+ mlflow server --host 0.0.0.0 --port 5000
+ ```
 
 * **Weights & Biases (W&B):** Alternative cloud-hosted tracker for teams preferring managed infrastructure. Particularly useful for visualizing how Defender A's accuracy on Task 1 (SSH brute-force) changes when Defender B introduces Task 2 (C2 beaconing) through federated aggregation.
 * **TensorBoard:** Standard local visualizer for monitoring weight distributions, gradient norms, and per-layer activation statistics during CL training.
 
-    ```bash
-    pip install tensorboard
-    tensorboard --logdir ~/fl-cl-env/runs/ --port 6006
-    ```
+ ```bash
+ pip install tensorboard
+ tensorboard --logdir ~/fl-cl-env/runs/ --port 6006
+ ```
 
 The observability stack closes the feedback loop: metrics inform tuning decisions (e.g., adjusting `ewc_lambda` in [02_architecture.md](02_architecture.md) Section 5.2, modifying aggregation frequency in Section 5.4, or rebalancing traffic ratios in this document's Section 4).

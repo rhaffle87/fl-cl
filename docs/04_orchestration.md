@@ -1,6 +1,6 @@
 # FL-CL Orchestration & Threat Simulation Walkthrough
 
-> **Role in the documentation set**: This document provides a thorough, step-by-step guide to executing the automated Federated Continual Learning pipeline. It explains every node, every script, and every phase of the orchestration process. For the underlying architecture, see [02_architecture.md](02_architecture.md). For infrastructure deployment, see [04_deployment.md](04_deployment.md).
+> **Role in the documentation set**: This document provides a thorough, step-by-step guide to executing the automated Federated Continual Learning pipeline. It explains every node, every script, and every phase of the orchestration process. For the underlying architecture, see [02_architecture.md](02_architecture.md). For infrastructure deployment, see [03_deployment.md](03_deployment.md).
 
 ---
 
@@ -10,25 +10,25 @@ All nodes sit on a flat Layer 2 network over the Proxmox bridge `vmbr1` using th
 
 ```mermaid
 graph TD
-    Aggregator["FL Aggregator (LXC 300)<br/>10.10.130.10<br/>Runs: server.py, MLflow"]
-    TG["Traffic Generator (VM 400)<br/>10.10.140.10<br/>Runs: attack_flow.py"]
+ Aggregator["FL Aggregator (LXC 300)<br/>10.10.130.10<br/>Runs: server.py, MLflow"]
+ TG["Traffic Generator (VM 400)<br/>10.10.140.10<br/>Runs: attack_flow.py"]
 
-    subgraph OrgA ["Organization A Zone"]
-        DefenderA["Defender A (VM 310)<br/>10.10.130.11<br/>Runs: extractor.py, client.py<br/>Captures via: ens19"]
-        TargetA["Target A1 (VM 311)<br/>10.10.110.15<br/>Runs: busybox httpd"]
-        TargetA -->|Port Mirror| DefenderA
-    end
+ subgraph OrgA ["Organization A Zone"]
+ DefenderA["Defender A (VM 310)<br/>10.10.130.11<br/>Runs: extractor.py, client.py<br/>Captures via: ens19"]
+ TargetA["Target A1 (VM 311)<br/>10.10.110.15<br/>Runs: busybox httpd"]
+ TargetA -->|Port Mirror| DefenderA
+ end
 
-    subgraph OrgB ["Organization B Zone"]
-        DefenderB["Defender B (VM 320)<br/>10.10.130.12<br/>Runs: extractor.py, client.py<br/>Captures via: ens19"]
-        TargetB["Target B1 (VM 321)<br/>10.10.120.15<br/>Runs: busybox httpd"]
-        TargetB -->|Port Mirror| DefenderB
-    end
+ subgraph OrgB ["Organization B Zone"]
+ DefenderB["Defender B (VM 320)<br/>10.10.130.12<br/>Runs: extractor.py, client.py<br/>Captures via: ens19"]
+ TargetB["Target B1 (VM 321)<br/>10.10.120.15<br/>Runs: busybox httpd"]
+ TargetB -->|Port Mirror| DefenderB
+ end
 
-    DefenderA <-->|gRPC Weight Sync| Aggregator
-    DefenderB <-->|gRPC Weight Sync| Aggregator
-    TG -->|Simulated Attacks| TargetA
-    TG -->|Simulated Attacks| TargetB
+ DefenderA <-->|gRPC Weight Sync| Aggregator
+ DefenderB <-->|gRPC Weight Sync| Aggregator
+ TG -->|Simulated Attacks| TargetA
+ TG -->|Simulated Attacks| TargetB
 ```
 
 ### Node Summary Table
@@ -50,36 +50,36 @@ Scripts are grouped into logical folders based on their role and deployment targ
 
 ```text
 fl-cl/
-├── configs/
-│   └── experiment.yaml    # Central configuration file for hyperparameters & topology
-│
-├── runs/
-│   ├── clean_testbed.py   # Wipes state and stops processes across testbed nodes
-│   └── setup_ssh_targets.py # Dynamically creates admin users with non-trivial passwords on targets
-│
-├── src/
-│   ├── aggregator/        # → FL Aggregator (LXC 300)  10.10.130.10
-│   │   └── server.py      #   Flower server + MLflow logging + checkpointing
-│   │
-│   ├── defender/          # → Defender A (VM 310) + Defender B (VM 320)
-│   │   ├── client.py      #   Flower client with Avalanche EWC
-│   │   ├── cl_strategy.py #   EWC continual learning strategy (class-weighted)
-│   │   ├── model.py       #   CyberDefenseNet model definition (single source of truth)
-│   │   └── extractor.py   #   NFStream traffic feature extractor
-│   │
-│   ├── traffic_gen/       # → Traffic Generator (VM 400)  10.10.140.10
-│   │   └── attack_flow.py #   Offensive scenario simulator (multi-round botnet beaconing)
-│   │
-│   ├── notifications.py   # Telegram webhook notifications helper
-│   └── orchestrate.py     # Master orchestrator running on local workstation
-│
-└── tools/                 # → Diagnostics & Pre-deployment Validation
-    ├── check_dataset.py   # Inspect label distributions on ramdisk
-    ├── check_features.py  # Compute feature statistics per class to check overlap
-    ├── enable_wal.py      # Enable WAL mode on MLflow SQLite database
-    ├── local_train.py     # Local training diagnostic tool with confusion matrix
-    ├── plot_metrics.py    # Post-training convergence plot generator (per-class)
-    └── validate_model.py  # Model validation gate (asserts minimum per-class F1 score)
+ configs/
+ experiment.yaml # Central configuration file for hyperparameters & topology
+
+ runs/
+ clean_testbed.py # Wipes state and stops processes across testbed nodes
+ setup_ssh_targets.py # Dynamically creates admin users with non-trivial passwords on targets
+
+ src/
+ aggregator/ # → FL Aggregator (LXC 300) 10.10.130.10
+ server.py # Flower server + MLflow logging + checkpointing
+ 
+ defender/ # → Defender A (VM 310) + Defender B (VM 320)
+ client.py # Flower client with Avalanche EWC
+ cl_strategy.py # EWC continual learning strategy (class-weighted)
+ model.py # CyberDefenseNet model definition (single source of truth)
+ extractor.py # NFStream traffic feature extractor
+ 
+ traffic_gen/ # → Traffic Generator (VM 400) 10.10.140.10
+ attack_flow.py # Offensive scenario simulator (multi-round botnet beaconing)
+ 
+ notifications.py # Telegram webhook notifications helper
+ orchestrate.py # Master orchestrator running on local workstation
+
+ tools/ # → Diagnostics & Pre-deployment Validation
+ check_dataset.py # Inspect label distributions on ramdisk
+ check_features.py # Compute feature statistics per class to check overlap
+ enable_wal.py # Enable WAL mode on MLflow SQLite database
+ local_train.py # Local training diagnostic tool with confusion matrix
+ plot_metrics.py # Post-training convergence plot generator (per-class)
+ validate_model.py # Model validation gate (asserts minimum per-class F1 score)
 ```
 
 > The model definition is centralized in `src/defender/model.py`. The orchestrator copies this single source of truth to the aggregator container and all defender VMs during initialization.
@@ -96,9 +96,9 @@ Defines three alternative neural network backbones (MLP, 1D-CNN, and Transformer
 
 * **MLP Baseline (`CyberDefenseNet`)**:
 
-  ```text
-  Input (32 features) → Linear(64) → ReLU → Dropout(0.2) → Linear(32) → ReLU → Linear(5 classes)
-  ```
+ ```text
+ Input (32 features) → Linear(64) → ReLU → Dropout(0.2) → Linear(32) → ReLU → Linear(5 classes)
+ ```
 
 * **1D-CNN (`CyberDefenseCNN`)**: Reshapes the input flow features to a 1D sequence and extracts spatial/temporal representations via 1D convolutions and pooling layers.
 * **Transformer (`CyberDefenseTransformer`)**: Projects the features into token embeddings with positional encoding, passing them through Multi-head Attention layers.
@@ -120,7 +120,7 @@ Defines three alternative neural network backbones (MLP, 1D-CNN, and Transformer
 
 ### 3.2 `src/defender/extractor.py` — Packet-to-Feature Pipeline
 
-**Deployed to:** Defender A (VM 310), Defender B (VM 320)  
+**Deployed to:** Defender A (VM 310), Defender B (VM 320) 
 **Runs on interface:** `ens19` (the SPAN/mirror capture port)
 
 This script is a **long-running daemon** that:
@@ -128,11 +128,11 @@ This script is a **long-running daemon** that:
 1. **Binds to the mirror interface** (`ens19`) using NFStream in promiscuous mode.
 2. **Reconstructs packets into flows** — grouping related packets by 5-tuple (src IP, dst IP, src port, dst port, protocol) with idle/active timeouts.
 3. **Extracts 17 metadata features** per flow, including:
-   * TLS handshake fingerprints (`ja3_hash`, `ja3s_hash`)
-   * Flow statistics (`bidirectional_packets`, `bidirectional_bytes`, `duration_ms`)
-   * Directional metrics (`src2dst_packets`, `dst2src_bytes`)
-   * Timing (`src2dst_mean_piat_ms`, `dst2src_mean_piat_ms`)
-   * Connection metadata (`src_ip`, `dst_ip`, `src_port`, `dst_port`, `protocol`)
+ * TLS handshake fingerprints (`ja3_hash`, `ja3s_hash`)
+ * Flow statistics (`bidirectional_packets`, `bidirectional_bytes`, `duration_ms`)
+ * Directional metrics (`src2dst_packets`, `dst2src_bytes`)
+ * Timing (`src2dst_mean_piat_ms`, `dst2src_mean_piat_ms`)
+ * Connection metadata (`src_ip`, `dst_ip`, `src_port`, `dst_port`, `protocol`)
 4. **Batches flows into CSV files** (default: 500 flows per file) and writes them to `/mnt/ramdisk/flows/`.
 
 **Why RAM disk?** The `/mnt/ramdisk/` is a 4 GB tmpfs mount. Writing to RAM avoids disk I/O contention on the shared RAID controller, which is critical when the extractor is processing hundreds of flows per second during attack scenarios.
@@ -307,11 +307,11 @@ Each node is defined with a name, IP, username, and optional SSH key:
 
 ```python
 aggregator = RemoteNode("fl-aggregator", "10.10.130.10", "root", args.key)
-def_a      = RemoteNode("defender-a",    "10.10.130.11", "root", args.key)
-def_b      = RemoteNode("defender-b",    "10.10.130.12", "root", args.key)
-target_a   = RemoteNode("target-a1",     "10.10.110.15", "root", args.key)
-target_b   = RemoteNode("target-b1",     "10.10.120.15", "root", args.key)
-traffic_gen = RemoteNode("traffic-gen",  "10.10.140.10", "root", args.key)
+def_a = RemoteNode("defender-a", "10.10.130.11", "root", args.key)
+def_b = RemoteNode("defender-b", "10.10.130.12", "root", args.key)
+target_a = RemoteNode("target-a1", "10.10.110.15", "root", args.key)
+target_b = RemoteNode("target-b1", "10.10.120.15", "root", args.key)
+traffic_gen = RemoteNode("traffic-gen", "10.10.140.10", "root", args.key)
 ```
 
 Key methods:
@@ -384,8 +384,8 @@ python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.
 
 * **Experimental Mode (`--mlops-mode experimental`)**: Meant for training new models or hyperparameter tuning. The training proceeds as a cold-start (or warm-start if checkpoints exist), and the final registered model is assigned the `challenger` alias in MLflow.
 * **Production Mode (`--mlops-mode production`)**: Meant for maintaining the production-grade model. Under this mode, the orchestrator handles lifecycle state promotions:
-  * **Resume Strategy (`--production-strategy resume`)**: Checks the Model Registry for the version tagged with the `champion` alias. If present, it warm-starts the aggregator and client networks using this champion version's weights, ensuring continual learning continuity.
-  * **Fresh Strategy (`--production-strategy fresh`)**: Ignores existing registry weights and cold-starts training from scratch. Upon completion, the new model is registered and automatically promoted to the `champion` alias (displacing any previous champion).
+ * **Resume Strategy (`--production-strategy resume`)**: Checks the Model Registry for the version tagged with the `champion` alias. If present, it warm-starts the aggregator and client networks using this champion version's weights, ensuring continual learning continuity.
+ * **Fresh Strategy (`--production-strategy fresh`)**: Ignores existing registry weights and cold-starts training from scratch. Upon completion, the new model is registered and automatically promoted to the `champion` alias (displacing any previous champion).
 
 ### Step 2: Phase 1 — Process Cleanup
 
@@ -594,11 +594,11 @@ You can view, search, query, and plot this dataset directly from the MLflow run 
 When evaluating results inside the MLflow dashboard or CSV exports:
 
 1. **Skipped/Missing Class Columns (`accuracy_class_1`, `accuracy_class_2`)**:
-   * Because Botnet (class 1) and DNS Exfiltration (class 2) traffic generator modes were previously not triggered during the standard orchestration flow. With the updated 5-stage pipeline, all classes should now be represented.
-   * To avoid division-by-zero errors when calculating class accuracy for zero samples, the clients report a sentinel value of `-1.0`. The server filters this sentinel, resulting in omitted logs/columns for these classes.
+ * Because Botnet (class 1) and DNS Exfiltration (class 2) traffic generator modes were previously not triggered during the standard orchestration flow. With the updated 5-stage pipeline, all classes should now be represented.
+ * To avoid division-by-zero errors when calculating class accuracy for zero samples, the clients report a sentinel value of `-1.0`. The server filters this sentinel, resulting in omitted logs/columns for these classes.
 2. **Extremely High Overall Accuracy (~99.9%) alongside Low/Zero Benign Accuracy (`accuracy_class_0`)**:
-   * **Severe Class Imbalance**: The traffic generator produces thousands of malicious flows during active attack phases, whereas the benign flow generation runs yield a very small handful. As a result, the global validation accuracy is heavily dominated by the attack detection rates.
-   * **Administrative Port 22 Overlap**: The heuristic labeling logic in `client.py` assigns Class 0 (Normal) to all non-attacker flows. However, the orchestrator script continuously issues administrative SSH connections on port 22 to check process statuses. Since these administrative flows share structural characteristics (port 22) with the SSH Brute Force attacks (Class 3), the model correctly notices the feature overlap and biases toward classifying all port 22 flows as malicious, lowering the benign class accuracy.
+ * **Severe Class Imbalance**: The traffic generator produces thousands of malicious flows during active attack phases, whereas the benign flow generation runs yield a very small handful. As a result, the global validation accuracy is heavily dominated by the attack detection rates.
+ * **Administrative Port 22 Overlap**: The heuristic labeling logic in `client.py` assigns Class 0 (Normal) to all non-attacker flows. However, the orchestrator script continuously issues administrative SSH connections on port 22 to check process statuses. Since these administrative flows share structural characteristics (port 22) with the SSH Brute Force attacks (Class 3), the model correctly notices the feature overlap and biases toward classifying all port 22 flows as malicious, lowering the benign class accuracy.
 
 ### 5.4 Post-Run Local LLM Analytics & Reporting
 
@@ -663,12 +663,12 @@ To establish a strict promotion logic and track model lineage, the aggregator us
 ### Promotion Rules by MLOps Mode
 
 * **Experimental Mode (`--mlops-mode experimental`)**:
-  * The model is registered to the registry under a new version number.
-  * The new version is automatically tagged with the **`challenger`** alias, indicating it is under testing.
+ * The model is registered to the registry under a new version number.
+ * The new version is automatically tagged with the **`challenger`** alias, indicating it is under testing.
 * **Production Mode (`--mlops-mode production`)**:
-  * The model is registered under a new version number.
-  * The new version is automatically promoted to the **`champion`** alias.
-  * MLflow automatically removes the `champion` alias from any previous model version and assigns it to this newly promoted version, enforcing a single current production model.
+ * The model is registered under a new version number.
+ * The new version is automatically promoted to the **`champion`** alias.
+ * MLflow automatically removes the `champion` alias from any previous model version and assigns it to this newly promoted version, enforcing a single current production model.
 
 ### Warm-Starting from Registry Champion
 
@@ -692,8 +692,8 @@ client = MlflowClient()
 
 # Get champion version metadata
 champion_meta = client.get_model_version_by_alias(
-    name="CyberDefenseNet",
-    alias="champion"
+ name="CyberDefenseNet",
+ alias="champion"
 )
 print(f"Active Champion Version: {champion_meta.version} (Run ID: {champion_meta.run_id})")
 
@@ -714,15 +714,15 @@ The controller accepts a sweep YAML config (e.g., `configs/sweep_grid.yaml` or `
 
 ```yaml
 experiment:
-  name: "FL-CL-Hyperparameter-Sweep"
-  mlops_mode: "production"
-  production_strategy: "fresh"
+ name: "FL-CL-Hyperparameter-Sweep"
+ mlops_mode: "production"
+ production_strategy: "fresh"
 
 grid:
-  cl:
-    ewc_lambda: [0.1, 0.25, 0.5, 0.8]
-  training:
-    lr: [0.005, 0.01, 0.02]
+ cl:
+ ewc_lambda: [0.1, 0.25, 0.5, 0.8]
+ training:
+ lr: [0.005, 0.01, 0.02]
 ```
 
 ### 7.2 Parent-Child Nesting Architecture
@@ -746,18 +746,18 @@ Before starting the training loop, the orchestrator:
 1. SSHs to Defender A (`10.10.130.11`) and Defender B (`10.10.130.12`).
 2. Iterates over all flow CSV files in `/mnt/ramdisk/flows/` to calculate their individual SHA-256 hashes.
 3. Generates a combined, sorting-stable SHA-256 digest of the entire file collection for each client (e.g., `defender_a_hash`, `defender_b_hash`).
-   * Done remotely via: `find /mnt/ramdisk/flows/ -name '*.csv' -type f -exec sha256sum {} + | sort | sha256sum`
+ * Done remotely via: `find /mnt/ramdisk/flows/ -name '*.csv' -type f -exec sha256sum {} + | sort | sha256sum`
 
 ### 8.2 Lineage Graph Logging
 
 1. These individual hashes are logged as MLflow parameters on the run: `defender_a_hash` and `defender_b_hash`.
 2. A combined run-level dataset provenance hash is calculated by hashing the concatenated client digests:
-   $$\text{combined}_{\text{hash}} = \text{SHA-256}(\text{hash}_{\text{A}} \mathbin{\Vert} \text{hash}_{\text{B}})$$
+ $$\text{combined}_{\text{hash}} = \text{SHA-256}(\text{hash}_{\text{A}} \mathbin{\Vert} \text{hash}_{\text{B}})$$
 3. A JSON schema artifact `dataset_lineage.json` is generated and saved with the MLflow run. This file documents:
-   * Workstation git commit SHA-1
-   * Path to local CSVs on client nodes
-   * Individual client hashes
-   * Timestamp and sample counts per client node.
+ * Workstation git commit SHA-1
+ * Path to local CSVs on client nodes
+ * Individual client hashes
+ * Timestamp and sample counts per client node.
 
 ---
 
@@ -770,26 +770,26 @@ To enforce strict quality control in the automated MLOps pipeline, candidate mod
 The gate checks the candidate model's validation metrics using three key dimensions:
 
 1. **Per-Class F1 Gating**: Rather than naive accuracy, the model must surpass specific F1 thresholds on all classes:
-   * Class 0 (Normal): $\text{F1} \ge 0.50$
-   * Class 1 (Botnet): $\text{F1} \ge 0.60$
-   * Class 2 (Exfiltration): $\text{F1} \ge 0.70$
-   * Class 3 (BruteForce): $\text{F1} \ge 0.50$
-   * Class 4 (DoS): $\text{F1} \ge 0.70$
+ * Class 0 (Normal): $\text{F1} \ge 0.50$
+ * Class 1 (Botnet): $\text{F1} \ge 0.60$
+ * Class 2 (Exfiltration): $\text{F1} \ge 0.70$
+ * Class 3 (BruteForce): $\text{F1} \ge 0.50$
+ * Class 4 (DoS): $\text{F1} \ge 0.70$
 2. **Backward Transfer (BWT) Forgetting Gate**: To prevent catastrophic forgetting, the Backward Transfer (BWT) for each individual class must not regress:
-   $$\text{BWT}_{\text{class}_i} \ge 0.0 \quad \text{for all } i \in [0, 4] \text{ where evaluation data exists}$$
+ $$\text{BWT}_{\text{class}_i} \ge 0.0 \quad \text{for all } i \in [0, 4] \text{ where evaluation data exists}$$
 3. **Communication Overhead Budget**: The total network bytes exchanged during training rounds must be within the defined budget (default: 200,000,000 bytes):
-   $$\text{Bytes}_{\text{total}} \le \text{Budget}$$
+ $$\text{Bytes}_{\text{total}} \le \text{Budget}$$
 
 ### 9.2 Registry Promotion & Notifications Control
 
 * **Pass**: If the candidate satisfies all gates:
-  * It is promoted to the **`champion`** alias in the MLflow Model Registry.
-  * The model is exported as a TorchScript artifact `CyberDefenseNet.pt`.
-  * A successful promotion Telegram notification is sent with the task sequence and final metrics.
+ * It is promoted to the **`champion`** alias in the MLflow Model Registry.
+ * The model is exported as a TorchScript artifact `CyberDefenseNet.pt`.
+ * A successful promotion Telegram notification is sent with the task sequence and final metrics.
 * **Fail**: If any threshold is violated:
-  * The model remains registered but retains the **`challenger`** alias.
-  * The specific reasons for rejection are tagged on the MLflow run (`rejection_reason`).
-  * An HTML-formatted Telegram alert is dispatched detailing the exact class or parameter that caused the failure.
+ * The model remains registered but retains the **`challenger`** alias.
+ * The specific reasons for rejection are tagged on the MLflow run (`rejection_reason`).
+ * An HTML-formatted Telegram alert is dispatched detailing the exact class or parameter that caused the failure.
 
 ---
 
@@ -817,7 +817,7 @@ To audit feature-level distributions manually, researchers can use `tools/check_
 
 1. It compares the mean/standard deviation of active features against `baseline_stats.json` on a per-class basis.
 2. It flags feature drift using standard **Z-scores**:
-   $$Z_f = \frac{\mu_{\text{active}, f} - \mu_{\text{baseline}, f}}{\sigma_{\text{baseline}, f}}$$
+ $$Z_f = \frac{\mu_{\text{active}, f} - \mu_{\text{baseline}, f}}{\sigma_{\text{baseline}, f}}$$
 3. If $|Z_f| \ge 3.0$, a feature drift warning is logged to help identify which specific flow features (e.g., packet sizes, timing) caused the JSD gate to trip.
 
 ---
@@ -850,9 +850,9 @@ To evaluate system stability, plasticity, and security under varying deployment 
 1. **Inverse-Frequency Loss Multipliers**: Setting `class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]` grants $15\times$ relative gradient strength to minority classes (Botnet & DoS), preventing majority Normal traffic ($8,200+$ samples) from eroding minority gradients under DP noise and label poisoning.
 2. **Adaptive Byzantine TrimmedMean Median**: In small topology clusters ($N \le 3$), `server.py` adaptively falls back to coordinate-wise `FedMedian`. This mathematically guarantees 100% elimination of outlier updates from 1 corrupted defender node in a 2-node cluster, restoring DoS F1 score to **0.9675** under 20% label poisoning.
 3. **Automated Deployment Command**: Run the entire 9-stage testing sequence directly on the physical testbed from the repository root:
-   ```bash
-   python scratch/deploy_to_testbed.py
-   ```
-   Execution logs stream live to terminal and `deploy.log`.
+ ```bash
+ python scratch/deploy_to_testbed.py
+ ```
+ Execution logs stream live to terminal and `deploy.log`.
 
 

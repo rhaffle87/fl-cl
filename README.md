@@ -8,60 +8,70 @@ A privacy-preserving, forgetting-resistant intrusion detection system deployed o
 
 ```text
 fl-cl/
-├── README.md                     ← You are here
-├── TECH_STACK.md                 ← Complete technology inventory
+├── README.md                     <- You are here
+├── TECH_STACK.md                 <- Complete technology inventory
 │
-├── configs/                      ← Experiment configurations
-│   ├── experiment.yaml           ← Reproducible hyperparams, topology, notifications
-│   ├── sweep_grid.yaml           ← Hyperparameter sweep configuration grid
-│   ├── sweep_custom_test.yaml    ← Custom multi-parameter sweep (MLP vs CNN × EWC λ)
-│   └── sweep_verify.yaml         ← Fast hyperparameter sweep verification config
+├── configs/                      <- Experiment configurations
+│   ├── experiment.yaml           <- Reproducible hyperparams, topology, notifications
+│   ├── baseline_feature_stats.json <- Baseline Z-score scaling statistics
+│   └── experiments/              <- Specialized experiment configs (GEM, Dropout, ColdStart, Poisoning)
 │
-├── docs/                         ← Research documentation
-│   ├── 00_research_paper.md      ← Full integrated paper (Chapters 1–9)
-│   ├── 01_prerequisites.md       ← Hardware, datasets, traffic tools
-│   ├── 02_architecture.md        ← Conceptual blueprint & diagrams
-│   ├── 03_workarounds.md         ← Cluster-specific fixes & deployment
-│   ├── 04_deployment.md          ← Step-by-step cluster setup
-│   ├── 05_orchestration.md       ← Training and attack execution
-│   ├── 06_fcl.md                 ← End-to-end FCL technical explanation
-│   ├── 07_training_guide.md      ← Training guidebook, CLI flags, MLOps perks
-│   └── reports/                  ← Experiment reports, sweep results, plots
+├── data/                         <- Organized local datasets, databases, exports, and reports
+│   ├── db/                       <- Local MLflow SQLite databases (mlflow.db)
+│   ├── exports/                  <- Synced experiment run exports and plots
+│   ├── models/                   <- Local PyTorch checkpoints (.pt)
+│   ├── plots/                    <- Fact-checked visualization figures (.png, .svg)
+│   ├── references/               <- Reference research papers (.pdf)
+│   └── reports/                  <- Consolidated technical results reports (.md, .csv)
 │
-├── infra/                        ← Infrastructure-as-Code (shell scripts)
-│   ├── 01_host_config/           ← PVE hypervisor-level configuration
-│   ├── 02_vm_provision/          ← VM/CT creation scripts
-│   ├── 03_hookscripts/           ← Proxmox lifecycle hookscripts
-│   └── 04_guest_setup/           ← In-VM software provisioning
+├── docs/                         <- System documentation & Architecture Decision Records
+│   ├── decisions/                <- Formal Architecture Decision Records (ADR-001 to ADR-005)
+│   ├── paper/                    <- IEEE LaTeX manuscript, BibTeX citations & vector figures
+│   ├── 01_prerequisites.md       <- Hardware, datasets, traffic tools
+│   ├── 02_architecture.md        <- Conceptual blueprint & C4 diagrams
+│   ├── 03_deployment.md          <- Step-by-step cluster setup
+│   ├── 04_orchestration.md       <- Training and attack execution
+│   ├── 05_continual_learning_fcl.md <- End-to-end FCL technical explanation
+│   ├── 06_training_and_mlops_guide.md <- Training guidebook, CLI flags, MLOps perks
+│   ├── 07_troubleshooting_and_workarounds.md <- Cluster-specific fixes & failure modes ledger
+│   ├── 08_api_reference.md       <- Comprehensive API and module reference
+│   └── 09_glossary.md            <- Domain model & technical terminology glossary
 │
-├── runs/                         ← Simulation preparation scripts
-│   ├── clean_testbed.py          ← Clean MLflow DB & target leftover flows/logs/processes
-│   └── setup_ssh_targets.py      ← Configure challenging target SSH passwords
+├── infra/                        <- Infrastructure-as-Code (shell scripts)
+│   ├── 01_host_config/           <- PVE hypervisor-level configuration
+│   ├── 02_vm_provision/          <- VM/CT creation scripts
+│   ├── 03_hookscripts/           <- Proxmox lifecycle hookscripts
+│   └── 04_guest_setup/           <- In-VM software provisioning
 │
-├── src/                          ← Python application code
-│   ├── aggregator/               ← FL Aggregator (LXC 300)
-│   │   └── server.py             ← Flower server + MLflow + checkpointing
-│   ├── defender/                 ← Defender clients (VM 310 & 320)
-│   │   ├── client.py             ← Flower FL client + Avalanche CL
-│   │   ├── cl_strategy.py        ← EWC continual learning (class-weighted)
-│   │   ├── extractor.py          ← NFStream flow feature extraction
-│   │   └── model.py              ← Model architectures (MLP, 1D-CNN, Transformer) & factory
-│   ├── traffic_gen/              ← Traffic Generator (VM 400)
-│   │   └── attack_flow.py        ← Offensive scenario simulator
-│   ├── notifications.py          ← Telegram webhook notifications
-│   ├── orchestrate.py            ← Local workstation orchestrator
-│   └── sweep.py                  ← Hyperparameter grid search controller
+├── runs/                         <- Simulation preparation scripts
+│   ├── clean_testbed.py          <- Clean MLflow DB & target leftover flows/logs/processes
+│   └── setup_ssh_targets.py      <- Configure challenging target SSH passwords
 │
-└── tools/                        ← Diagnostic & validation utilities
-    ├── check_dataset.py          ← Inspect ramdisk flow label distribution
-    ├── check_features.py         ← Per-class feature statistics
-    ├── enable_wal.py             ← Enable WAL mode on MLflow SQLite DB
-    ├── bwt_eval_suite.py         ← Standardized BWT validation suite with signatures
-    ├── cross_dataset_benchmark.py ← Heterogeneous generalization benchmark (shift simulator)
-    ├── generate_llm_report.py    ← Post-training local LLM threat report generator
-    ├── local_train.py            ← Standalone training + confusion matrix
-    ├── plot_metrics.py           ← Post-training convergence plot generator
-    └── validate_model.py         ← Pre-deployment model validation gate
+├── src/                          <- Python application code
+│   ├── aggregator/               <- FL Aggregator (LXC 300)
+│   │   └── server.py             <- Flower server + MLflow + checkpointing
+│   ├── defender/                 <- Defender clients (VM 310 & 320)
+│   │   ├── client.py             <- Flower FL client + Avalanche CL
+│   │   ├── cl_strategy.py        <- EWC & GEM continual learning
+│   │   ├── extractor.py          <- NFStream flow feature extraction (tmpfs RAMDisk)
+│   │   ├── inference_loop.py     <- Real-time flow classification loop (101k flows/sec)
+│   │   └── model.py              <- Model factory (MLP, 1D-CNN, Transformer)
+│   ├── traffic_gen/              <- Traffic Generator (VM 400)
+│   │   └── attack_flow.py        <- Offensive scenario simulator
+│   ├── notifications.py          <- Telegram webhook notifications
+│   ├── orchestrate.py            <- Local workstation orchestrator
+│   └── sweep.py                  <- Hyperparameter grid search controller
+│
+└── tools/                        <- Diagnostic & validation utilities
+    ├── check_dataset.py          <- Inspect ramdisk flow label distribution
+    ├── check_features.py         <- Per-class feature statistics
+    ├── ci_cd_promote.py          <- Automated CI/CD validation & registry promotion gate
+    ├── bwt_eval_suite.py         <- Standardized BWT validation suite with signatures
+    ├── cross_dataset_benchmark.py <- Heterogeneous generalization benchmark (shift simulator)
+    ├── generate_llm_report.py    <- Post-training local LLM threat report generator
+    ├── local_train.py            <- Standalone training + confusion matrix
+    ├── plot_metrics.py           <- Post-training convergence plot generator
+    └── validate_model.py         <- Pre-deployment model validation gate
 ```
 
 ---
@@ -220,18 +230,21 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/cross_dataset_benchmark.py --ch
 
 ---
 
-## Documentation
+## Documentation & Architecture Decision Records
 
 | Document | Purpose |
 | :--- | :--- |
-| [Research Paper](docs/00_research_paper.md) | Complete integrated paper (Chapters 1–9) |
-| [Prerequisites](docs/01_prerequisites.md) | Hardware, datasets, traffic generation tools |
-| [Architecture](docs/02_architecture.md) | Conceptual blueprint, diagrams, code components |
-| [Workarounds](docs/03_workarounds.md) | Cluster-specific fixes and step-by-step configurations |
-| [Deployment](docs/04_deployment.md) | Step-by-step cluster setup, provisioning, and installations |
-| [Orchestration](docs/05_orchestration.md) | Detailed guide to training and attack execution |
-| [FCL Explained](docs/06_fcl.md) | End-to-end technical explanation of how FCL works |
-| [Training Guide](docs/07_training_guide.md) | Training guidebook, CLI reference, MLOps behaviors |
+| [Architecture Decision Records (ADRs)](docs/decisions/README.md) | Formal records of major technical decisions (ADR-001 to ADR-005) |
+| [IEEE Research Manuscript (Markdown)](docs/paper/manuscript.md) | Publication-ready paper with mathematical proofs & embedded figures |
+| [IEEE Research Manuscript (LaTeX)](docs/paper/manuscript.tex) | 2-column IEEE Transactions LaTeX package & BibTeX citations |
+| [01 Prerequisites](docs/01_prerequisites.md) | Hardware, datasets, traffic generation tools |
+| [02 Architecture](docs/02_architecture.md) | Conceptual blueprint, C4 diagrams, code components |
+| [03 Deployment](docs/03_deployment.md) | Step-by-step cluster setup, provisioning, and installations |
+| [04 Orchestration](docs/04_orchestration.md) | Detailed guide to training and attack execution |
+| [05 Continual Federated Learning](docs/05_continual_learning_fcl.md) | End-to-end technical explanation of how FCL works |
+| [06 Training & MLOps Guide](docs/06_training_and_mlops_guide.md) | Training guidebook, CLI reference, MLOps behaviors |
+| [07 Troubleshooting & Workarounds](docs/07_troubleshooting_and_workarounds.md) | Cluster-specific fixes, workarounds, and failure modes ledger |
+| [08 API Reference](docs/08_api_reference.md) | Detailed technical reference for all Python classes, methods, and modules |
+| [09 Domain Model & Glossary](docs/09_glossary.md) | Technical glossary of FL, CL, ETA, and MLOps domain terminology |
 | [Tech Stack](TECH_STACK.md) | Full technology inventory per layer |
-| [Parameter Sweep Report](docs/reports/parameter_sweep_report.md) | Comparative analysis of MLP vs CNN × EWC λ sweep |
-| [Production Training Report](docs/reports/training_results_report.md) | Consolidated 100-round production run results |
+| [Production Training Report](data/reports/training_results_report.md) | Consolidated multi-track empirical results & benchmarks |

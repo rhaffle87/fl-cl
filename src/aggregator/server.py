@@ -335,6 +335,71 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
             ndarrays = weights_list[best_idx]
             aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
             print(f"[server] Aggregated fit via Krum strategy: Selected client index {best_idx} with score {scores[best_idx]:.6f}")
+        elif self.aggregation_strategy == "MultiKrum":
+            # Multi-Krum selection & averaging
+            weights_list = [w for w, _ in weights_results]
+            n = len(weights_list)
+            f = max(0, int((n - 3) / 2))
+            flat_weights = [np.concatenate([arr.flatten() for arr in w]) for w in weights_list]
+            
+            distances = np.zeros((n, n))
+            for i in range(n):
+                for j in range(n):
+                    if i != j:
+                        distances[i, j] = np.linalg.norm(flat_weights[i] - flat_weights[j])
+            
+            scores = []
+            for i in range(n):
+                sorted_dists = np.sort(distances[i])
+                num_neighbors = max(1, n - f - 1)
+                scores.append(np.sum(sorted_dists[1:num_neighbors]))
+            
+            m = max(1, n - f)
+            top_m_indices = np.argsort(scores)[:m]
+            selected_weights = [weights_list[idx] for idx in top_m_indices]
+            
+            ndarrays = []
+            for layer_idx in range(len(weights_list[0])):
+                stacked = np.stack([w[layer_idx] for w in selected_weights], axis=0)
+                ndarrays.append(np.mean(stacked, axis=0))
+            aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
+            print(f"[server] Aggregated fit via MultiKrum strategy: Selected {m} clients {top_m_indices.tolist()}")
+        elif self.aggregation_strategy == "Bulyan":
+            # Bulyan (Multi-Krum + Coordinate-wise TrimmedMean)
+            weights_list = [w for w, _ in weights_results]
+            n = len(weights_list)
+            f = max(0, int((n - 3) / 2))
+            flat_weights = [np.concatenate([arr.flatten() for arr in w]) for w in weights_list]
+            
+            distances = np.zeros((n, n))
+            for i in range(n):
+                for j in range(n):
+                    if i != j:
+                        distances[i, j] = np.linalg.norm(flat_weights[i] - flat_weights[j])
+            
+            scores = []
+            for i in range(n):
+                sorted_dists = np.sort(distances[i])
+                num_neighbors = max(1, n - f - 1)
+                scores.append(np.sum(sorted_dists[1:num_neighbors]))
+            
+            # Select theta = n - 2f candidates
+            theta = max(1, n - 2 * f)
+            selected_indices = np.argsort(scores)[:theta]
+            selected_weights = [weights_list[idx] for idx in selected_indices]
+            
+            ndarrays = []
+            for layer_idx in range(len(weights_list[0])):
+                stacked = np.stack([w[layer_idx] for w in selected_weights], axis=0)
+                sorted_stacked = np.sort(stacked, axis=0)
+                k_trim = max(0, int(np.floor(0.1 * len(selected_weights))))
+                if k_trim > 0 and 2 * k_trim < len(selected_weights):
+                    trimmed = sorted_stacked[k_trim:-k_trim]
+                else:
+                    trimmed = sorted_stacked
+                ndarrays.append(np.mean(trimmed, axis=0))
+            aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
+            print(f"[server] Aggregated fit via Bulyan strategy: Selected {theta} clients {selected_indices.tolist()} with trimmed mean")
         else:
             # Default to standard FedAvg (weighted average)
             aggregated = super().aggregate_fit(server_round, results, failures)

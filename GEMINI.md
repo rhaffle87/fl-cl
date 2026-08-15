@@ -18,18 +18,18 @@ Welcome! This document outlines key context, conventions, architecture details, 
 
 ```text
 fl-cl/
-├── docs/                        # Technical documentation & papers
-├── configs/                     # Hyperparameter sweeps & experiment setups
-├── src/                         # Core Python codebase
-│   ├── aggregator/              # Flower Server & MLflow dashboard
-│   ├── defender/                # Flower Clients, EWC strategies, and Models
-│   │   ├── client.py            # FL Client lifecycle wrapper
-│   │   ├── cl_strategy.py       # Avalanche EWC implementation
-│   │   ├── extractor.py         # NFStream extraction engine
-│   │   └── model.py             # CyberDefenseNet backbones & factory
-│   └── orchestrate.py           # Simulation pipeline controller
-├── tools/                       # Evaluation & diagnostics utilities
-└── scratch/                     # Local test scripts & verification suites
+ docs/ # Technical documentation & papers
+ configs/ # Hyperparameter sweeps & experiment setups
+ src/ # Core Python codebase
+ aggregator/ # Flower Server & MLflow dashboard
+ defender/ # Flower Clients, EWC strategies, and Models
+ client.py # FL Client lifecycle wrapper
+ cl_strategy.py # Avalanche EWC implementation
+ extractor.py # NFStream extraction engine
+ model.py # CyberDefenseNet backbones & factory
+ orchestrate.py # Simulation pipeline controller
+ tools/ # Evaluation & diagnostics utilities
+ scratch/ # Local test scripts & verification suites
 ```
 
 ---
@@ -43,17 +43,17 @@ The factory function `get_model(model_type, input_dim, num_classes, **kwargs)` d
 1. **MLP (`mlp` / `CyberDefenseNet`)**: Standard feedforward network with configurable hidden dimensions.
 2. **1D-CNN (`cnn` / `CyberDefenseCNN`)**: A convolutional feature extractor. Resolves linear fully connected input dimensions dynamically using a dummy forward pass rather than hardcoded dimensions:
 
-   ```python
-   with torch.no_grad():
-       dummy_out = self.conv(torch.zeros(1, 1, input_dim))
-       self.fc_input_dim = dummy_out.numel()
-   ```
+ ```python
+ with torch.no_grad():
+ dummy_out = self.conv(torch.zeros(1, 1, input_dim))
+ self.fc_input_dim = dummy_out.numel()
+ ```
 
 3. **Transformer (`transformer` / `CyberDefenseTransformer`)**: Projects inputs into token embeddings and applies self-attention. It enforces mathematical integrity with:
 
-   ```python
-   assert token_len * token_dim == input_dim
-   ```
+ ```python
+ assert token_len * token_dim == input_dim
+ ```
 
 ### Continual Learning Strategy (`src/defender/cl_strategy.py`)
 

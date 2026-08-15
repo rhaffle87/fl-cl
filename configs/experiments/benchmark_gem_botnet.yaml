@@ -1,0 +1,123 @@
+# ── FL-CL Experiment: benchmark_gem_botnet.yaml ──────────────────────────
+# GEM (Gradient Episodic Memory) Botnet Mitigation Experiment
+#
+# Addresses the Class 1 (Botnet) BWT regression observed under EWC.
+# GEM enforces hard gradient constraints per prior experience, preventing
+# backward transfer on the Botnet minority class.
+#
+# FIX NOTE: orchestrate.py reads config["cl"]["strategy"] and config["fl"]["rounds"].
+# The fl_cl: schema is used by newer benchmark configs but is NOT parsed by orchestrate.py.
+# Both schemas are included here for forward compatibility.
+#
+# Reference: Lopez-Paz & Ranzato (2017). "Gradient Episodic Memory for
+# Continual Learning." NeurIPS 2017.
+# ──────────────────────────────────────────────────────────────────────────
+
+experiment_name: "FL-CL-GEM-Botnet-Mitigation"
+
+experiment:
+  name: "FL-CL-GEM-Botnet-Mitigation"
+  description: "GEM strategy to reduce Botnet class backward transfer under EWC baseline"
+
+# ── Federated Learning (parsed by orchestrate.py) ──────────────
+fl:
+  rounds: 10
+  min_clients: 2
+  fraction_fit: 1.0
+  fraction_evaluate: 1.0
+
+# ── Continual Learning (parsed by orchestrate.py) ──────────────
+cl:
+  strategy: "GEM"              # orchestrate.py reads config["cl"]["strategy"]
+  ewc_lambda: 0.8
+  gem_patterns_per_exp: 512    # orchestrate.py reads config["cl"]["gem_patterns_per_exp"]
+  gem_memory_strength: 0.5
+  task_sequence: "benign,ssh,slowloris,dns_exfil,botnet"
+  complexity_score: 1.4
+  comm_overhead_budget: 200000000
+
+# ── fl_cl schema (forward-compat, not currently read by orchestrate.py) ──
+fl_cl:
+  rounds: 10
+  min_fit_clients: 2
+  min_evaluate_clients: 2
+  min_available_clients: 2
+  sample_fraction_fit: 1.0
+  cl_strategy: "GEM"
+  ewc_lambda: 0.8
+  gem_patterns: 512
+  gem_memory_strength: 0.5
+
+# ── Environment & Infrastructure ────────────────────────────
+topology:
+  aggregator: "10.10.130.10"
+  defender_a: "10.10.130.11"
+  defender_b: "10.10.130.12"
+  target_a: "10.10.110.15"
+  target_b: "10.10.120.15"
+  traffic_gen: "10.10.140.10"
+  flower_port: 8080
+  mlflow_port: 5000
+
+# ── Simulation & Workload ───────────────────────────────────
+simulation:
+  duration_seconds: 60
+  attack_duration_seconds: 60
+  threat_stage_duration: 60
+  attack_modes: ["benign", "ssh", "slowloris", "dns_exfil", "botnet"]
+  stages:
+    - mode: benign
+    - mode: ssh
+    - mode: slowloris
+    - mode: dns_exfil
+    - mode: botnet
+
+# ── Model Architecture ──────────────────────────────────────
+model:
+  type: "cnn"
+  prune_fraction: 0.2
+  input_dim: 32
+  num_classes: 5
+  hidden_layers: [64, 32]
+  dropout: 0.2
+
+# ── Training Hyperparameters ────────────────────────────────
+training:
+  optimizer: "SGD"
+  lr: 0.005
+  momentum: 0.9
+  batch_size: 32
+  epochs_per_round: 1
+  class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
+
+# ── Security, Privacy & Defense ─────────────────────────────
+security:
+  poison_enabled: false
+  dp_enabled: false
+  aggregation_strategy: "FedAvg"
+  trimmed_mean_beta: 0.1
+
+# ── MLOps & Tracking ────────────────────────────────────────
+mlops:
+  mode: "experimental"
+  production_strategy: "fresh"
+  mlflow_port: 5000
+  registered_model_name: "CyberDefenseNet"
+
+notifications:
+  telegram:
+    enabled: true
+
+checkpointing:
+  save_dir: "/opt/mlflow-artifacts/checkpoints"
+  save_best: true
+  export_torchscript: true
+
+labeling:
+  dos_duration_threshold_ms: 2000
+
+data_quality:
+  jsd_threshold: 0.6
+  gate_action: "abort"
+  baseline_stats_path: "configs/baseline_feature_stats.json"
+  baseline_class_distribution: "2000,10,200,50,100"

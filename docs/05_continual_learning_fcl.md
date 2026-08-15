@@ -1,6 +1,6 @@
 # How Federated Continual Learning Works — End-to-End Technical Explanation
 
-> **Role in the documentation set**: This document provides a thorough, conceptual-to-code explanation of how the Federated Continual Learning (FCL) pipeline operates in this repository. It traces the complete lifecycle of a single federated round — from raw network traffic on a local defender node, through local EWC-regularized training, to global weight aggregation, and back to model redistribution. For infrastructure deployment, see [04_deployment.md](04_deployment.md). For orchestration details, see [05_orchestration.md](05_orchestration.md).
+> **Role in the documentation set**: This document provides a thorough, conceptual-to-code explanation of how the Federated Continual Learning (FCL) pipeline operates in this repository. It traces the complete lifecycle of a single federated round — from raw network traffic on a local defender node, through local EWC-regularized training, to global weight aggregation, and back to model redistribution. For infrastructure deployment, see [03_deployment.md](03_deployment.md). For orchestration details, see [04_orchestration.md](04_orchestration.md).
 
 ---
 
@@ -24,41 +24,41 @@ Traditional machine learning assumes that all training data is available in one 
 
 ```mermaid
 flowchart TD
-    subgraph OrgA["Organization A (VM 310 — Defender A)"]
-        TA["Target A1<br>10.10.110.15"] -->|Port Mirror<br>via tc rules| EA["NFStream Extractor<br>(ens19 → /mnt/ramdisk/flows/)"]
-        EA --> CA["Flower Client A<br>client.py<br>(+ DP / Poisoning simulation)"]
-        CA --> EWCA["Continual Learner<br>(EWC / GEM / Naive)"]
-        EWCA --> NETA["Local CyberDefenseNet"]
-    end
+ subgraph OrgA["Organization A (VM 310 — Defender A)"]
+ TA["Target A1<br>10.10.110.15"] -->|Port Mirror<br>via tc rules| EA["NFStream Extractor<br>(ens19 → /mnt/ramdisk/flows/)"]
+ EA --> CA["Flower Client A<br>client.py<br>(+ DP / Poisoning simulation)"]
+ CA --> EWCA["Continual Learner<br>(EWC / GEM / Naive)"]
+ EWCA --> NETA["Local CyberDefenseNet"]
+ end
 
-    subgraph OrgB["Organization B (VM 320 — Defender B)"]
-        TB["Target B1<br>10.10.120.15"] -->|Port Mirror<br>via tc rules| EB["NFStream Extractor<br>(ens19 → /mnt/ramdisk/flows/)"]
-        EB --> CB["Flower Client B<br>client.py<br>(+ DP / Poisoning simulation)"]
-        CB --> EWCB["Continual Learner<br>(EWC / GEM / Naive)"]
-        EWCB --> NETB["Local CyberDefenseNet"]
-    end
+ subgraph OrgB["Organization B (VM 320 — Defender B)"]
+ TB["Target B1<br>10.10.120.15"] -->|Port Mirror<br>via tc rules| EB["NFStream Extractor<br>(ens19 → /mnt/ramdisk/flows/)"]
+ EB --> CB["Flower Client B<br>client.py<br>(+ DP / Poisoning simulation)"]
+ CB --> EWCB["Continual Learner<br>(EWC / GEM / Naive)"]
+ EWCB --> NETB["Local CyberDefenseNet"]
+ end
 
-    subgraph Aggregator["FL Aggregator (LXC 300 — 10.10.130.10)"]
-        FS["Flower Server<br>server.py"]
-        RA["Byzantine-Robust Aggregation<br>(FedAvg / FedMedian / TrimmedMean / Krum)"]
-        SG["NaN/Inf Sanitization Guard"]
-        GM["Global CyberDefenseNet"]
-        ML["MLflow Tracker"]
-        FS --> RA --> SG --> GM
-        SG --> ML
-    end
+ subgraph Aggregator["FL Aggregator (LXC 300 — 10.10.130.10)"]
+ FS["Flower Server<br>server.py"]
+ RA["Byzantine-Robust Aggregation<br>(FedAvg / FedMedian / TrimmedMean / Krum)"]
+ SG["NaN/Inf Sanitization Guard"]
+ GM["Global CyberDefenseNet"]
+ ML["MLflow Tracker"]
+ FS --> RA --> SG --> GM
+ SG --> ML
+ end
 
-    subgraph TrafficGen["Traffic Generator (VM 400 — 10.10.140.10)"]
-        TG["attack_flow.py<br>Benign / SSH / Slowloris / DNS / Botnet"]
-    end
+ subgraph TrafficGen["Traffic Generator (VM 400 — 10.10.140.10)"]
+ TG["attack_flow.py<br>Benign / SSH / Slowloris / DNS / Botnet"]
+ end
 
-    TG -->|Attack traffic| TA
-    TG -->|Attack traffic| TB
+ TG -->|Attack traffic| TA
+ TG -->|Attack traffic| TB
 
-    NETA -->|"① Send local weights<br>(NumPy arrays via gRPC)"| FS
-    NETB -->|"① Send local weights<br>(NumPy arrays via gRPC)"| FS
-    GM -->|"② Broadcast global weights<br>(updated θ_global)"| CA
-    GM -->|"② Broadcast global weights<br>(updated θ_global)"| CB
+ NETA -->|"① Send local weights<br>(NumPy arrays via gRPC)"| FS
+ NETB -->|"① Send local weights<br>(NumPy arrays via gRPC)"| FS
+ GM -->|"② Broadcast global weights<br>(updated θ_global)"| CA
+ GM -->|"② Broadcast global weights<br>(updated θ_global)"| CB
 ```
 
 ---
@@ -72,7 +72,7 @@ Each federated round follows a precise sequence. Below is the complete lifecycle
 **Where:** Defender A (`10.10.130.11`) and Defender B (`10.10.130.12`)
 **Script:** [`src/defender/extractor.py`](../src/defender/extractor.py)
 
-The defender VMs have a second network interface (`ens19`) that receives a port-mirrored copy of all traffic flowing through the target VM's interface. This is set up via `tc` mirroring rules applied by Proxmox hookscripts (see [04_deployment.md](04_deployment.md)).
+The defender VMs have a second network interface (`ens19`) that receives a port-mirrored copy of all traffic flowing through the target VM's interface. This is set up via `tc` mirroring rules applied by Proxmox hookscripts (see [03_deployment.md](03_deployment.md)).
 
 The `extractor.py` script runs as a background daemon:
 
@@ -107,47 +107,47 @@ When the Flower client or real-time inference loop loads flow CSVs, it uses a ve
 
 ```python
 def assign_labels_vectorized(df, dos_threshold_ms=2000, traffic_gen_ip=None):
-    if df.empty:
-        return np.array([], dtype=np.int64)
+ if df.empty:
+ return np.array([], dtype=np.int64)
 
-    if traffic_gen_ip is None:
-        traffic_gen_ip = os.environ.get("TRAFFIC_GEN_IP", "10.10.140.10")
+ if traffic_gen_ip is None:
+ traffic_gen_ip = os.environ.get("TRAFFIC_GEN_IP", "10.10.140.10")
 
-    src_ips = df["src_ip"].astype(str).values
-    dst_ips = df["dst_ip"].astype(str).values
-    src_ports = pd.to_numeric(df["src_port"], errors="coerce").fillna(0).astype(int).values
-    dst_ports = pd.to_numeric(df["dst_port"], errors="coerce").fillna(0).astype(int).values
-    durations = pd.to_numeric(df["duration_ms"], errors="coerce").fillna(0).astype(float).values
+ src_ips = df["src_ip"].astype(str).values
+ dst_ips = df["dst_ip"].astype(str).values
+ src_ports = pd.to_numeric(df["src_port"], errors="coerce").fillna(0).astype(int).values
+ dst_ports = pd.to_numeric(df["dst_port"], errors="coerce").fillna(0).astype(int).values
+ durations = pd.to_numeric(df["duration_ms"], errors="coerce").fillna(0).astype(float).values
 
-    is_from_tg = (src_ips == traffic_gen_ip)
-    is_to_tg = (dst_ips == traffic_gen_ip)
-    is_tg = is_from_tg | is_to_tg
+ is_from_tg = (src_ips == traffic_gen_ip)
+ is_to_tg = (dst_ips == traffic_gen_ip)
+ is_tg = is_from_tg | is_to_tg
 
-    labels = np.zeros(len(df), dtype=np.int64)
+ labels = np.zeros(len(df), dtype=np.int64)
 
-    # BruteForce (SSH on port 22)
-    bf_mask = is_tg & ((src_ports == 22) | (dst_ports == 22))
-    labels[bf_mask] = 3
+ # BruteForce (SSH on port 22)
+ bf_mask = is_tg & ((src_ports == 22) | (dst_ports == 22))
+ labels[bf_mask] = 3
 
-    # Botnet (C2 on ports 8080, 8888, 9000)
-    botnet_mask = is_tg & (~bf_mask) & (np.isin(src_ports, [8080, 8888, 9000]) | np.isin(dst_ports, [8080, 8888, 9000]))
-    labels[botnet_mask] = 1
+ # Botnet (C2 on ports 8080, 8888, 9000)
+ botnet_mask = is_tg & (~bf_mask) & (np.isin(src_ports, [8080, 8888, 9000]) | np.isin(dst_ports, [8080, 8888, 9000]))
+ labels[botnet_mask] = 1
 
-    # Exfiltration (DNS on port 53)
-    exfil_mask = is_tg & (~bf_mask) & (~botnet_mask) & ((src_ports == 53) | (dst_ports == 53))
-    labels[exfil_mask] = 2
+ # Exfiltration (DNS on port 53)
+ exfil_mask = is_tg & (~bf_mask) & (~botnet_mask) & ((src_ports == 53) | (dst_ports == 53))
+ labels[exfil_mask] = 2
 
-    # DoS (volumetric HTTP floods on 80/443 exceeding duration threshold)
-    web_ports = [80, 443]
-    web_mask = is_tg & (~bf_mask) & (~botnet_mask) & (~exfil_mask) & (np.isin(src_ports, web_ports) | np.isin(dst_ports, web_ports))
-    dos_web_mask = web_mask & (durations > dos_threshold_ms)
-    labels[dos_web_mask] = 4
+ # DoS (volumetric HTTP floods on 80/443 exceeding duration threshold)
+ web_ports = [80, 443]
+ web_mask = is_tg & (~bf_mask) & (~botnet_mask) & (~exfil_mask) & (np.isin(src_ports, web_ports) | np.isin(dst_ports, web_ports))
+ dos_web_mask = web_mask & (durations > dos_threshold_ms)
+ labels[dos_web_mask] = 4
 
-    # Default attack label for other TG traffic
-    default_attack_mask = is_tg & (~bf_mask) & (~botnet_mask) & (~exfil_mask) & (~web_mask)
-    labels[default_attack_mask] = 4
+ # Default attack label for other TG traffic
+ default_attack_mask = is_tg & (~bf_mask) & (~botnet_mask) & (~exfil_mask) & (~web_mask)
+ labels[default_attack_mask] = 4
 
-    return labels
+ return labels
 ```
 
 This dynamic labeling matches offensive simulated target traffic identifiers and constructs target tensors on-the-fly without persistent raw packet logging.
@@ -165,32 +165,32 @@ This is the core of the Continual Learning component. When Flower calls `fit()` 
 
 ```python
 def fit(self, parameters, config):
-    # 1. Inject the latest global model weights into the local network
-    self.set_parameters(parameters)
+ # 1. Inject the latest global model weights into the local network
+ self.set_parameters(parameters)
 
-    # 2. Load fresh flow CSVs from the RAM disk
-    X, y = load_ramdisk_flows(self.flows_dir)
+ # 2. Load fresh flow CSVs from the RAM disk
+ X, y = load_ramdisk_flows(self.flows_dir)
 
-    # 3. Data Quality Gate (JSD Check)
-    # If the batch distribution is too anomalous, skip training and snapshot for debugging
-    current_jsd = calculate_jsd(y, self.baseline_distribution)
-    if current_jsd > self.jsd_threshold:
-        snapshot_drifted_data(X, y)
-        return self.get_parameters(config={}), 0, {"dataset_rejected": 1.0, "dataset_jsd": current_jsd}
+ # 3. Data Quality Gate (JSD Check)
+ # If the batch distribution is too anomalous, skip training and snapshot for debugging
+ current_jsd = calculate_jsd(y, self.baseline_distribution)
+ if current_jsd > self.jsd_threshold:
+ snapshot_drifted_data(X, y)
+ return self.get_parameters(config={}), 0, {"dataset_rejected": 1.0, "dataset_jsd": current_jsd}
 
-    # 4. Ephemeral Train/Validation Split (80/20)
-    # Hold out 20% of the batch in memory to evaluate real-time plasticity
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
-    self.ephemeral_val_set = (X_val, y_val)
+ # 4. Ephemeral Train/Validation Split (80/20)
+ # Hold out 20% of the batch in memory to evaluate real-time plasticity
+ X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
+ self.ephemeral_val_set = (X_val, y_val)
 
-    # 5. Wrap into an Avalanche "experience" for CL training
-    experience = get_experience(X_train, y_train)
+ # 5. Wrap into an Avalanche "experience" for CL training
+ experience = get_experience(X_train, y_train)
 
-    # 6. Train using EWC-regularized strategy
-    self.cl.train(experience)
+ # 6. Train using EWC-regularized strategy
+ self.cl.train(experience)
 
-    # 7. Return updated weights (the "recipe") to the aggregator
-    return self.get_parameters(config={}), len(X_train), {}
+ # 7. Return updated weights (the "recipe") to the aggregator
+ return self.get_parameters(config={}), len(X_train), {}
 ```
 
 The data preparation pipeline:
@@ -209,18 +209,18 @@ The EWC strategy is configured in [`cl_strategy.py`](../src/defender/cl_strategy
 
 ```python
 def get_continual_learner(model, device, ewc_lambda=0.8, class_weights=None):
-    if class_weights is None:
-        class_weights = [1.0, 250.0, 2.0, 5.0, 50.0]  # Overridden by configs/experiment.yaml
-    weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
-    return EWC(
-        model=model,
-        optimizer=SGD(model.parameters(), lr=0.01, momentum=0.9),
-        criterion=CrossEntropyLoss(weight=weights_tensor),
-        ewc_lambda=ewc_lambda,
-        train_mb_size=32,
-        train_epochs=1,
-        device=device,
-    )
+ if class_weights is None:
+ class_weights = [1.0, 250.0, 2.0, 5.0, 50.0] # Overridden by configs/experiment.yaml
+ weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
+ return EWC(
+ model=model,
+ optimizer=SGD(model.parameters(), lr=0.01, momentum=0.9),
+ criterion=CrossEntropyLoss(weight=weights_tensor),
+ ewc_lambda=ewc_lambda,
+ train_mb_size=32,
+ train_epochs=1,
+ device=device,
+ )
 ```
 
 **How EWC prevents catastrophic forgetting:**
@@ -240,14 +240,14 @@ Where:
 
 ```mermaid
 graph LR
-    subgraph WithoutEWC ["Without EWC"]
-        W1["Round 1: Learns SSH-BF [PASS]"] --> W2["Round 2: Learns DoS [PASS] <br/> (Forgets SSH-BF [FAIL])"]
-        W2 --> W3["Round 3: Learns Botnet [PASS] <br/> (Forgets DoS [FAIL])"]
-    end
-    subgraph WithEWC ["With EWC"]
-        E1["Round 1: Learns SSH-BF [PASS]"] --> E2["Round 2: Learns DoS [PASS] <br/> (Retains SSH-BF [PASS])"]
-        E2 --> E3["Round 3: Learns Botnet [PASS] <br/> (Retains SSH-BF + DoS [PASS])"]
-    end
+ subgraph WithoutEWC ["Without EWC"]
+ W1["Round 1: Learns SSH-BF [PASS]"] --> W2["Round 2: Learns DoS [PASS] <br/> (Forgets SSH-BF [FAIL])"]
+ W2 --> W3["Round 3: Learns Botnet [PASS] <br/> (Forgets DoS [FAIL])"]
+ end
+ subgraph WithEWC ["With EWC"]
+ E1["Round 1: Learns SSH-BF [PASS]"] --> E2["Round 2: Learns DoS [PASS] <br/> (Retains SSH-BF [PASS])"]
+ E2 --> E3["Round 3: Learns Botnet [PASS] <br/> (Retains SSH-BF + DoS [PASS])"]
+ end
 ```
 
 #### 3.3.3 Class Weighting for Imbalanced Traffic
@@ -257,7 +257,7 @@ The `CrossEntropyLoss` is configured with per-class weights from the experiment 
 ```yaml
 # configs/experiment.yaml
 training:
-  class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
+ class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
 ```
 
 This tells the optimizer to pay **250× more attention** to misclassifying Botnet (class 1) compared to **1× for Normal** (class 0). Without these weights, the model would ignore rare attack classes in favor of maximizing accuracy on the dominant Normal class.
@@ -273,7 +273,7 @@ After local training completes, the client exports the model's mathematical repr
 
 ```python
 def get_parameters(self, config):
-    return [v.cpu().numpy() for _, v in self.net.state_dict().items()]
+ return [v.cpu().numpy() for _, v in self.net.state_dict().items()]
 ```
 
 This returns a list of NumPy arrays representing:
@@ -288,15 +288,15 @@ This returns a list of NumPy arrays representing:
 
 ```mermaid
 sequenceDiagram
-    participant A as Defender A
-    participant AG as FL Aggregator
-    participant B as Defender B
+ participant A as Defender A
+ participant AG as FL Aggregator
+ participant B as Defender B
 
-    Note over A: NO raw data leaves Org A
-    A->>AG: Send weights [w1, b1, w2, b2, w3, b3] (via gRPC)
-    Note over B: NO raw data leaves Org B
-    B->>AG: Send weights [w1, b1, w2, b2, w3, b3] (via gRPC)
-    Note over AG: Receives weight updates from both clients
+ Note over A: NO raw data leaves Org A
+ A->>AG: Send weights [w1, b1, w2, b2, w3, b3] (via gRPC)
+ Note over B: NO raw data leaves Org B
+ B->>AG: Send weights [w1, b1, w2, b2, w3, b3] (via gRPC)
+ Note over AG: Receives weight updates from both clients
 ```
 
 ---
@@ -311,21 +311,21 @@ The aggregator receives weight updates from connected clients and combines them 
 #### Aggregation Strategies
 
 - **Federated Averaging (FedAvg)**:
-    Computes a weighted average based on client training set sizes:
-    $$\theta_{\text{global}} = \sum_{c=1}^{C} \frac{N_c}{N_{\text{total}}} \cdot \theta_c$$
+ Computes a weighted average based on client training set sizes:
+ $$\theta_{\text{global}} = \sum_{c=1}^{C} \frac{N_c}{N_{\text{total}}} \cdot \theta_c$$
 
 - **Federated Coordinate-wise Median (FedMedian)**:
-    Computes the median independently for each coordinate across client weight updates:
-    $$\theta_{\text{global}, i} = \text{median}(\{\theta_{c, i}\}_{c=1}^{C})$$
-    Highly effective at neutralizing extreme model poisoning or arbitrary weight replacements.
+ Computes the median independently for each coordinate across client weight updates:
+ $$\theta_{\text{global}, i} = \text{median}(\{\theta_{c, i}\}_{c=1}^{C})$$
+ Highly effective at neutralizing extreme model poisoning or arbitrary weight replacements.
 - **Coordinate-wise Trimmed Mean (TrimmedMean)**:
-    Sorts parameters coordinate-wise and trims a fraction $\beta$ of values from each tail before computing the mean:
-    $$\theta_{\text{global}, i} = \frac{1}{C - 2k} \sum_{c=k+1}^{C-k} \theta_{(c), i}$$
-    Where $k = \lfloor \beta \cdot C \rfloor$, and $\theta_{(c), i}$ represents sorted coordinate updates.
+ Sorts parameters coordinate-wise and trims a fraction $\beta$ of values from each tail before computing the mean:
+ $$\theta_{\text{global}, i} = \frac{1}{C - 2k} \sum_{c=k+1}^{C-k} \theta_{(c), i}$$
+ Where $k = \lfloor \beta \cdot C \rfloor$, and $\theta_{(c), i}$ represents sorted coordinate updates.
 - **Krum (Consensus Client Selection)**:
-    Selects a single representative client update that minimizes the sum of squared distances to its $C - f - 2$ nearest updates (where $f$ is the assumed number of Byzantine attackers):
-    $$c^* = \arg\min_{c} \sum_{c' \in \mathcal{N}_c} \|\theta_c - \theta_{c'}\|^2$$
-    Guarantees that the chosen client update lies within the convex hull of clean updates.
+ Selects a single representative client update that minimizes the sum of squared distances to its $C - f - 2$ nearest updates (where $f$ is the assumed number of Byzantine attackers):
+ $$c^* = \arg\min_{c} \sum_{c' \in \mathcal{N}_c} \|\theta_c - \theta_{c'}\|^2$$
+ Guarantees that the chosen client update lies within the convex hull of clean updates.
 
 #### NaN/Inf Sanitization Guard
 
@@ -335,35 +335,35 @@ To prevent Byzantine clients from crashing the training cycle using NaN/Inf weig
 # Replace NaN and Inf parameters with 0.0 prior to model assembly and serialization
 clean_ndarrays = []
 for arr in ndarrays:
-    clean_arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
-    clean_ndarrays.append(clean_arr)
+ clean_arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+ clean_ndarrays.append(clean_arr)
 ```
 
 The aggregation and checkpointing happens in `aggregate_fit()`:
 
 ```python
 def aggregate_fit(self, server_round, results, failures):
-    # Triggers robust aggregation strategy on results
-    aggregated = super().aggregate_fit(server_round, results, failures)
+ # Triggers robust aggregation strategy on results
+ aggregated = super().aggregate_fit(server_round, results, failures)
 
-    if aggregated is not None:
-        parameters, config = aggregated
-        ndarrays = fl.common.parameters_to_ndarrays(parameters)
+ if aggregated is not None:
+ parameters, config = aggregated
+ ndarrays = fl.common.parameters_to_ndarrays(parameters)
 
-        # Apply NaN/Inf sanitization
-        ndarrays = [np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0) for arr in ndarrays]
+ # Apply NaN/Inf sanitization
+ ndarrays = [np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0) for arr in ndarrays]
 
-        # Reconstruct the global model from sanitized parameters
-        model = get_model(self.model_type)
-        state_dict = OrderedDict(
-            {k: torch.tensor(v) for k, v in zip(model.state_dict().keys(), ndarrays)}
-        )
-        model.load_state_dict(state_dict, strict=True)
+ # Reconstruct the global model from sanitized parameters
+ model = get_model(self.model_type)
+ state_dict = OrderedDict(
+ {k: torch.tensor(v) for k, v in zip(model.state_dict().keys(), ndarrays)}
+ )
+ model.load_state_dict(state_dict, strict=True)
 
-        # Save checkpoint
-        torch.save(model.state_dict(), f"model_round_{server_round:04d}.pt")
+ # Save checkpoint
+ torch.save(model.state_dict(), f"model_round_{server_round:04d}.pt")
 
-    return aggregated
+ return aggregated
 ```
 
 After aggregation, the server also runs a global evaluation round:
@@ -371,70 +371,70 @@ After aggregation, the server also runs a global evaluation round:
 ```python
 @mlflow.trace(name="aggregate_evaluate")
 def aggregate_evaluate(self, server_round, results, failures):
-    aggregated_result = super().aggregate_evaluate(server_round, results, failures)
-    if aggregated_result:
-        loss, metrics = aggregated_result
-        accuracy = metrics.get("accuracy", 0.0)
-        self.latest_loss = loss
-        self.latest_accuracy = accuracy
-        self.latest_metrics = metrics
+ aggregated_result = super().aggregate_evaluate(server_round, results, failures)
+ if aggregated_result:
+ loss, metrics = aggregated_result
+ accuracy = metrics.get("accuracy", 0.0)
+ self.latest_loss = loss
+ self.latest_accuracy = accuracy
+ self.latest_metrics = metrics
 
-        print(f"[server] Round {server_round} Aggregated Loss: {loss:.4f} | Accuracy: {accuracy:.4f}")
-        mlflow.log_metric("loss", loss, step=server_round)
-        for k, v in metrics.items():
-            mlflow.log_metric(k, v, step=server_round)
+ print(f"[server] Round {server_round} Aggregated Loss: {loss:.4f} | Accuracy: {accuracy:.4f}")
+ mlflow.log_metric("loss", loss, step=server_round)
+ for k, v in metrics.items():
+ mlflow.log_metric(k, v, step=server_round)
 
-        # Checkpoint best model
-        if loss < self.best_loss:
-            self.best_loss = loss
-            self.best_round = server_round
-            self.best_accuracy = accuracy
-            self.best_metrics = metrics.copy()
-            mlflow.log_metric("best_loss", loss, step=server_round)
-            mlflow.log_metric("best_round", server_round, step=server_round)
-            print(f"[server] New best model at round {server_round} (loss={loss:.4f})")
+ # Checkpoint best model
+ if loss < self.best_loss:
+ self.best_loss = loss
+ self.best_round = server_round
+ self.best_accuracy = accuracy
+ self.best_metrics = metrics.copy()
+ mlflow.log_metric("best_loss", loss, step=server_round)
+ mlflow.log_metric("best_round", server_round, step=server_round)
+ print(f"[server] New best model at round {server_round} (loss={loss:.4f})")
 
-    return aggregated_result
+ return aggregated_result
 ```
 
 The per-class accuracy and F1-score aggregations use `weighted_avg()`, which weights each client's class-wise metric by its dataset sample count, skipping clients that had no samples for a given class. It also sums class-wise confusion matrix counts across clients to get global counts:
 
 ```python
 def weighted_avg(metrics):
-    total_samples = sum([n for n, _ in metrics])
-    if total_samples == 0:
-        return {"accuracy": 0.0}
+ total_samples = sum([n for n, _ in metrics])
+ if total_samples == 0:
+ return {"accuracy": 0.0}
 
-    accs = [n * m["accuracy"] for n, m in metrics]
-    avg_accuracy = sum(accs) / total_samples
+ accs = [n * m["accuracy"] for n, m in metrics]
+ avg_accuracy = sum(accs) / total_samples
 
-    aggregated_metrics = {"accuracy": avg_accuracy}
-    
-    # Class-wise accuracy aggregation
-    for i in range(5):
-        class_key = f"accuracy_class_{i}"
-        class_vals = [(n, m[class_key]) for n, m in metrics if m.get(class_key, -1.0) >= 0.0]
-        if class_vals:
-            aggregated_metrics[class_key] = sum(w * v for w, v in class_vals) / sum(w for w, _ in class_vals)
-        else:
-            aggregated_metrics[class_key] = -1.0
+ aggregated_metrics = {"accuracy": avg_accuracy}
+ 
+ # Class-wise accuracy aggregation
+ for i in range(5):
+ class_key = f"accuracy_class_{i}"
+ class_vals = [(n, m[class_key]) for n, m in metrics if m.get(class_key, -1.0) >= 0.0]
+ if class_vals:
+ aggregated_metrics[class_key] = sum(w * v for w, v in class_vals) / sum(w for w, _ in class_vals)
+ else:
+ aggregated_metrics[class_key] = -1.0
 
-    # Class-wise F1 score aggregation
-    for i in range(5):
-        f1_key = f"f1_class_{i}"
-        f1_vals = [(n, m[f1_key]) for n, m in metrics if m.get(f1_key, -1.0) >= 0.0]
-        if f1_vals:
-            aggregated_metrics[f1_key] = sum(w * v for w, v in f1_vals) / sum(w for w, _ in f1_vals)
-        else:
-            aggregated_metrics[f1_key] = -1.0
+ # Class-wise F1 score aggregation
+ for i in range(5):
+ f1_key = f"f1_class_{i}"
+ f1_vals = [(n, m[f1_key]) for n, m in metrics if m.get(f1_key, -1.0) >= 0.0]
+ if f1_vals:
+ aggregated_metrics[f1_key] = sum(w * v for w, v in f1_vals) / sum(w for w, _ in f1_vals)
+ else:
+ aggregated_metrics[f1_key] = -1.0
 
-    # Sum raw confusion matrix counts
-    for t in range(5):
-        for p in range(5):
-            cm_key = f"cm_{t}_{p}"
-            aggregated_metrics[cm_key] = float(sum([m.get(cm_key, 0.0) for n, m in metrics]))
+ # Sum raw confusion matrix counts
+ for t in range(5):
+ for p in range(5):
+ cm_key = f"cm_{t}_{p}"
+ aggregated_metrics[cm_key] = float(sum([m.get(cm_key, 0.0) for n, m in metrics]))
 
-    return aggregated_metrics
+ return aggregated_metrics
 ```
 
 ### 3.5.2 Post-Training: Registration, Datasets, and Governance
@@ -444,20 +444,20 @@ Once training completes (all rounds finished), the server executes the final pip
 1. **Log Model Artifact**: The PyTorch model is registered to MLflow using `mlflow.pytorch.log_model(..., registered_model_name="CyberDefenseNet")`.
 2. **Link Training Dataset**: The aggregator documents training context using an MLflow `Dataset` entity:
 
-   ```python
-   dataset_summary = pd.DataFrame([
-       {"class": "Normal", "defender_a": 22, "defender_b": 10},
-       # ... other classes
-   ])
-   train_dataset = mlflow.data.from_pandas(dataset_summary, name="aggregated_training_flows")
-   mlflow.log_metrics(..., model_id=logged_model.model_id, dataset=train_dataset)
-   ```
+ ```python
+ dataset_summary = pd.DataFrame([
+ {"class": "Normal", "defender_a": 22, "defender_b": 10},
+ # ... other classes
+ ])
+ train_dataset = mlflow.data.from_pandas(dataset_summary, name="aggregated_training_flows")
+ mlflow.log_metrics(..., model_id=logged_model.model_id, dataset=train_dataset)
+ ```
 
 3. **Structured Markdown Note**: The `mlflow.note.content` tag is updated programmatically to display execution metadata and final best class-wise metrics inside the MLflow UI.
 4. **Log Evaluation Table**: Detailed per-class accuracies and sample counts are saved as a structured JSON table artifact (`evaluation_metrics_summary.json` via `mlflow.log_table()`).
 5. **Enforce Version Aliases**: Using `MlflowClient`, the new version is registered and promoted to:
-   - **`champion`** (in `production` mode), replacing any old champion.
-   - **`challenger`** (in `experimental` mode).
+ - **`champion`** (in `production` mode), replacing any old champion.
+ - **`challenger`** (in `experimental` mode).
 6. **Local LLM Post-Run Analysis**: The orchestrator triggers `tools/generate_llm_report.py`, querying a local CPU-bound Ollama service (`llama3.1:8b`) via an Nginx authentication proxy. The query uses an instruct-style prompt structure and a strict `"num_predict": 512` token cap to generate a structured markdown threat analysis without CPU hangs or timeouts. The resulting report is appended to `run_summary.md` and registered in MLflow under the current run as an experiment artifact.
 
 ---
@@ -471,10 +471,10 @@ At the start of the **next** federated round, the Flower server automatically br
 
 ```python
 def set_parameters(self, params):
-    state = OrderedDict(
-        {k: torch.tensor(v) for k, v in zip(self.net.state_dict().keys(), params)}
-    )
-    self.net.load_state_dict(state, strict=True)
+ state = OrderedDict(
+ {k: torch.tensor(v) for k, v in zip(self.net.state_dict().keys(), params)}
+ )
+ self.net.load_state_dict(state, strict=True)
 ```
 
 After this call, the local model on each defender is now synchronized with the global model — containing knowledge from **both** organizations' traffic patterns — without either organization having exposed its raw data to the other.
@@ -485,42 +485,42 @@ After this call, the local model on each defender is now synchronized with the g
 
 ```mermaid
 sequenceDiagram
-    participant TG as Traffic Generator
-    participant TA as Target A1
-    participant DA as Defender A
-    participant AGG as Aggregator
-    participant DB as Defender B
-    participant TB as Target B1
+ participant TG as Traffic Generator
+ participant TA as Target A1
+ participant DA as Defender A
+ participant AGG as Aggregator
+ participant DB as Defender B
+ participant TB as Target B1
 
-    Note over TG,TB: Attack traffic flows through the network
+ Note over TG,TB: Attack traffic flows through the network
 
-    TG->>TA: Send attack traffic (SSH / DoS / Botnet)
-    TG->>TB: Send attack traffic (SSH / DoS / Botnet)
+ TG->>TA: Send attack traffic (SSH / DoS / Botnet)
+ TG->>TB: Send attack traffic (SSH / DoS / Botnet)
 
-    Note over DA: NFStream captures mirrored packets on ens19
-    TA-->>DA: Port-mirrored traffic (tc rules)
-    TB-->>DB: Port-mirrored traffic (tc rules)
+ Note over DA: NFStream captures mirrored packets on ens19
+ TA-->>DA: Port-mirrored traffic (tc rules)
+ TB-->>DB: Port-mirrored traffic (tc rules)
 
-    Note over DA,DB: Step 1-2: Extract features & label flows locally
+ Note over DA,DB: Step 1-2: Extract features & label flows locally
 
-    AGG->>DA: ② Broadcast global θ_global (start of round)
-    AGG->>DB: ② Broadcast global θ_global (start of round)
+ AGG->>DA: ② Broadcast global θ_global (start of round)
+ AGG->>DB: ② Broadcast global θ_global (start of round)
 
-    Note over DA: Step 3: Train locally with EWC
-    DA->>DA: load_ramdisk_flows() → StandardScaler → EWC.train()
-    Note over DB: Step 3: Train locally with EWC
-    DB->>DB: load_ramdisk_flows() → StandardScaler → EWC.train()
+ Note over DA: Step 3: Train locally with EWC
+ DA->>DA: load_ramdisk_flows() → StandardScaler → EWC.train()
+ Note over DB: Step 3: Train locally with EWC
+ DB->>DB: load_ramdisk_flows() → StandardScaler → EWC.train()
 
-    Note over DA,DB: Step 4: Export weight "recipe"
-    DA->>AGG: ① Send θ_A (local weights + sample count)
-    DB->>AGG: ① Send θ_B (local weights + sample count)
+ Note over DA,DB: Step 4: Export weight "recipe"
+ DA->>AGG: ① Send θ_A (local weights + sample count)
+ DB->>AGG: ① Send θ_B (local weights + sample count)
 
-    Note over AGG: Step 5: Aggregate via FedAvg
-    AGG->>AGG: θ_global = (N_A·θ_A + N_B·θ_B) / (N_A + N_B)
-    AGG->>AGG: Log metrics to MLflow
+ Note over AGG: Step 5: Aggregate via FedAvg
+ AGG->>AGG: θ_global = (N_A·θ_A + N_B·θ_B) / (N_A + N_B)
+ AGG->>AGG: Log metrics to MLflow
 
-    Note over AGG: Step 6: Save checkpoint & repeat
-    AGG->>AGG: torch.save(model_latest.pt)
+ Note over AGG: Step 6: Save checkpoint & repeat
+ AGG->>AGG: torch.save(model_latest.pt)
 ```
 
 ---
@@ -582,20 +582,20 @@ All tunable parameters are centralized in [`configs/experiment.yaml`](../configs
 
 ```text
 Class 1 (Botnet) accuracy too low?
-  → Increase class_weights[1] (currently 20.0)
-  → Ensure attack_flow.py --mode botnet is running long enough
+ → Increase class_weights[1] (currently 20.0)
+ → Ensure attack_flow.py --mode botnet is running long enough
 
 Class 3 (BruteForce) accuracy dropping after new attacks?
-  → Increase ewc_lambda (e.g., 0.3 → 0.5) for more stability
-  → This trades off plasticity for new attack learning
+ → Increase ewc_lambda (e.g., 0.3 → 0.5) for more stability
+ → This trades off plasticity for new attack learning
 
 Byzantine/Poisoned client corrupting the global model?
-  → Change fl.strategy to FedMedian or TrimmedMean
-  → Adjust fl.trimmed_mean_beta to account for the expected fraction of malicious clients
+ → Change fl.strategy to FedMedian or TrimmedMean
+ → Adjust fl.trimmed_mean_beta to account for the expected fraction of malicious clients
 
 Training gradients exploding or crashing with NaN?
-  → Double check that the Gradient Safety clip_grad_norm_ is active (cl_strategy.py automatically clips at 1.0)
-  → The server's NaN/Inf Sanitization Guard will intercept anomalies and replace them with zero.
+ → Double check that the Gradient Safety clip_grad_norm_ is active (cl_strategy.py automatically clips at 1.0)
+ → The server's NaN/Inf Sanitization Guard will intercept anomalies and replace them with zero.
 ```
 
 ---
@@ -606,7 +606,7 @@ Training gradients exploding or crashing with NaN?
 
 1. All target VMs (`311`, `321`) are booted with port mirroring hookscripts applied
 2. SSH key is authorized on all 6 nodes (`ssh root@10.10.130.10` must work without password)
-3. Python environments are installed on remote nodes (see [04_deployment.md](04_deployment.md))
+3. Python environments are installed on remote nodes (see [03_deployment.md](03_deployment.md))
 
 ### Execute
 
@@ -665,14 +665,14 @@ To transition from basic collaborative training to a highly robust enterprise de
 
 - **Purpose**: Restricts automated Model Registry promotions to only candidate models that satisfy strict continual learning performance and communication constraints.
 - **Gates Enforced**:
-  1. **Per-Class F1 Thresholds**:
-     - Class 0 (Normal) $\ge 0.50$
-     - Class 1 (Botnet) $\ge 0.60$
-     - Class 2 (Exfiltration) $\ge 0.70$
-     - Class 3 (BruteForce) $\ge 0.50$
-     - Class 4 (DoS) $\ge 0.70$
-  2. **No Forgetting Regression**: Per-class Backward Transfer (BWT) $\ge 0.0$ (ensuring no forgetting regression for any individual class).
-  3. **Communication Budget**: Total communication overhead $\le$ budget (default: 200,000,000 bytes).
+ 1. **Per-Class F1 Thresholds**:
+ - Class 0 (Normal) $\ge 0.50$
+ - Class 1 (Botnet) $\ge 0.60$
+ - Class 2 (Exfiltration) $\ge 0.70$
+ - Class 3 (BruteForce) $\ge 0.50$
+ - Class 4 (DoS) $\ge 0.70$
+ 2. **No Forgetting Regression**: Per-class Backward Transfer (BWT) $\ge 0.0$ (ensuring no forgetting regression for any individual class).
+ 3. **Communication Budget**: Total communication overhead $\le$ budget (default: 200,000,000 bytes).
 - **Promotion Control**: If the candidate fails any check, the registry alias remains on the current `champion`, and the failure reason is registered as an MLflow run tag. If all checks pass, the model is atomically promoted to `champion`, exported as a TorchScript model artifact, and `mlflow.note.content` is updated.
 - **Real-Time Telegram Alerts**: Triggers real-time alerts with detailed HTML formatting for successful promotions or failure details (specifically listing which class F1, BWT, or communication budget was violated).
 - **First-Class CL Metadata**: Registered models are annotated with task sequence attributes (`cl_task_sequence`, `cl_complexity_score`) for lineage auditability.
@@ -682,8 +682,8 @@ To transition from basic collaborative training to a highly robust enterprise de
 
 - **Objective**: Protect the collaborative model from malicious poisoning attacks, guarantee privacy against membership inference via differential privacy, and ensure computational safety against exploding/NaN parameters.
 - **Robust Aggregation**:
-  - **FedMedian**: Computes the coordinate-wise median, preventing single-client extreme updates from influencing the global model.
-  - **TrimmedMean**: Trims configured tails from sorted parameters coordinate-wise to compute a clean average, neutralizing bounded attackers.
-  - **Krum**: Restricts updates to a single consensus client that minimizes distance to neighboring updates.
+ - **FedMedian**: Computes the coordinate-wise median, preventing single-client extreme updates from influencing the global model.
+ - **TrimmedMean**: Trims configured tails from sorted parameters coordinate-wise to compute a clean average, neutralizing bounded attackers.
+ - **Krum**: Restricts updates to a single consensus client that minimizes distance to neighboring updates.
 - **Client-Side Differential Privacy (DP-SGD)**: Optionally wraps PyTorch data loaders and model parameters with **Opacus** at the client, enforcing strict differential privacy bounds via noise injection and per-sample gradient clipping.
 - **NaN/Inf Sanitization**: Aggregator scans updates for invalid parameters (`NaN` or `Inf`), replacing them with `0.0` to preserve training loop continuity.

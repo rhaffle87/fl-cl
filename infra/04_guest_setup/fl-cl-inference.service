@@ -1,0 +1,19 @@
+[Unit]
+Description=FL-CL Real-Time Inference & Threat Alerting Loop
+After=network.target fl-cl-extractor.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/fl-cl
+ExecStartPre=/bin/mkdir -p /mnt/ramdisk/flows /var/log
+ExecStart=/root/fl-cl-env/bin/python3 src/defender/inference_loop.py --checkpoint /root/model_latest_scripted.pt --flows-dir /mnt/ramdisk/flows --poll-interval 1.0 --alert-threshold 0.75 --alerts-log /var/log/fl-cl-alerts.log --stats-path configs/baseline_feature_stats.json
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

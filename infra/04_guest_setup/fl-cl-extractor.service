@@ -1,0 +1,19 @@
+[Unit]
+Description=FL-CL NFStream Flow Feature Extractor
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/fl-cl
+ExecStartPre=/bin/mkdir -p /mnt/ramdisk/flows
+ExecStart=/root/fl-cl-env/bin/python3 src/defender/extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows --batch-size 500
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

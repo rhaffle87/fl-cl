@@ -10,36 +10,36 @@ The training system is designed with **Secure-by-Design** principles. No static 
 
 1. Copy the template configuration file:
 
-   ```bash
-   cp .env.example .env
-   ```
+ ```bash
+ cp .env.example .env
+ ```
 
 2. Open `.env` and fill in your topology, SSH keys, and notification credentials:
 
-   ```env
-   # Telegram notifications credentials
-   TELEGRAM_BOT_TOKEN="your_bot_token"
-   TELEGRAM_CHAT_ID="your_chat_id"
+ ```env
+ # Telegram notifications credentials
+ TELEGRAM_BOT_TOKEN="your_bot_token"
+ TELEGRAM_CHAT_ID="your_chat_id"
 
-   # SSH private key path for orchestrator → remote node access
-   SSH_KEY_PATH="C:\Users\YourUser\.ssh\id_ed25519"
+ # SSH private key path for orchestrator → remote node access
+ SSH_KEY_PATH="C:\Users\YourUser\.ssh\id_ed25519"
 
-   # Ollama AI Reporting Configuration
-   OLLAMA_ENDPOINT="https://your-ollama-server.ts.net"
-   OLLAMA_KEY="your_api_key"
-   OLLAMA_MODEL="llama3.1:8b"
+ # Ollama AI Reporting Configuration
+ OLLAMA_ENDPOINT="https://your-ollama-server.ts.net"
+ OLLAMA_KEY="your_api_key"
+ OLLAMA_MODEL="llama3.1:8b"
 
-   # Topology — Proxmox guest IPs
-   AGGREGATOR_HOST="10.10.130.10"
-   DEFENDER_A_HOST="10.10.130.11"
-   DEFENDER_B_HOST="10.10.130.12"
-   TARGET_A_HOST="10.10.110.15"
-   TARGET_B_HOST="10.10.120.15"
-   TRAFFIC_GEN_HOST="10.10.140.10"
+ # Topology — Proxmox guest IPs
+ AGGREGATOR_HOST="10.10.130.10"
+ DEFENDER_A_HOST="10.10.130.11"
+ DEFENDER_B_HOST="10.10.130.12"
+ TARGET_A_HOST="10.10.110.15"
+ TARGET_B_HOST="10.10.120.15"
+ TRAFFIC_GEN_HOST="10.10.140.10"
 
-   # MLflow tracking URI
-   MLFLOW_TRACKING_URI="http://10.10.130.10:5000"
-   ```
+ # MLflow tracking URI
+ MLFLOW_TRACKING_URI="http://10.10.130.10:5000"
+ ```
 
 ---
 
@@ -96,9 +96,9 @@ Configure warm-start behavior in `configs/experiment.yaml`:
 
 ```yaml
 mlops:
-  mode: "production"
-  production_strategy: "resume"
-  registered_model_name: "CyberDefenseNet"
+ mode: "production"
+ production_strategy: "resume"
+ registered_model_name: "CyberDefenseNet"
 ```
 
 - **Cold Start (`production_strategy: "fresh"`)**: Initialized with random weights.
@@ -152,11 +152,11 @@ Use `tools/bwt_eval_suite.py` to evaluate any TorchScript model checkpoint. The 
 
 ```bash
 python tools/bwt_eval_suite.py \
-  --checkpoint checkpoints/model_latest_scripted.pt \
-  --test-dir /mnt/ramdisk/flows \
-  --output benchmarks/bwt_report.csv \
-  --peak-f1 "0.95,0.92,0.97,0.94,0.99" \
-  --mlflow-run-id "your_active_mlflow_run_id"
+ --checkpoint checkpoints/model_latest_scripted.pt \
+ --test-dir /mnt/ramdisk/flows \
+ --output benchmarks/bwt_report.csv \
+ --peak-f1 "0.95,0.92,0.97,0.94,0.99" \
+ --mlflow-run-id "your_active_mlflow_run_id"
 ```
 
 - **Lineage & Authenticity:** Generates a SHA-256 validation signature composed of the model file's hash, dataset hash, and tabular results.
@@ -168,11 +168,11 @@ Use `tools/cross_dataset_benchmark.py` to compare FCL models on heterogeneous tr
 
 ```bash
 python tools/cross_dataset_benchmark.py \
-  --checkpoint checkpoints/model_latest_scripted.pt \
-  --dataset-a-dir /mnt/ramdisk/flows \
-  --dataset-b-dir /mnt/ustc_tfc2016/flows \
-  --output benchmarks/generalization_report.csv \
-  --mlflow-run-id "your_active_mlflow_run_id"
+ --checkpoint checkpoints/model_latest_scripted.pt \
+ --dataset-a-dir /mnt/ramdisk/flows \
+ --dataset-b-dir /mnt/ustc_tfc2016/flows \
+ --output benchmarks/generalization_report.csv \
+ --mlflow-run-id "your_active_mlflow_run_id"
 ```
 
 - **Covariate Shift Simulator:** If Dataset B is not provided or files are missing, the tool simulates the USTC-TFC2016 domain distribution by dynamically applying deterministic statistical shifts to Dataset A.

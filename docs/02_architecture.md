@@ -1,6 +1,6 @@
 # Proxmox Testbed Architecture: Hybrid FL-CL Collaborative Cyber Defense
 
-> **Role in the documentation set**: This document provides the *conceptual blueprint* for the virtualized testbed. It defines what each component does and why it exists. For the cluster-specific workarounds required to deploy this blueprint on a heterogeneous 3-node cluster, see [03_workarounds.md](03_workarounds.md). For the hardware, dataset, and tooling prerequisites, see [01_prerequisites.md](01_prerequisites.md). For the fully integrated research paper, see [00_research_paper.md](00_research_paper.md).
+> **Role in the documentation set**: This document provides the *conceptual blueprint* for the virtualized testbed. It defines what each component does and why it exists. For the cluster-specific workarounds required to deploy this blueprint on a heterogeneous 3-node cluster, see [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md). For the hardware, dataset, and tooling prerequisites, see [01_prerequisites.md](01_prerequisites.md). For the fully integrated research paper, see [paper/manuscript.md](paper/manuscript.md).
 
 ---
 
@@ -21,50 +21,50 @@ To simulate a multi-tenant collaborative defense environment while bypassing phy
 
 ```mermaid
 graph TD
-    subgraph PVE_Cluster ["Proxmox VE Cluster"]
-        subgraph WAN_Mgmt["WAN / Management Bridge (vmbr0)"]
-            Router[PVE Gateway / Internet]
-        end
+ subgraph PVE_Cluster ["Proxmox VE Cluster"]
+ subgraph WAN_Mgmt["WAN / Management Bridge (vmbr0)"]
+ Router[PVE Gateway / Internet]
+ end
 
-        subgraph SDN["Internal Bridge (vmbr1) – Flat L2 (10.10.0.0/16)"]
-            subgraph CentralZone["Central Zone (10.10.130.x)"]
-                Aggregator["FL Aggregator<br/>LXC 300 – Ubuntu 24.04"]
-            end
-            
-            subgraph OrgA["Organization A (10.10.110.x)"]
-                DefenderA["Defender Node A<br/>VM 310 – Ubuntu 24.04"]
-                TargetA["Target Host A1<br/>VM 311 – Alpine Linux"]
-                MirrorA["TAP/Bridge Mirror"]
-            end
+ subgraph SDN["Internal Bridge (vmbr1) – Flat L2 (10.10.0.0/16)"]
+ subgraph CentralZone["Central Zone (10.10.130.x)"]
+ Aggregator["FL Aggregator<br/>LXC 300 – Ubuntu 24.04"]
+ end
+ 
+ subgraph OrgA["Organization A (10.10.110.x)"]
+ DefenderA["Defender Node A<br/>VM 310 – Ubuntu 24.04"]
+ TargetA["Target Host A1<br/>VM 311 – Alpine Linux"]
+ MirrorA["TAP/Bridge Mirror"]
+ end
 
-            subgraph OrgB["Organization B (10.10.120.x)"]
-                DefenderB["Defender Node B<br/>VM 320 – Ubuntu 24.04"]
-                TargetB["Target Host B1<br/>VM 321 – Alpine Linux"]
-                MirrorB["TAP/Bridge Mirror"]
-            end
-            
-            subgraph TrafficZone["Traffic Generator Zone (10.10.140.x)"]
-                Attacker["Traffic Generator<br/>VM 400 – Kali Linux"]
-            end
-        end
-    end
+ subgraph OrgB["Organization B (10.10.120.x)"]
+ DefenderB["Defender Node B<br/>VM 320 – Ubuntu 24.04"]
+ TargetB["Target Host B1<br/>VM 321 – Alpine Linux"]
+ MirrorB["TAP/Bridge Mirror"]
+ end
+ 
+ subgraph TrafficZone["Traffic Generator Zone (10.10.140.x)"]
+ Attacker["Traffic Generator<br/>VM 400 – Kali Linux"]
+ end
+ end
+ end
 
-    Attacker -->|Encrypted Attacks / Benign Traffic| TargetA
-    Attacker -->|Encrypted Attacks / Benign Traffic| TargetB
-    
-    TargetA <--> MirrorA
-    TargetB <--> MirrorB
-    
-    MirrorA -.->|Port Mirroring via tc| DefenderA
-    MirrorB -.->|Port Mirroring via tc| DefenderB
+ Attacker -->|Encrypted Attacks / Benign Traffic| TargetA
+ Attacker -->|Encrypted Attacks / Benign Traffic| TargetB
+ 
+ TargetA <--> MirrorA
+ TargetB <--> MirrorB
+ 
+ MirrorA -.->|Port Mirroring via tc| DefenderA
+ MirrorB -.->|Port Mirroring via tc| DefenderB
 
-    DefenderA <==>|gRPC FL Updates over TLS| Aggregator
-    DefenderB <==>|gRPC FL Updates over TLS| Aggregator
+ DefenderA <==>|gRPC FL Updates over TLS| Aggregator
+ DefenderB <==>|gRPC FL Updates over TLS| Aggregator
 ```
 
 ### VM / Container Breakdown
 
-Each VM's resources, IP assignment, and role are designed to match the workload placement strategy defined in [03_workarounds.md](03_workarounds.md) Section 2.
+Each VM's resources, IP assignment, and role are designed to match the workload placement strategy defined in [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 2.
 
 | VM ID | Hostname | Type | OS | Resources | IP Address (vmbr1) | Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -85,7 +85,7 @@ To capture traffic on the private cluster without interfering with production ne
 
 Each defender VM has two network interfaces: `net0` on `vmbr0` (management/internet) and `net1` on `vmbr1` (dedicated capture interface). The target VM's `net0` on `vmbr1` is the mirror source. On the hypervisor host, these map to TAP interfaces named `tap<VMID>i<NET_INDEX>`.
 
-1. Ensure `vmbr1` is configured as a VLAN-aware bridge on all hypervisors. *(See [03_workarounds.md](03_workarounds.md) Section 1.C for reconciliation details.)*
+1. Ensure `vmbr1` is configured as a VLAN-aware bridge on all hypervisors. *(See [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 1.C for reconciliation details.)*
 2. Attach the target VM's NIC (`tap311i0`) and the defender VM's capture NIC (`tap310i1`) to `vmbr1`.
 3. Apply the following `tc` rules on the hypervisor host to mirror all traffic from the target to the defender:
 
@@ -97,19 +97,19 @@ ip link set dev tap310i1 promisc on
 # Mirror all incoming (ingress) traffic from target to defender
 tc qdisc add dev tap311i0 handle ffff: ingress
 tc filter add dev tap311i0 parent ffff: protocol all u32 match u32 0 0 \
-  action mirred egress mirror dev tap310i1
+ action mirred egress mirror dev tap310i1
 
 # Mirror all outgoing (egress) traffic from target to defender
 tc qdisc add dev tap311i0 root handle 1: prio
 tc filter add dev tap311i0 parent 1: protocol all u32 match u32 0 0 \
-  action mirred egress mirror dev tap310i1
+ action mirred egress mirror dev tap310i1
 ```
 
-> **Critical limitation:** Proxmox destroys TAP interfaces when a VM shuts down, erasing all `tc` rules. The hookscript workaround that solves this is documented in [03_workarounds.md](03_workarounds.md) Section 4, Phase 3.
+> **Critical limitation:** Proxmox destroys TAP interfaces when a VM shuts down, erasing all `tc` rules. The hookscript workaround that solves this is documented in [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 4, Phase 3.
 
 ### 3.2 Multi-Node Considerations (SDN/VXLAN)
 
-If the cluster spans multiple physical Proxmox nodes (as ours does), mirrored traffic cannot cross physical hosts natively. Each target VM must reside on the **same hypervisor** as its corresponding defender VM. The workload placement in [03_workarounds.md](03_workarounds.md) Section 2 enforces this co-location: `target-a1` (VM 311) and `defender-a` (VM 310) are both placed on node `its`; `target-b1` (VM 321) and `defender-b` (VM 320) are both on node `node2`.
+If the cluster spans multiple physical Proxmox nodes (as ours does), mirrored traffic cannot cross physical hosts natively. Each target VM must reside on the **same hypervisor** as its corresponding defender VM. The workload placement in [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 2 enforces this co-location: `target-a1` (VM 311) and `defender-a` (VM 310) are both placed on node `its`; `target-b1` (VM 321) and `defender-b` (VM 320) are both on node `node2`.
 
 For future deployments requiring cross-host mirroring, the PVE SDN feature with EVPN/VXLAN can route encapsulated span traffic across hosts.
 
@@ -121,10 +121,10 @@ With port mirroring delivering packets to the defender nodes (Section 3), this s
 
 ```mermaid
 graph LR
-    Raw["Raw Packets (ens19)"] --> NFStream["[ NFStream ]"]
-    NFStream --> CSV["Flow Records (CSV)"]
-    CSV --> Scale["[ Scaling & Encoding ]"]
-    Scale --> Tensor["PyTorch Tensor"]
+ Raw["Raw Packets (ens19)"] --> NFStream["[ NFStream ]"]
+ NFStream --> CSV["Flow Records (CSV)"]
+ CSV --> Scale["[ Scaling & Encoding ]"]
+ Scale --> Tensor["PyTorch Tensor"]
 ```
 
 ### 4.1 Feature Extraction with NFStream
@@ -139,7 +139,7 @@ pip install nfstream pandas scikit-learn
 
 **Feature Extraction Script (`extractor.py`):**
 
-This script captures traffic on the mirrored capture interface in real-time, generating tabular feature vectors for the neural network. Output is directed to the RAM disk buffer (see [03_workarounds.md](03_workarounds.md) Section 3.B for I/O optimization rationale).
+This script captures traffic on the mirrored capture interface in real-time, generating tabular feature vectors for the neural network. Output is directed to the RAM disk buffer (see [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 3.B for I/O optimization rationale).
 
 ```python
 from nfstream import NFStreamer
@@ -147,29 +147,29 @@ import pandas as pd
 
 # Listen on the mirrored capture interface (net1 inside the defender VM)
 streamer = NFStreamer(
-    source="ens19",          # Mirrored capture interface
-    promiscuous_mode=True,
-    snapshot_length=1536,
-    idle_timeout=10,         # Quick flow emission (optimized for live detection)
-    active_timeout=60,       # Force-flush long-lived connections
-    n_dissections=20         # Enable deep packet inspection for TLS metadata
+ source="ens19", # Mirrored capture interface
+ promiscuous_mode=True,
+ snapshot_length=1536,
+ idle_timeout=10, # Quick flow emission (optimized for live detection)
+ active_timeout=60, # Force-flush long-lived connections
+ n_dissections=20 # Enable deep packet inspection for TLS metadata
 )
 
 for flow in streamer:
-    features = {
-        "ja3_hash": flow.src_to_dst_ja3,
-        "ja3s_hash": flow.dst_to_src_ja3,
-        "sni": flow.requested_server_name,
-        "application": flow.application_name,
-        "bidirectional_packets": flow.bidirectional_packets,
-        "bidirectional_bytes": flow.bidirectional_bytes,
-        "duration_ms": flow.bidirectional_duration_ms,
-        "src2dst_packets": flow.src2dst_packets,
-        "dst2src_packets": flow.dst2src_packets,
-        "src_ip": flow.src_ip, "dst_ip": flow.dst_ip,
-        "src_port": flow.src_port, "dst_port": flow.dst_port,
-    }
-    # Batch and write to /mnt/ramdisk/flows/ as CSV for downstream training
+ features = {
+ "ja3_hash": flow.src_to_dst_ja3,
+ "ja3s_hash": flow.dst_to_src_ja3,
+ "sni": flow.requested_server_name,
+ "application": flow.application_name,
+ "bidirectional_packets": flow.bidirectional_packets,
+ "bidirectional_bytes": flow.bidirectional_bytes,
+ "duration_ms": flow.bidirectional_duration_ms,
+ "src2dst_packets": flow.src2dst_packets,
+ "dst2src_packets": flow.dst2src_packets,
+ "src_ip": flow.src_ip, "dst_ip": flow.dst_ip,
+ "src_port": flow.src_port, "dst_port": flow.dst_port,
+ }
+ # Batch and write to /mnt/ramdisk/flows/ as CSV for downstream training
 ```
 
 ### 4.2 Critical ETA Feature Set
@@ -189,28 +189,28 @@ The core innovation is combining **Flower** (a lightweight FL framework) with **
 
 ```mermaid
 graph TD
-    Aggregator["Central FL Aggregator<br/>(Flower Server – LXC 300)"]
-    
-    subgraph DefenderA ["Defender Node A"]
-        ClientA["Flower Client"]
-        CL_A["Avalanche EWC<br/>(CL Strategy)"]
-        PipeA["NFStream Pipeline<br/>(Section 4)"]
-        
-        ClientA --> CL_A
-        CL_A --> PipeA
-    end
+ Aggregator["Central FL Aggregator<br/>(Flower Server – LXC 300)"]
+ 
+ subgraph DefenderA ["Defender Node A"]
+ ClientA["Flower Client"]
+ CL_A["Avalanche EWC<br/>(CL Strategy)"]
+ PipeA["NFStream Pipeline<br/>(Section 4)"]
+ 
+ ClientA --> CL_A
+ CL_A --> PipeA
+ end
 
-    subgraph DefenderB ["Defender Node B"]
-        ClientB["Flower Client"]
-        CL_B["Avalanche EWC<br/>(CL Strategy)"]
-        PipeB["NFStream Pipeline<br/>(Section 4)"]
-        
-        ClientB --> CL_B
-        CL_B --> PipeB
-    end
+ subgraph DefenderB ["Defender Node B"]
+ ClientB["Flower Client"]
+ CL_B["Avalanche EWC<br/>(CL Strategy)"]
+ PipeB["NFStream Pipeline<br/>(Section 4)"]
+ 
+ ClientB --> CL_B
+ CL_B --> PipeB
+ end
 
-    ClientA <-->|gRPC Weight Sync| Aggregator
-    ClientB <-->|gRPC Weight Sync| Aggregator
+ ClientA <-->|gRPC Weight Sync| Aggregator
+ ClientB <-->|gRPC Weight Sync| Aggregator
 ```
 
 ### 5.1 PyTorch Neural Network Architectures (`model.py`)
@@ -223,15 +223,15 @@ A 3-layer MLP that acts as the baseline backbone.
 
 ```python
 class CyberDefenseNet(nn.Module):
-    def __init__(self, input_dim=32, num_classes=5, hidden_dim1=64, hidden_dim2=32, dropout=0.2):
-        super().__init__()
-        self.fc = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim1), nn.ReLU(), nn.Dropout(dropout),
-            nn.Linear(hidden_dim1, hidden_dim2), nn.ReLU(),
-            nn.Linear(hidden_dim2, num_classes)
-        )
-    def forward(self, x):
-        return self.fc(x)
+ def __init__(self, input_dim=32, num_classes=5, hidden_dim1=64, hidden_dim2=32, dropout=0.2):
+ super().__init__()
+ self.fc = nn.Sequential(
+ nn.Linear(input_dim, hidden_dim1), nn.ReLU(), nn.Dropout(dropout),
+ nn.Linear(hidden_dim1, hidden_dim2), nn.ReLU(),
+ nn.Linear(hidden_dim2, num_classes)
+ )
+ def forward(self, x):
+ return self.fc(x)
 ```
 
 #### 2. 1D Convolutional Neural Network (`cnn` / `CyberDefenseCNN`)
@@ -240,24 +240,24 @@ Treats the 32 input dimensions as a sequence, reshaping to `(batch, 1, 32)`. The
 
 ```python
 class CyberDefenseCNN(nn.Module):
-    def __init__(self, input_dim=32, num_classes=5, conv_channels1=16, conv_channels2=32, kernel_size=3, fc_dim=64, dropout=0.2):
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv1d(1, conv_channels1, kernel_size=kernel_size, padding=kernel_size//2), nn.ReLU(), nn.MaxPool1d(2),
-            nn.Conv1d(conv_channels1, conv_channels2, kernel_size=kernel_size, padding=kernel_size//2), nn.ReLU(), nn.MaxPool1d(2)
-        )
-        with torch.no_grad():
-            dummy_out = self.conv(torch.zeros(1, 1, input_dim))
-            self.fc_input_dim = dummy_out.numel()
-        self.fc = nn.Sequential(
-            nn.Linear(self.fc_input_dim, fc_dim), nn.ReLU(), nn.Dropout(dropout),
-            nn.Linear(fc_dim, num_classes)
-        )
-    def forward(self, x):
-        x = x.unsqueeze(1)
-        x = self.conv(x)
-        x = x.view(x.size(0), -1)
-        return self.fc(x)
+ def __init__(self, input_dim=32, num_classes=5, conv_channels1=16, conv_channels2=32, kernel_size=3, fc_dim=64, dropout=0.2):
+ super().__init__()
+ self.conv = nn.Sequential(
+ nn.Conv1d(1, conv_channels1, kernel_size=kernel_size, padding=kernel_size//2), nn.ReLU(), nn.MaxPool1d(2),
+ nn.Conv1d(conv_channels1, conv_channels2, kernel_size=kernel_size, padding=kernel_size//2), nn.ReLU(), nn.MaxPool1d(2)
+ )
+ with torch.no_grad():
+ dummy_out = self.conv(torch.zeros(1, 1, input_dim))
+ self.fc_input_dim = dummy_out.numel()
+ self.fc = nn.Sequential(
+ nn.Linear(self.fc_input_dim, fc_dim), nn.ReLU(), nn.Dropout(dropout),
+ nn.Linear(fc_dim, num_classes)
+ )
+ def forward(self, x):
+ x = x.unsqueeze(1)
+ x = self.conv(x)
+ x = x.view(x.size(0), -1)
+ return self.fc(x)
 ```
 
 #### 3. Transformer Classifier (`transformer` / `CyberDefenseTransformer`)
@@ -266,36 +266,36 @@ Reshapes the input to `token_len` tokens of dimension `token_dim`, applies linea
 
 ```python
 class CyberDefenseTransformer(nn.Module):
-    def __init__(self, input_dim=32, num_classes=5, token_len=8, token_dim=4, d_model=32, nhead=4, dim_feedforward=64, num_layers=2, fc_dim=32, dropout=0.1):
-        super().__init__()
-        assert token_len * token_dim == input_dim
-        self.token_len, self.token_dim, self.d_model = token_len, token_dim, d_model
-        self.input_projection = nn.Linear(self.token_dim, self.d_model)
-        self.pos_encoder = nn.Parameter(torch.randn(1, self.token_len, self.d_model))
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=self.d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout, batch_first=True
-        )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-        self.fc = nn.Sequential(
-            nn.Linear(self.d_model, fc_dim), nn.ReLU(), nn.Dropout(dropout),
-            nn.Linear(fc_dim, num_classes)
-        )
-    def forward(self, x):
-        x = x.view(x.size(0), self.token_len, self.token_dim)
-        x = self.input_projection(x) + self.pos_encoder
-        x = self.transformer(x).mean(dim=1)
-        return self.fc(x)
+ def __init__(self, input_dim=32, num_classes=5, token_len=8, token_dim=4, d_model=32, nhead=4, dim_feedforward=64, num_layers=2, fc_dim=32, dropout=0.1):
+ super().__init__()
+ assert token_len * token_dim == input_dim
+ self.token_len, self.token_dim, self.d_model = token_len, token_dim, d_model
+ self.input_projection = nn.Linear(self.token_dim, self.d_model)
+ self.pos_encoder = nn.Parameter(torch.randn(1, self.token_len, self.d_model))
+ encoder_layer = nn.TransformerEncoderLayer(
+ d_model=self.d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout, batch_first=True
+ )
+ self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+ self.fc = nn.Sequential(
+ nn.Linear(self.d_model, fc_dim), nn.ReLU(), nn.Dropout(dropout),
+ nn.Linear(fc_dim, num_classes)
+ )
+ def forward(self, x):
+ x = x.view(x.size(0), self.token_len, self.token_dim)
+ x = self.input_projection(x) + self.pos_encoder
+ x = self.transformer(x).mean(dim=1)
+ return self.fc(x)
 ```
 
 #### 4. Model Factory
 
 ```python
 def get_model(model_type="mlp", input_dim=32, num_classes=5, **kwargs):
-    m_type = model_type.lower()
-    if m_type == "mlp": return CyberDefenseNet(input_dim, num_classes, **kwargs)
-    elif m_type == "cnn": return CyberDefenseCNN(input_dim, num_classes, **kwargs)
-    elif m_type == "transformer": return CyberDefenseTransformer(input_dim, num_classes, **kwargs)
-    else: raise ValueError(f"Unknown model type: {model_type}")
+ m_type = model_type.lower()
+ if m_type == "mlp": return CyberDefenseNet(input_dim, num_classes, **kwargs)
+ elif m_type == "cnn": return CyberDefenseCNN(input_dim, num_classes, **kwargs)
+ elif m_type == "transformer": return CyberDefenseTransformer(input_dim, num_classes, **kwargs)
+ else: raise ValueError(f"Unknown model type: {model_type}")
 ```
 
 ### 5.2 Continual Learning Strategy (`cl_strategy.py`)
@@ -311,17 +311,17 @@ from avalanche.training.supervised import EWC
 import torch
 
 def get_continual_learner(model, device, ewc_lambda=0.8, class_weights=None):
-    if class_weights is None:
-        class_weights = [1.0, 250.0, 2.0, 5.0, 50.0]
-    weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
-    return EWC(
-        model=model,
-        optimizer=SGD(model.parameters(), lr=0.01, momentum=0.9),
-        criterion=CrossEntropyLoss(weight=weights_tensor),
-        ewc_lambda=ewc_lambda,  # Balance plasticity vs. stability
-        train_mb_size=32, train_epochs=1, eval_mb_size=32,
-        device=device
-    )
+ if class_weights is None:
+ class_weights = [1.0, 250.0, 2.0, 5.0, 50.0]
+ weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
+ return EWC(
+ model=model,
+ optimizer=SGD(model.parameters(), lr=0.01, momentum=0.9),
+ criterion=CrossEntropyLoss(weight=weights_tensor),
+ ewc_lambda=ewc_lambda, # Balance plasticity vs. stability
+ train_mb_size=32, train_epochs=1, eval_mb_size=32,
+ device=device
+ )
 ```
 
 ### 5.3 Flower FL Client (`client.py`)
@@ -340,32 +340,32 @@ net = get_model("mlp").to(device)
 cl = get_continual_learner(net, device)
 
 class CyberDefenseClient(fl.client.NumPyClient):
-    def get_parameters(self, config):
-        return [v.cpu().numpy() for _, v in net.state_dict().items()]
+ def get_parameters(self, config):
+ return [v.cpu().numpy() for _, v in net.state_dict().items()]
 
-    def set_parameters(self, params):
-        state = OrderedDict(
-            {k: torch.tensor(v) for k, v in zip(net.state_dict().keys(), params)}
-        )
-        net.load_state_dict(state, strict=True)
+ def set_parameters(self, params):
+ state = OrderedDict(
+ {k: torch.tensor(v) for k, v in zip(net.state_dict().keys(), params)}
+ )
+ net.load_state_dict(state, strict=True)
 
-    def fit(self, parameters, config):
-        self.set_parameters(parameters)
-        dataset = load_ramdisk_flows()   # From Section 4 pipeline
-        cl.train(dataset)
-        return self.get_parameters(config={}), len(dataset), {}
+ def fit(self, parameters, config):
+ self.set_parameters(parameters)
+ dataset = load_ramdisk_flows() # From Section 4 pipeline
+ cl.train(dataset)
+ return self.get_parameters(config={}), len(dataset), {}
 
-    def evaluate(self, parameters, config):
-        self.set_parameters(parameters)
-        test = load_validation_set()
-        results = cl.eval(test)
-        return float(results['Loss']), len(test), {"accuracy": float(results['Top1_Acc'])}
+ def evaluate(self, parameters, config):
+ self.set_parameters(parameters)
+ test = load_validation_set()
+ results = cl.eval(test)
+ return float(results['Loss']), len(test), {"accuracy": float(results['Top1_Acc'])}
 
 if __name__ == "__main__":
-    fl.client.start_numpy_client(
-        server_address="10.10.130.10:8080",  # Aggregator Flat L2 IP
-        client=CyberDefenseClient()
-    )
+ fl.client.start_numpy_client(
+ server_address="10.10.130.10:8080", # Aggregator Flat L2 IP
+ client=CyberDefenseClient()
+ )
 ```
 
 ### 5.4 Flower Aggregator Server (`server.py`)
@@ -376,22 +376,22 @@ The aggregator runs on LXC 300, combining parameters from all defender nodes via
 import flwr as fl
 
 def weighted_avg(metrics):
-    accs = [n * m["accuracy"] for n, m in metrics]
-    total = [n for n, _ in metrics]
-    return {"accuracy": sum(accs) / sum(total)}
+ accs = [n * m["accuracy"] for n, m in metrics]
+ total = [n for n, _ in metrics]
+ return {"accuracy": sum(accs) / sum(total)}
 
 strategy = fl.server.strategy.FedAvg(
-    fraction_fit=1.0, fraction_evaluate=1.0,
-    min_fit_clients=2, min_evaluate_clients=2, min_available_clients=2,
-    evaluate_metrics_aggregation_fn=weighted_avg,
+ fraction_fit=1.0, fraction_evaluate=1.0,
+ min_fit_clients=2, min_evaluate_clients=2, min_available_clients=2,
+ evaluate_metrics_aggregation_fn=weighted_avg,
 )
 
 if __name__ == "__main__":
-    fl.server.start_server(
-        server_address="0.0.0.0:8080",
-        config=fl.server.ServerConfig(num_rounds=100),  # Configurable via experiment.yaml
-        strategy=strategy
-    )
+ fl.server.start_server(
+ server_address="0.0.0.0:8080",
+ config=fl.server.ServerConfig(num_rounds=100), # Configurable via experiment.yaml
+ strategy=strategy
+ )
 ```
 
 ### 5.5 Local LLM Reporting Engine (`generate_llm_report.py`)
@@ -400,10 +400,10 @@ To close the MLOps loop, the pipeline triggers an automated post-training analys
 
 ```mermaid
 graph LR
-    Orchestrate["orchestrate.py"] --> Report["generate_llm_report.py"]
-    Report --> Proxy["Nginx Proxy"]
-    Proxy --> Ollama["Ollama (llama3.1:8b)"]
-    Proxy -->|markdown report| MLflow["MLflow Runs / Artifacts"]
+ Orchestrate["orchestrate.py"] --> Report["generate_llm_report.py"]
+ Report --> Proxy["Nginx Proxy"]
+ Proxy --> Ollama["Ollama (llama3.1:8b)"]
+ Proxy -->|markdown report| MLflow["MLflow Runs / Artifacts"]
 ```
 
 1. **Analytical Assessment**: The aggregator collects the training results (validation losses, final class-specific detection accuracies, and EWC backward transfer metrics).
@@ -412,13 +412,13 @@ graph LR
 
 ## 6. Setup Workflow (Step-by-Step)
 
-This section provides the generic execution sequence. For cluster-specific provisioning commands (including exact `qm create` / `pct create` flags, hookscript deployment, and software installation), see [03_workarounds.md](03_workarounds.md) Section 4.
+This section provides the generic execution sequence. For cluster-specific provisioning commands (including exact `qm create` / `pct create` flags, hookscript deployment, and software installation), see [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 4.
 
 ### Phase 1: Proxmox Virtual Networks Setup
 
 1. Log into your Proxmox server console.
-2. Ensure `vmbr1` is configured as a VLAN-aware bridge on all nodes. *(See [03_workarounds.md](03_workarounds.md) Section 1.C.)*
-3. Apply the standardized `/etc/hosts` template. *(See [03_workarounds.md](03_workarounds.md) Section 1.A.)*
+2. Ensure `vmbr1` is configured as a VLAN-aware bridge on all nodes. *(See [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 1.C.)*
+3. Apply the standardized `/etc/hosts` template. *(See [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 1.A.)*
 
 ### Phase 2: VM & Container Provisioning
 
@@ -426,38 +426,38 @@ This section provides the generic execution sequence. For cluster-specific provi
 2. Deploy VM 310 (`defender-a`) on node `its` with dual NICs (`vmbr0` + `vmbr1` Flat L2 Network).
 3. Deploy VM 320 (`defender-b`) on node `node2` with dual NICs (`vmbr0` + `vmbr1` Flat L2 Network).
 4. Deploy target VMs 311 and 321, and traffic generator VM 400.
-5. Bind hookscripts to target VMs for automatic port mirroring. *(See [03_workarounds.md](03_workarounds.md) Section 4, Phase 3.)*
+5. Bind hookscripts to target VMs for automatic port mirroring. *(See [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 4, Phase 3.)*
 
 ### Phase 3: Traffic Generation & Data Collection
 
 1. **Benign Background**: On target VMs, run headless browser scripts (Selenium) simulating human HTTPS browsing. *(See [01_prerequisites.md](01_prerequisites.md) Section 4.)*
 2. **Benchmark Replay**: On the traffic generator VM, replay labeled PCAPs (CIC-IDS2017, USTC-TFC2016) using `tcpreplay`. *(See [01_prerequisites.md](01_prerequisites.md) Section 3.)*
 3. **Live Attacks**: On the traffic generator VM, execute coordinated attack campaigns:
-   * SSH brute force via `hydra` against target hosts.
-   * HTTPS flood / Slowloris attacks.
-   * Encrypted C2 beaconing via Metasploit reverse HTTPS shells.
+ * SSH brute force via `hydra` against target hosts.
+ * HTTPS flood / Slowloris attacks.
+ * Encrypted C2 beaconing via Metasploit reverse HTTPS shells.
 4. Keep the `extractor.py` script running on defender nodes to capture flows into `/mnt/ramdisk/flows/`, labeling them based on active attack scripts.
 
 ### Phase 4: Model Execution and Verification
 
 1. Start the Flower aggregator server on LXC 300:
 
-   ```bash
-   source /opt/flower-env/bin/activate && python3 server.py
-   ```
+ ```bash
+ source /opt/flower-env/bin/activate && python3 server.py
+ ```
 
 2. Start the NFStream capture on each defender VM:
 
-   ```bash
-   source ~/fl-cl-env/bin/activate
-   python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/
-   ```
+ ```bash
+ source ~/fl-cl-env/bin/activate
+ python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/
+ ```
 
 3. Start FL-CL clients on each defender VM:
 
-   ```bash
-   python3 client.py --server 10.10.130.10:8080 --client-id A
-   ```
+ ```bash
+ python3 client.py --server 10.10.130.10:8080 --client-id A
+ ```
 
 4. Monitor training rounds via MLflow/TensorBoard. *(See [01_prerequisites.md](01_prerequisites.md) Section 5.B.)*
 
@@ -466,18 +466,18 @@ This section provides the generic execution sequence. For cluster-specific provi
 The hybrid FL-CL system's performance, stability, and resistance to catastrophic forgetting are validated using a three-tier benchmarking suite:
 
 1. **Client-Side Plasticity Evaluation (80/20 Ephemeral Split):**
-   * **Mechanism:** Defender clients automatically split their incoming ephemeral RAM disk batch holding out 20% for local validation.
-   * **Metrics:** This enables real-time evaluation of plasticity (ability to learn the current task) immediately after the EWC training hook.
+ * **Mechanism:** Defender clients automatically split their incoming ephemeral RAM disk batch holding out 20% for local validation.
+ * **Metrics:** This enables real-time evaluation of plasticity (ability to learn the current task) immediately after the EWC training hook.
 
 2. **Per-Round Confusion Matrix Tracking (I3):**
-   * **Mechanism:** Defender clients compute local 5x5 confusion matrices on their 20% validation sets and return flattened counts (`cm_t_p`) to the aggregator.
-   * **Aggregation & Visualization:** The aggregator server sums the counts in `weighted_avg` and automatically plots a styled, headless `matplotlib` heatmap logged under `confusion_matrices/confusion_round_{round}.png` in MLflow for every round.
+ * **Mechanism:** Defender clients compute local 5x5 confusion matrices on their 20% validation sets and return flattened counts (`cm_t_p`) to the aggregator.
+ * **Aggregation & Visualization:** The aggregator server sums the counts in `weighted_avg` and automatically plots a styled, headless `matplotlib` heatmap logged under `confusion_matrices/confusion_round_{round}.png` in MLflow for every round.
 
 3. **Standardized BWT Evaluation Suite & Cryptographic Lineage (I1):**
-   * **Tool:** `tools/bwt_eval_suite.py` evaluates candidate TorchScript checkpoints (`.pt`) against ground-truth validation datasets.
-   * **Metrics:** Computes overall accuracy, macro/class-wise F1, and Backward Transfer (BWT) delta profiles relative to historical peak performance.
-   * **Governance:** Signs the results cryptographically with a SHA-256 signature chain combining the model binary hash, the validation dataset flow hash, and the evaluation performance stats, exporting them as a signed CSV to MLflow.
+ * **Tool:** `tools/bwt_eval_suite.py` evaluates candidate TorchScript checkpoints (`.pt`) against ground-truth validation datasets.
+ * **Metrics:** Computes overall accuracy, macro/class-wise F1, and Backward Transfer (BWT) delta profiles relative to historical peak performance.
+ * **Governance:** Signs the results cryptographically with a SHA-256 signature chain combining the model binary hash, the validation dataset flow hash, and the evaluation performance stats, exporting them as a signed CSV to MLflow.
 
 3. **Cross-Dataset Generalization Benchmark (I2):**
-   * **Tool:** `tools/cross_dataset_benchmark.py` measures model transferability and generalization gaps across heterogeneous flow domains (e.g., training on `CIC-IDS2017` and evaluating on `USTC-TFC2016`).
-   * **Covariate Shift Simulator:** Uses a mathematical feature-shift engine (offset and scaling adjustments) to simulate the distribution of the secondary dataset if local raw pcap directories are unavailable, outputting comparative matrices and uploading generalization logs to MLflow.
+ * **Tool:** `tools/cross_dataset_benchmark.py` measures model transferability and generalization gaps across heterogeneous flow domains (e.g., training on `CIC-IDS2017` and evaluating on `USTC-TFC2016`).
+ * **Covariate Shift Simulator:** Uses a mathematical feature-shift engine (offset and scaling adjustments) to simulate the distribution of the secondary dataset if local raw pcap directories are unavailable, outputting comparative matrices and uploading generalization logs to MLflow.

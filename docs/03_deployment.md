@@ -14,12 +14,12 @@ This testbed combines **Federated Learning (FL)** for collaborative decentralize
 
 ```mermaid
 graph RL
-    subgraph Conceptual_Pipeline ["Federated Continual Learning Cycle"]
-        DataStream["Encrypted Traffic Stream <br> (Non-Stationary)"] -->|Layer 4: NFStream <br> Extraction| FeatureTensors["Feature Vectors <br> (32 features)"]
-        FeatureTensors -->|Layer 5: Local CL <br> with EWC| LocalUpdates["Local Parameter Updates <br> (Regularized by FIM)"]
-        LocalUpdates -->|Layer 6: FL Sync - <br> Flower and gRPC| GlobalAggregator["Global Aggregation <br> (FedAvg)"]
-        GlobalAggregator -->|Broadcast <br> Global Model| DataStream
-    end
+ subgraph Conceptual_Pipeline ["Federated Continual Learning Cycle"]
+ DataStream["Encrypted Traffic Stream <br> (Non-Stationary)"] -->|Layer 4: NFStream <br> Extraction| FeatureTensors["Feature Vectors <br> (32 features)"]
+ FeatureTensors -->|Layer 5: Local CL <br> with EWC| LocalUpdates["Local Parameter Updates <br> (Regularized by FIM)"]
+ LocalUpdates -->|Layer 6: FL Sync - <br> Flower and gRPC| GlobalAggregator["Global Aggregation <br> (FedAvg)"]
+ GlobalAggregator -->|Broadcast <br> Global Model| DataStream
+ end
 ```
 
 ### The Stability-Plasticity Dilemma
@@ -69,19 +69,19 @@ The underlying infrastructure consists of three physical servers connected to an
 
 ```mermaid
 graph LR
-    subgraph physical_nodes ["Physical Nodes"]
-        its["its (Compute Node A)<br/>bond0 (LACP)"]
-        node2["node2 (Compute Node B)<br/>bond0 (LACP)"]
-        pve["pve (Orchestration Node)<br/>eth0"]
-    end
-    
-    subgraph network_fabric ["Network Fabric"]
-        Switch["L2 Managed Switch<br/>802.1Q Trunking"]
-    end
+ subgraph physical_nodes ["Physical Nodes"]
+ its["its (Compute Node A)<br/>bond0 (LACP)"]
+ node2["node2 (Compute Node B)<br/>bond0 (LACP)"]
+ pve["pve (Orchestration Node)<br/>eth0"]
+ end
+ 
+ subgraph network_fabric ["Network Fabric"]
+ Switch["L2 Managed Switch<br/>802.1Q Trunking"]
+ end
 
-    its <==>|LACP Trunk| Switch
-    node2 <==>|LACP Trunk| Switch
-    pve <==>|Trunk Link| Switch
+ its <==>|LACP Trunk| Switch
+ node2 <==>|LACP Trunk| Switch
+ pve <==>|Trunk Link| Switch
 ```
 
 #### Step 1.1: Standardize Node Host Resolution
@@ -91,9 +91,9 @@ To ensure reliable cluster communication and Corosync health, route node traffic
 ```bash
 cat << 'EOF' >> /etc/hosts
 # Secondary Network Cluster Resolution
-10.10.10.11     its.ac.id its
-10.10.10.12     node2.ac.id node2
-10.10.10.13     pve.ac.id pve
+10.10.10.11 its.ac.id its
+10.10.10.12 node2.ac.id node2
+10.10.10.13 pve.ac.id pve
 EOF
 ```
 
@@ -125,11 +125,11 @@ Network isolation and routing boundaries are enforced using Proxmox native Linux
 
 ```mermaid
 graph TD
-    subgraph node_its ["Node 'its'"]
-        bond0["Physical bond0 (PROMISC ON)"] <--> vmbr1["vmbr1 (PROMISC ON)"]
-        vmbr1 <-->|Flat L2| tap310i1["tap310i1 (Defender A Capture)"]
-        vmbr1 <-->|Flat L2| tap311i0["tap311i0 (Target A1 Access)"]
-    end
+ subgraph node_its ["Node 'its'"]
+ bond0["Physical bond0 (PROMISC ON)"] <--> vmbr1["vmbr1 (PROMISC ON)"]
+ vmbr1 <-->|Flat L2| tap310i1["tap310i1 (Defender A Capture)"]
+ vmbr1 <-->|Flat L2| tap311i0["tap311i0 (Target A1 Access)"]
+ end
 ```
 
 #### Step 2.1: Enable VLAN Awareness on vmbr1
@@ -139,9 +139,9 @@ Execute the following on nodes `its` and `pve` (already active on `node2`):
 ```bash
 # Add VLAN awareness parameter if not present
 if ! grep -q "bridge-vlan-aware yes" /etc/network/interfaces; then
-    sed -i '/iface vmbr1 inet manual/a \        bridge-vlan-aware yes' /etc/network/interfaces
-    # Apply settings dynamically using ifupdown2
-    ifup --force vmbr1
+ sed -i '/iface vmbr1 inet manual/a \ bridge-vlan-aware yes' /etc/network/interfaces
+ # Apply settings dynamically using ifupdown2
+ ifup --force vmbr1
 fi
 ```
 
@@ -151,16 +151,16 @@ Create the aggregator LXC container. `net1` is bound to `vmbr1` on the flat L2 n
 
 ```bash
 pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
-  --cores 4 \
-  --memory 8192 \
-  --swap 2048 \
-  --hostname fl-aggregator \
-  --ostype ubuntu \
-  --rootfs local:50 \
-  --net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  --net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
-  --onboot 1 \
-  --start 1
+ --cores 4 \
+ --memory 8192 \
+ --swap 2048 \
+ --hostname fl-aggregator \
+ --ostype ubuntu \
+ --rootfs local:50 \
+ --net0 name=eth0,bridge=vmbr0,ip=dhcp \
+ --net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
+ --onboot 1 \
+ --start 1
 ```
 
 #### Step 2.3: Provision the Defender and Target VMs
@@ -172,16 +172,16 @@ Deploy the VM instances without VLAN tags to ensure untagged flat L2 operations 
 ```bash
 # Create Defender VM (ID 310)
 qm create 310 --name defender-a --cores 8 --memory 16384 --balloon 8192 \
-  --cpu host --sockets 1 --ostype l26 \
-  --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1 \
-  --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
-  --boot order=scsi0 --onboot 1 --start 0
+ --cpu host --sockets 1 --ostype l26 \
+ --net0 virtio,bridge=vmbr0 \
+ --net1 virtio,bridge=vmbr1 \
+ --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
+ --boot order=scsi0 --onboot 1 --start 0
 
 # Create Target VM (ID 311)
 qm create 311 --name target-a1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1 \
-  --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
+ --net0 virtio,bridge=vmbr1 \
+ --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 ```
 
 **On Node `node2` (Defender B, Target B1, & Traffic Generator):**
@@ -189,22 +189,22 @@ qm create 311 --name target-a1 --cores 1 --memory 1024 \
 ```bash
 # Create Defender VM (ID 320)
 qm create 320 --name defender-b --cores 8 --memory 16384 --balloon 8192 \
-  --cpu host --sockets 1 --ostype l26 \
-  --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1 \
-  --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
-  --boot order=scsi0 --onboot 1 --start 0
+ --cpu host --sockets 1 --ostype l26 \
+ --net0 virtio,bridge=vmbr0 \
+ --net1 virtio,bridge=vmbr1 \
+ --scsihw virtio-scsi-pci --scsi0 local:100,discard=on \
+ --boot order=scsi0 --onboot 1 --start 0
 
 # Create Target VM (ID 321)
 qm create 321 --name target-b1 --cores 1 --memory 1024 \
-  --net0 virtio,bridge=vmbr1 \
-  --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
+ --net0 virtio,bridge=vmbr1 \
+ --scsihw virtio-scsi-pci --scsi0 local:10,discard=on --start 0
 
 # Create Traffic Generator (ID 400)
 qm create 400 --name traffic-gen --cores 4 --memory 4096 \
-  --net0 virtio,bridge=vmbr0 \
-  --net1 virtio,bridge=vmbr1 \
-  --scsihw virtio-scsi-pci --scsi0 local:50,discard=on --start 0
+ --net0 virtio,bridge=vmbr0 \
+ --net1 virtio,bridge=vmbr1 \
+ --scsihw virtio-scsi-pci --scsi0 local:50,discard=on --start 0
 ```
 
 ---
@@ -217,18 +217,18 @@ To resolve this, we implement a Proxmox Lifecycle Hookscript that automatically 
 
 ```mermaid
 sequenceDiagram
-    participant PVE as Proxmox host (its)
-    participant VM311 as Target VM (311)
-    participant VM310 as Defender VM (310)
+ participant PVE as Proxmox host (its)
+ participant VM311 as Target VM (311)
+ participant VM310 as Defender VM (310)
 
-    VM311->>PVE: Boot Trigger (qm start 311)
-    PVE->>PVE: Create interface tap311i0
-    PVE->>PVE: Run mirror-hook.sh (post-start)
-    Note over PVE: Wait 3 seconds for bridge attachment
-    PVE->>PVE: Set tap311i0 and tap310i1 to promisc
-    PVE->>PVE: Apply tc ingress/egress mirror rules
-    PVE->>VM311: VM execution begins
-    VM311->>VM310: Traffic duplicated to tap310i1 in background
+ VM311->>PVE: Boot Trigger (qm start 311)
+ PVE->>PVE: Create interface tap311i0
+ PVE->>PVE: Run mirror-hook.sh (post-start)
+ Note over PVE: Wait 3 seconds for bridge attachment
+ PVE->>PVE: Set tap311i0 and tap310i1 to promisc
+ PVE->>PVE: Apply tc ingress/egress mirror rules
+ PVE->>VM311: VM execution begins
+ VM311->>VM310: Traffic duplicated to tap310i1 in background
 ```
 
 #### Step 3.1: Enable Snippet Storage
@@ -251,27 +251,27 @@ vmid=$1
 phase=$2
 
 if [ "$vmid" = "311" ] && [ "$phase" = "post-start" ]; then
-    SOURCE="tap311i0"
-    MIRROR="tap310i1"
-    
-    echo "Hook: VM 311 started. Applying traffic mirroring to $MIRROR..."
-    sleep 3  # Wait for bridge initialization
-    
-    # Configure interfaces to promiscuous mode
-    ip link set dev $SOURCE promisc on
-    ip link set dev $MIRROR promisc on
-    
-    # Mirror incoming (ingress) packets
-    tc qdisc add dev $SOURCE handle ffff: ingress
-    tc filter add dev $SOURCE parent ffff: protocol all u32 match u32 0 0 \
-      action mirred egress mirror dev $MIRROR
-      
-    # Mirror outgoing (egress) packets
-    tc qdisc add dev $SOURCE root handle 1: prio
-    tc filter add dev $SOURCE parent 1: protocol all u32 match u32 0 0 \
-      action mirred egress mirror dev $MIRROR
-      
-    echo "Hook: Traffic control rules successfully registered."
+ SOURCE="tap311i0"
+ MIRROR="tap310i1"
+ 
+ echo "Hook: VM 311 started. Applying traffic mirroring to $MIRROR..."
+ sleep 3 # Wait for bridge initialization
+ 
+ # Configure interfaces to promiscuous mode
+ ip link set dev $SOURCE promisc on
+ ip link set dev $MIRROR promisc on
+ 
+ # Mirror incoming (ingress) packets
+ tc qdisc add dev $SOURCE handle ffff: ingress
+ tc filter add dev $SOURCE parent ffff: protocol all u32 match u32 0 0 \
+ action mirred egress mirror dev $MIRROR
+ 
+ # Mirror outgoing (egress) packets
+ tc qdisc add dev $SOURCE root handle 1: prio
+ tc filter add dev $SOURCE parent 1: protocol all u32 match u32 0 0 \
+ action mirred egress mirror dev $MIRROR
+ 
+ echo "Hook: Traffic control rules successfully registered."
 fi
 EOF
 chmod +x /var/lib/vz/snippets/mirror-hook-a.sh
@@ -290,27 +290,27 @@ vmid=$1
 phase=$2
 
 if [ "$vmid" = "321" ] && [ "$phase" = "post-start" ]; then
-    SOURCE="tap321i0"
-    MIRROR="tap320i1"
-    
-    echo "Hook: VM 321 started. Applying traffic mirroring to $MIRROR..."
-    sleep 3  # Wait for bridge initialization
-    
-    # Configure interfaces to promiscuous mode
-    ip link set dev $SOURCE promisc on
-    ip link set dev $MIRROR promisc on
-    
-    # Mirror incoming (ingress) packets
-    tc qdisc add dev $SOURCE handle ffff: ingress
-    tc filter add dev $SOURCE parent ffff: protocol all u32 match u32 0 0 \
-      action mirred egress mirror dev $MIRROR
-      
-    # Mirror outgoing (egress) packets
-    tc qdisc add dev $SOURCE root handle 1: prio
-    tc filter add dev $SOURCE parent 1: protocol all u32 match u32 0 0 \
-      action mirred egress mirror dev $MIRROR
-      
-    echo "Hook: Traffic control rules successfully registered."
+ SOURCE="tap321i0"
+ MIRROR="tap320i1"
+ 
+ echo "Hook: VM 321 started. Applying traffic mirroring to $MIRROR..."
+ sleep 3 # Wait for bridge initialization
+ 
+ # Configure interfaces to promiscuous mode
+ ip link set dev $SOURCE promisc on
+ ip link set dev $MIRROR promisc on
+ 
+ # Mirror incoming (ingress) packets
+ tc qdisc add dev $SOURCE handle ffff: ingress
+ tc filter add dev $SOURCE parent ffff: protocol all u32 match u32 0 0 \
+ action mirred egress mirror dev $MIRROR
+ 
+ # Mirror outgoing (egress) packets
+ tc qdisc add dev $SOURCE root handle 1: prio
+ tc filter add dev $SOURCE parent 1: protocol all u32 match u32 0 0 \
+ action mirred egress mirror dev $MIRROR
+ 
+ echo "Hook: Traffic control rules successfully registered."
 fi
 EOF
 chmod +x /var/lib/vz/snippets/mirror-hook-b.sh
@@ -325,9 +325,9 @@ Within each Defender VM, network packets duplicated from the targets are capture
 
 ```mermaid
 graph TD
-    Target["Target VM Interface"] -->|SPAN| ens19["Defender Interface ens19"]
-    ens19 --> Engine["NFStream Engine"]
-    Engine -->|Extract Features| Buffer["tmpfs RAM Disk Buffer<br/>(/mnt/ramdisk/flows/)"]
+ Target["Target VM Interface"] -->|SPAN| ens19["Defender Interface ens19"]
+ ens19 --> Engine["NFStream Engine"]
+ Engine -->|Extract Features| Buffer["tmpfs RAM Disk Buffer<br/>(/mnt/ramdisk/flows/)"]
 ```
 
 #### Step 4.1: Bypass I/O Bottlenecks with a tmpfs RAM Disk
@@ -354,45 +354,45 @@ import pandas as pd
 from nfstream import NFStreamer
 
 def extract_features(interface, out_dir, batch_size=500):
-    os.makedirs(out_dir, exist_ok=True)
-    print(f"[*] Starting NFStream extraction on {interface}...")
-    
-    streamer = NFStreamer(
-        source=interface,
-        promiscuous_mode=True,
-        snapshot_length=1536,
-        idle_timeout=10,       # Quick flow emission for live detection
-        active_timeout=60,     # Force-flush long-lived connections
-        n_dissections=20       # Deep packet inspection for TLS metadata
-    )
-    
-    batch = []
-    batch_num = 0
-    for flow in streamer:
-        features = {
-            "ja3_hash": getattr(flow, "src_to_dst_ja3", ""),
-            "ja3s_hash": getattr(flow, "dst_to_src_ja3", ""),
-            "bidirectional_packets": flow.bidirectional_packets,
-            "bidirectional_bytes": flow.bidirectional_bytes,
-            "duration_ms": flow.bidirectional_duration_ms,
-            "src_ip": flow.src_ip, "dst_ip": flow.dst_ip,
-            "src_port": flow.src_port, "dst_port": flow.dst_port,
-        }
-        batch.append(features)
-        if len(batch) >= batch_size:
-            batch_num += 1
-            pd.DataFrame(batch).to_csv(
-                os.path.join(out_dir, f"flows_{batch_num:06d}.csv"), index=False
-            )
-            batch = []
+ os.makedirs(out_dir, exist_ok=True)
+ print(f"[*] Starting NFStream extraction on {interface}...")
+ 
+ streamer = NFStreamer(
+ source=interface,
+ promiscuous_mode=True,
+ snapshot_length=1536,
+ idle_timeout=10, # Quick flow emission for live detection
+ active_timeout=60, # Force-flush long-lived connections
+ n_dissections=20 # Deep packet inspection for TLS metadata
+ )
+ 
+ batch = []
+ batch_num = 0
+ for flow in streamer:
+ features = {
+ "ja3_hash": getattr(flow, "src_to_dst_ja3", ""),
+ "ja3s_hash": getattr(flow, "dst_to_src_ja3", ""),
+ "bidirectional_packets": flow.bidirectional_packets,
+ "bidirectional_bytes": flow.bidirectional_bytes,
+ "duration_ms": flow.bidirectional_duration_ms,
+ "src_ip": flow.src_ip, "dst_ip": flow.dst_ip,
+ "src_port": flow.src_port, "dst_port": flow.dst_port,
+ }
+ batch.append(features)
+ if len(batch) >= batch_size:
+ batch_num += 1
+ pd.DataFrame(batch).to_csv(
+ os.path.join(out_dir, f"flows_{batch_num:06d}.csv"), index=False
+ )
+ batch = []
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--interface", default="ens19")
-    parser.add_argument("--out-dir", default="/mnt/ramdisk/flows/")
-    parser.add_argument("--batch-size", type=int, default=500)
-    args = parser.parse_args()
-    extract_features(args.interface, args.out_dir, args.batch_size)
+ parser = argparse.ArgumentParser()
+ parser.add_argument("--interface", default="ens19")
+ parser.add_argument("--out-dir", default="/mnt/ramdisk/flows/")
+ parser.add_argument("--batch-size", type=int, default=500)
+ args = parser.parse_args()
+ extract_features(args.interface, args.out_dir, args.batch_size)
 ```
 
 ---
@@ -419,19 +419,19 @@ from torch.optim import SGD
 from avalanche.training.supervised import EWC
 
 def get_continual_learner(model, device, ewc_lambda=0.8, class_weights=None):
-    if class_weights is None:
-        class_weights = [1.0, 250.0, 2.0, 5.0, 50.0]
-    weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
-    return EWC(
-        model=model,
-        optimizer=SGD(model.parameters(), lr=0.01, momentum=0.9),
-        criterion=CrossEntropyLoss(weight=weights_tensor),
-        ewc_lambda=ewc_lambda,
-        train_mb_size=32,
-        train_epochs=1,
-        eval_mb_size=32,
-        device=device,
-    )
+ if class_weights is None:
+ class_weights = [1.0, 250.0, 2.0, 5.0, 50.0]
+ weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
+ return EWC(
+ model=model,
+ optimizer=SGD(model.parameters(), lr=0.01, momentum=0.9),
+ criterion=CrossEntropyLoss(weight=weights_tensor),
+ ewc_lambda=ewc_lambda,
+ train_mb_size=32,
+ train_epochs=1,
+ eval_mb_size=32,
+ device=device,
+ )
 ```
 
 ---
@@ -442,12 +442,12 @@ Federated coordination uses the **Flower** framework. Local parameter updates ar
 
 ```mermaid
 graph TD
-    Aggregator["FL Aggregator (LXC 300)"]
-    DefenderA["Defender A"]
-    DefenderB["Defender B"]
+ Aggregator["FL Aggregator (LXC 300)"]
+ DefenderA["Defender A"]
+ DefenderB["Defender B"]
 
-    Aggregator <-->|gRPC / TLS| DefenderA
-    Aggregator <-->|gRPC / TLS| DefenderB
+ Aggregator <-->|gRPC / TLS| DefenderA
+ Aggregator <-->|gRPC / TLS| DefenderB
 ```
 
 #### Step 6.1: Run the Flower Server (`server.py` on LXC 300)
@@ -481,36 +481,36 @@ from model import get_model
 from cl_strategy import get_cl_strategy
 
 class CyberDefenseClient(fl.client.NumPyClient):
-    def __init__(self, client_id, model_type="cnn"):
-        self.model = get_model(model_type, input_dim=32, num_classes=5)
-        self.strategy = get_cl_strategy(self.model, ewc_lambda=0.8)
-        self.client_id = client_id
+ def __init__(self, client_id, model_type="cnn"):
+ self.model = get_model(model_type, input_dim=32, num_classes=5)
+ self.strategy = get_cl_strategy(self.model, ewc_lambda=0.8)
+ self.client_id = client_id
 
-    def get_parameters(self, config):
-        return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
+ def get_parameters(self, config):
+ return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
 
-    def set_parameters(self, parameters):
-        params_dict = zip(self.model.state_dict().keys(), parameters)
-        state_dict = {k: torch.tensor(v) for k, v in params_dict}
-        self.model.load_state_dict(state_dict, strict=True)
+ def set_parameters(self, parameters):
+ params_dict = zip(self.model.state_dict().keys(), parameters)
+ state_dict = {k: torch.tensor(v) for k, v in params_dict}
+ self.model.load_state_dict(state_dict, strict=True)
 
-    def fit(self, parameters, config):
-        self.set_parameters(parameters)
-        # Load captured flows from RAM disk
-        train_data = load_data_from_ramdisk()
-        self.strategy.train(train_data)
-        return self.get_parameters(config={}), len(train_data), {}
+ def fit(self, parameters, config):
+ self.set_parameters(parameters)
+ # Load captured flows from RAM disk
+ train_data = load_data_from_ramdisk()
+ self.strategy.train(train_data)
+ return self.get_parameters(config={}), len(train_data), {}
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--server", default="10.10.130.10:8080")
-    parser.add_argument("--client-id", required=True)
-    args = parser.parse_args()
-    
-    fl.client.start_numpy_client(
-        server_address=args.server,
-        client=CyberDefenseClient(args.client_id)
-    )
+ parser = argparse.ArgumentParser()
+ parser.add_argument("--server", default="10.10.130.10:8080")
+ parser.add_argument("--client-id", required=True)
+ args = parser.parse_args()
+ 
+ fl.client.start_numpy_client(
+ server_address=args.server,
+ client=CyberDefenseClient(args.client_id)
+ )
 ```
 
 ---
@@ -521,8 +521,8 @@ To evaluate the learning stability and detection performance of the system, the 
 
 ```mermaid
 graph TD
-    TG["Traffic Generator VM 400"] --> TargetA["Target A1 (10.10.110.15/16)"]
-    TG --> TargetB["Target B1 (10.10.120.15/16)"]
+ TG["Traffic Generator VM 400"] --> TargetA["Target A1 (10.10.110.15/16)"]
+ TG --> TargetB["Target B1 (10.10.120.15/16)"]
 ```
 
 #### Step 7.1: Network Reachability on the Flat L2 Subnet
@@ -550,8 +550,8 @@ slowloris 10.10.110.15 -p 80 -s 100
 # 3. Replay Historical Attacks using tcpreplay
 # Rewrite IPs to match target subnets
 tcprewrite --pcap=input.pcap --out=output.pcap \
-  --srcipmap=0.0.0.0/0:10.10.140.10 \
-  --dstipmap=0.0.0.0/0:10.10.110.15
+ --srcipmap=0.0.0.0/0:10.10.140.10 \
+ --dstipmap=0.0.0.0/0:10.10.110.15
 tcpreplay --intf=eth1 --pps=500 output.pcap
 ```
 
@@ -633,17 +633,17 @@ Follow this execution sequence to start the FCL framework:
 
 ```mermaid
 graph LR
-    PVE["1. PVE Network Config"] --> VMs["2. Boot target VMs"]
-    VMs --> Orch["3. Launch Automated Orchestrator"]
-    Orch --> MLflow["4. Monitor via MLflow UI"]
+ PVE["1. PVE Network Config"] --> VMs["2. Boot target VMs"]
+ VMs --> Orch["3. Launch Automated Orchestrator"]
+ Orch --> MLflow["4. Monitor via MLflow UI"]
 ```
 
 * [x] **Phase 1**: Set up `vmbr1` on all physical nodes with `10.10.0.0/16` logical ranges.
 * [x] **Phase 2**: Boot the target VMs (`311` and `321`). Ensure the lifecycle hookscripts apply mirroring rules successfully (`journalctl -u pvedaemon | grep "mirror-hook"`).
 * [x] **Phase 3**: Run the master orchestrator (`python src/orchestrate.py`) to launch:
-  * Benign target servers (`busybox httpd`)
-  * NFStream extractors (`src/defender/extractor.py`)
-  * Aggregator and MLflow servers (`src/aggregator/server.py`)
-  * Offensive traffic generator (`src/traffic_gen/attack_flow.py`: Benign → SSH → Slowloris → DNS Exfil → Botnet)
-  * Flower continual learning clients (`src/defender/client.py` using Avalanche EWC)
+ * Benign target servers (`busybox httpd`)
+ * NFStream extractors (`src/defender/extractor.py`)
+ * Aggregator and MLflow servers (`src/aggregator/server.py`)
+ * Offensive traffic generator (`src/traffic_gen/attack_flow.py`: Benign → SSH → Slowloris → DNS Exfil → Botnet)
+ * Flower continual learning clients (`src/defender/client.py` using Avalanche EWC)
 * [x] **Phase 4**: Open `http://10.10.130.10:5000` to monitor training metrics and catastrophic forgetting mitigation in real time.
