@@ -73,7 +73,7 @@ def main():
     parser.add_argument("--checkpoint", required=True, help="Path to TorchScript model checkpoint (.pt)")
     parser.add_argument("--dataset-a-dir", default="/mnt/ramdisk/flows", help="Dataset A (CIC-IDS2017) flow CSV directory")
     parser.add_argument("--dataset-b-dir", help="Dataset B (USTC-TFC2016) flow CSV directory (optional)")
-    parser.add_argument("--output", default="generalization_benchmark_report.csv", help="Output path for CSV report")
+    parser.add_argument("--output", default=os.path.join("data", "reports", "generalization_benchmark_report.csv"), help="Output path for CSV report")
     parser.add_argument("--mlflow-run-id", help="Active MLflow run ID to tag parameters and log metrics")
     args = parser.parse_args()
 

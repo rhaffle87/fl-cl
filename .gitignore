@@ -38,9 +38,10 @@ Thumbs.db
 id_rsa
 id_rsa.pub
 
-# Model checkpoints (saved on remote aggregator)
+# Model checkpoints & data storage
 checkpoints/
 *.pt
+data/
 
 # Dynamic target credentials & temporary files
 runs/

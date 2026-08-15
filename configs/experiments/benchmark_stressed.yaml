@@ -1,6 +1,8 @@
+experiment_name: "FL-CL-Benchmark-Stressed"
+
 experiment:
-  name: FL-CL-Benchmark-Stressed
-  description: 'Category 3: Highly Stressed Test'
+  name: "FL-CL-Benchmark-Stressed"
+  description: "Category 3: Heavy / Stressed Testbed Tier"
 fl:
   rounds: 15
   min_clients: 2

@@ -1,6 +1,8 @@
+experiment_name: "FL-CL-Benchmark-Balanced"
+
 experiment:
-  name: FL-CL-Benchmark-Balanced
-  description: 'Category 2: Medium / Balanced Test'
+  name: "FL-CL-Benchmark-Balanced"
+  description: "Category 2: Medium / Balanced Testbed Tier"
 fl:
   rounds: 5
   min_clients: 2

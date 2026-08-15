@@ -6,9 +6,11 @@
 # as an MLflow artifact so every run is fully reproducible.
 # ─────────────────────────────────────────────────────────────
 
+experiment_name: "FL-CL-Baseline"
+
 experiment:
-  name: "FL-CL-EWC-Baseline"
-  description: "Federated Continual Learning with EWC on 5-class encrypted traffic"
+  name: "FL-CL-Baseline"
+  description: "Baseline Federated Continual Learning with EWC on 5-class encrypted network traffic"
 
 # ── Federated Learning ──────────────────────────────────────
 fl:

@@ -1,6 +1,8 @@
+experiment_name: "FL-CL-Benchmark-Quick"
+
 experiment:
-  name: FL-CL-Benchmark-Quick
-  description: 'Category 1: Fast / Quick Test'
+  name: "FL-CL-Benchmark-Quick"
+  description: "Category 1: Fast / Quick Testbed Tier"
 fl:
   rounds: 2
   min_clients: 2

@@ -148,6 +148,21 @@ def process_flow_file(file_path, model, device, threshold, alerts_log, stats_pat
                     f.write(json.dumps(alert) + "\n")
             except Exception as e:
                 print(f"[inference] Error writing alert log: {e}")
+
+            # Dispatch live Telegram telemetry alert if enabled
+            try:
+                from notifications import TelegramNotifier
+                notifier = TelegramNotifier()
+                if notifier.enabled:
+                    alert_msg = (
+                        f"🚨 <b>INTRUSION DETECTED</b>\n"
+                        f"• <b>Threat</b>: {alert['predicted_label']}\n"
+                        f"• <b>Confidence</b>: {alert['confidence']:.2%}\n"
+                        f"• <b>Flow</b>: <code>{alert['src_ip']}:{alert['src_port']} ➔ {alert['dst_ip']}:{alert['dst_port']}</code>"
+                    )
+                    notifier.send_message(alert_msg)
+            except Exception:
+                pass
             
             alerts_triggered += 1
             

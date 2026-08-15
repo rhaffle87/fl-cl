@@ -1,6 +1,8 @@
+experiment_name: "FL-CL-Benchmark-RealWorld"
+
 experiment:
-  name: FL-CL-Benchmark-RealWorld
-  description: 'Category 4: Real-World Scenarios'
+  name: "FL-CL-Benchmark-RealWorld"
+  description: "Category 4: Realistic Adversarial / Poisoned & Privacy Testbed Tier"
 fl:
   rounds: 10
   min_clients: 2

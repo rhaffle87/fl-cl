@@ -103,7 +103,7 @@ def main():
     parser = argparse.ArgumentParser(description="Standardized BWT Evaluation Suite")
     parser.add_argument("--checkpoint", required=True, help="Path to TorchScript checkpoint (.pt)")
     parser.add_argument("--test-dir", default="/mnt/ramdisk/flows", help="Test flow CSV directory")
-    parser.add_argument("--output", default="benchmark_evaluation_report.csv", help="Output path for signed CSV")
+    parser.add_argument("--output", default=os.path.join("data", "reports", "benchmark_evaluation_report.csv"), help="Output path for signed CSV")
     parser.add_argument("--peak-f1", default="1.0,1.0,1.0,1.0,1.0", help="Comma-separated peak historical F1-scores for class 0-4")
     parser.add_argument("--mlflow-run-id", help="Active MLflow run ID to upload the artifact directly")
     args = parser.parse_args()

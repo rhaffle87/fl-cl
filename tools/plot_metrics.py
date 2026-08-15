@@ -38,8 +38,8 @@ def run_plotting(key_path, aggregator_ip, local_db="mlflow_temp.db", run_id_arg=
     Returns a dictionary with run metadata, final metrics, and relative filenames of generated plots.
     """
     if output_dir is None:
-        # Default to exports/plots relative to the workspace (assuming script is in tools/)
-        output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "exports", "plots"))
+        # Default to data/exports/plots relative to the workspace (assuming script is in tools/)
+        output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "exports", "plots"))
     os.makedirs(output_dir, exist_ok=True)
 
     ssh_opts = ["-o", "StrictHostKeyChecking=no"]
