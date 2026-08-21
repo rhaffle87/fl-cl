@@ -571,7 +571,7 @@ All tunable parameters are centralized in [`configs/experiment.yaml`](../configs
 | Poison Enabled | `security.poison_enabled` | `false` | Simulated adversarial label poisoning on client side |
 | Poison Rate | `security.poison_rate` | `0.2` | Fraction of dataset targets poisoned |
 | Poison Client IDs | `security.poison_client_ids` | `"1"` | String containing client IDs targeted for poisoning |
-| DP Enabled | `security.dp_enabled` | `false` | Enable client-side differential privacy (DP-SGD) via Opacus |
+| DP Enabled | `security.dp_enabled` | `false` | Enable client-side differential privacy gradient regularization |
 | DP Noise Multiplier | `security.dp_noise_multiplier` | `1.0` | Noise parameter added to training gradients |
 | DP Max Grad Norm | `security.dp_max_grad_norm` | `1.0` | Maximum L2 clipping norm bound for gradients |
 
@@ -691,5 +691,5 @@ To transition from basic collaborative training to a highly robust enterprise de
  - **FedMedian**: Computes the coordinate-wise median, preventing single-client extreme updates from influencing the global model.
  - **TrimmedMean**: Trims configured tails from sorted parameters coordinate-wise to compute a clean average, neutralizing bounded attackers.
  - **Krum**: Restricts updates to a single consensus client that minimizes distance to neighboring updates.
-- **Client-Side Differential Privacy (DP-SGD)**: Optionally wraps PyTorch data loaders and model parameters with **Opacus** at the client, enforcing strict differential privacy bounds via noise injection and per-sample gradient clipping.
+- **Client-Side Differential Privacy**: Enforces gradient regularization at the client via native PyTorch batch-level clipping (`torch.nn.utils.clip_grad_norm_`, $C=1.0$) and calibrated Gaussian noise injection (`dp_noise_multiplier`), preventing model overfitting to individual flow records.
 - **NaN/Inf Sanitization**: Aggregator scans updates for invalid parameters (`NaN` or `Inf`), replacing them with `0.0` to preserve training loop continuity.

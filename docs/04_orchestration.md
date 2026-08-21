@@ -198,7 +198,7 @@ Instead of pre-labeled datasets, this function inspects raw flow metadata to ass
 #### Client-Side Security Extensions
 
 1. **Data Poisoning Simulation**: If `--poison-enabled` is active and the client's ID matches `--poison-client-ids`, a fraction of label samples defined by `--poison-rate` are poisoned (e.g. flipping Normal class `0` labels to DoS class `4`) to simulate a Byzantine adversarial participant.
-2. **Differential Privacy (DP-SGD)**: If `--dp-enabled` is active, client-side differential privacy is enabled during training using **Opacus**. This adds calculated noise (`--dp-noise-multiplier`) and clips per-sample gradients (`--dp-max-grad-norm`) to guarantee mathematical privacy.
+2. **Differential Privacy Gradient Regularization**: If `--dp-enabled` is active, client-side differential privacy gradient regularization is enabled during training via PyTorch primitives (`torch.nn.utils.clip_grad_norm_` and Gaussian noise injection in `cl_strategy.py`). This injects calibrated noise (`--dp-noise-multiplier`) and clips gradients (`--dp-max-grad-norm`) to regularize model updates.
 
 #### Per-Round Flower Client Lifecycle
 
@@ -356,9 +356,9 @@ python src/orchestrate.py --key "~/.ssh/id_ed25519" --config configs/experiment.
 | `--poison-enabled` | `False` | Enable label poisoning simulation on client nodes. |
 | `--poison-rate` | `0.2` | Fraction of labels to flip/poison on selected clients. |
 | `--poison-client-ids` | `1` | Comma-separated list of client IDs to perform poison simulation (e.g. `1` or `1,2`). |
-| `--dp-enabled` | `False` | Enable client-side differential privacy (DP-SGD) using Opacus. |
-| `--dp-noise-multiplier` | `1.0` | Noise scale added to gradients for DP-SGD. |
-| `--dp-max-grad-norm` | `1.0` | Clip norm value for per-sample gradients in DP-SGD. |
+| `--dp-enabled` | `False` | Enable client-side differential privacy gradient regularization in `cl_strategy.py`. |
+| `--dp-noise-multiplier` | `1.0` | Noise scale added to gradients for DP regularization. |
+| `--dp-max-grad-norm` | `1.0` | Clip norm value for gradients in DP regularization. |
 
 > [!TIP]
 > **Security Best Practice**: To avoid storing sensitive credentials in plain-text inside `configs/experiment.yaml`, you can either create a `.env` file at the root of the repository or export them as environment variables on your workstation before running the orchestrator:

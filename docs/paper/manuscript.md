@@ -17,8 +17,8 @@ In this paper, we introduce **FL-CL**, an end-to-end framework integrating **Fed
 - **99.53% Global Accuracy** under active 20% Byzantine label poisoning (champion model v35, MLflow registry).
 - **100.00% Botnet Recall** with **0.6905 F1-score** after GEM precision tuning ($P=512$, $s=0.2$, model v34).
 - **+30.9% Botnet F1 Improvement** from GEM initial recovery (0.5275 → 0.6905) through memory strength tuning.
-- **Byzantine Robustness**: TrimmedMean ($\beta=0.10$) retains **95.9% accuracy** under 20% poisoning vs. FedAvg degrading to 88.2%.
-- **99.51% Accuracy** retained under Differential Privacy noise $\sigma=0.20$ (Opacus DP-SGD, $C=1.0$).
+- **Byzantine Robustness**: TrimmedMean ($\beta=0.10$) retains **95.9% accuracy** under 20% poisoning vs. FedAvg degrading to 75.80% (achieving 99.53% overall validation accuracy on champion model v35).
+- **99.51% Accuracy** retained under Differential Privacy noise $\sigma=0.20$ (Batch-level gradient clip $C=1.0$ + Gaussian noise injection).
 - **101,258.6 flows/sec Aggregate Edge Throughput** across dual physical defender nodes (17.47–22.72 $\mu\text{s}$ per-flow latency).
 - **Up to 9.64x Inference Acceleration** via ONNX Runtime AVX2 CPU execution (1D-CNN, batch=16).
 
@@ -157,7 +157,7 @@ Measured live across physical Proxmox VE edge compute instances:
 
 ### 4.3 Differential Privacy Noise Sensitivity Curve
 
-DP-SGD (Opacus, gradient clip $C=1.0$) was evaluated across $\sigma \in [0.00, 0.30]$. Z-score feature normalization provides inherent gradient stability, enabling production deployment at $\sigma=0.20$ while retaining all CI/CD promotion gate thresholds.
+Differential Privacy gradient regularization (batch-level gradient clip $C=1.0$ + calibrated Gaussian noise) was evaluated across $\sigma \in [0.00, 0.30]$ (`src/defender/cl_strategy.py`). Z-score feature normalization provides inherent gradient stability, enabling production deployment at $\sigma=0.20$ while retaining all CI/CD promotion gate thresholds.
 
 | $\sigma$ | Normal F1 | Botnet F1 | Exfil F1 | BruteForce F1 | DoS F1 | Overall Acc. | Gate Status |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |

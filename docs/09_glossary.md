@@ -103,7 +103,7 @@ The noise multiplier $\sigma$ controls the privacy-utility tradeoff:
 | 0.20 | 99.51% | 0.6980 | **Production deployment** (all gates pass) |
 | 0.30 | 99.10% | 0.6450 | High-privacy degradation |
 
-Implemented via the **Opacus** library (`opacus>=1.4`) wrapping the PyTorch optimizer.
+Implemented via native PyTorch batch-level gradient clipping (`torch.nn.utils.clip_grad_norm_`, $C=1.0$) and calibrated Gaussian noise injection on parameter gradients in `src/defender/cl_strategy.py`.
 
 ### Fisher Information Matrix Collapse
 A failure mode of Elastic Weight Consolidation under extreme class imbalance. The Fisher diagonal $F_i$ is estimated via expectation over the training dataset:
