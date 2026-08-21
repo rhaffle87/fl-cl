@@ -74,27 +74,29 @@ Before any VMs can be provisioned, three infrastructure inconsistencies must be 
 The lab requires approximately **26 vCPUs, 46 GB RAM, and 320 GB Disk** to run 1 Flower Server, 2 PyTorch/Avalanche defender VMs, 2 target VMs, and 1 traffic generator VM. Workloads are distributed based on available capacity, with a critical constraint: **each target VM must reside on the same hypervisor as its corresponding defender VM** because port mirroring (Section 4, Phase 3) operates on hypervisor-local TAP interfaces. *(Paper: Chapter 3, Section 3.3)*
 
 ```mermaid
-graph TD
- subgraph allocation ["PVE Cluster Workload Allocation"]
- subgraph node_its ["Node 'its' (Used: 28.14 GB, Free: 34.63 GB)"]
- clientA["Defender Node A (VM 310)<br/>8 vCPU · 16 GB · 10.10.130.11/16"]
- targetA["Target Host A1 (VM 311)<br/>1 vCPU · 1 GB · 10.10.110.15/16"]
- end
+flowchart TD
+    subgraph allocation ["PVE Cluster Workload Allocation"]
+        direction TB
+        subgraph node_its ["Node 'its' (Used: 28.14 GB, Free: 34.63 GB)"]
+            clientA["Defender Node A (VM 310)<br/>8 vCPU · 16 GB · 10.10.130.11/16"]
+            targetA["Target Host A1 (VM 311)<br/>1 vCPU · 1 GB · 10.10.110.15/16"]
+        end
 
- subgraph node_node2 ["Node 'node2' (Used: 6.56 GB, Free: 56.21 GB)"]
- clientB["Defender Node B (VM 320)<br/>8 vCPU · 16 GB · 10.10.130.12/16"]
- targetB["Target Host B1 (VM 321)<br/>1 vCPU · 1 GB · 10.10.120.15/16"]
- trafficGen["Traffic Generator (VM 400)<br/>4 vCPU · 4 GB · 10.10.140.10/16"]
- end
+        subgraph node_node2 ["Node 'node2' (Used: 6.56 GB, Free: 56.21 GB)"]
+            clientB["Defender Node B (VM 320)<br/>8 vCPU · 16 GB · 10.10.130.12/16"]
+            targetB["Target Host B1 (VM 321)<br/>1 vCPU · 1 GB · 10.10.120.15/16"]
+            trafficGen["Traffic Generator (VM 400)<br/>4 vCPU · 4 GB · 10.10.140.10/16"]
+        end
 
- subgraph node_pve ["Node 'pve' (Used: 5.40 GB, Free: 25.46 GB)"]
- aggregator["FL Aggregator (LXC 300)<br/>4 vCPU · 8 GB · 10.10.130.10/16"]
- end
- end
- trafficGen -.->|Attacks + Benign Traffic| targetA
- trafficGen -.->|Attacks + Benign Traffic| targetB
- clientA <-->|gRPC FL Updates| aggregator
- clientB <-->|gRPC FL Updates| aggregator
+        subgraph node_pve ["Node 'pve' (Used: 5.40 GB, Free: 25.46 GB)"]
+            aggregator["FL Aggregator (LXC 300)<br/>4 vCPU · 8 GB · 10.10.130.10/16"]
+        end
+    end
+
+    trafficGen -.->|Attacks + Benign Traffic| targetA
+    trafficGen -.->|Attacks + Benign Traffic| targetB
+    clientA <-->|gRPC FL Updates| aggregator
+    clientB <-->|gRPC FL Updates| aggregator
 ```
 
 ### VM Resource Allocations

@@ -24,41 +24,45 @@ Traditional machine learning assumes that all training data is available in one 
 
 ```mermaid
 flowchart TD
- subgraph OrgA["Organization A (VM 310 — Defender A)"]
- TA["Target A1<br>10.10.110.15"] -->|Port Mirror<br>via tc rules| EA["NFStream Extractor<br>(ens19 → /mnt/ramdisk/flows/)"]
- EA --> CA["Flower Client A<br>client.py<br>(+ DP / Poisoning simulation)"]
- CA --> EWCA["Continual Learner<br>(EWC / GEM / Naive)"]
- EWCA --> NETA["Local CyberDefenseNet"]
- end
+    subgraph OrgA ["Organization A (VM 310 — Defender A)"]
+        direction TB
+        TA["Target A1<br>10.10.110.15"] -->|Port Mirror<br>via tc rules| EA["NFStream Extractor<br>(ens19 → /mnt/ramdisk/flows/)"]
+        EA --> CA["Flower Client A<br>client.py<br>(+ DP / Poisoning simulation)"]
+        CA --> EWCA["Continual Learner<br>(EWC / GEM / Naive)"]
+        EWCA --> NETA["Local CyberDefenseNet"]
+    end
 
- subgraph OrgB["Organization B (VM 320 — Defender B)"]
- TB["Target B1<br>10.10.120.15"] -->|Port Mirror<br>via tc rules| EB["NFStream Extractor<br>(ens19 → /mnt/ramdisk/flows/)"]
- EB --> CB["Flower Client B<br>client.py<br>(+ DP / Poisoning simulation)"]
- CB --> EWCB["Continual Learner<br>(EWC / GEM / Naive)"]
- EWCB --> NETB["Local CyberDefenseNet"]
- end
+    subgraph OrgB ["Organization B (VM 320 — Defender B)"]
+        direction TB
+        TB["Target B1<br>10.10.120.15"] -->|Port Mirror<br>via tc rules| EB["NFStream Extractor<br>(ens19 → /mnt/ramdisk/flows/)"]
+        EB --> CB["Flower Client B<br>client.py<br>(+ DP / Poisoning simulation)"]
+        CB --> EWCB["Continual Learner<br>(EWC / GEM / Naive)"]
+        EWCB --> NETB["Local CyberDefenseNet"]
+    end
 
- subgraph Aggregator["FL Aggregator (LXC 300 — 10.10.130.10)"]
- FS["Flower Server<br>server.py"]
- RA["Byzantine-Robust Aggregation<br>(FedAvg / FedMedian / TrimmedMean / Krum)"]
- SG["NaN/Inf Sanitization Guard"]
- GM["Global CyberDefenseNet"]
- ML["MLflow Tracker"]
- FS --> RA --> SG --> GM
- SG --> ML
- end
+    subgraph Aggregator ["FL Aggregator (LXC 300 — 10.10.130.10)"]
+        direction TB
+        FS["Flower Server<br>server.py"]
+        RA["Byzantine-Robust Aggregation<br>(FedAvg / FedMedian / TrimmedMean / Krum)"]
+        SG["NaN/Inf Sanitization Guard"]
+        GM["Global CyberDefenseNet"]
+        ML["MLflow Tracker"]
+        FS --> RA --> SG --> GM
+        SG --> ML
+    end
 
- subgraph TrafficGen["Traffic Generator (VM 400 — 10.10.140.10)"]
- TG["attack_flow.py<br>Benign / SSH / Slowloris / DNS / Botnet"]
- end
+    subgraph TrafficGen ["Traffic Generator (VM 400 — 10.10.140.10)"]
+        direction TB
+        TG["attack_flow.py<br>Benign / SSH / Slowloris / DNS / Botnet"]
+    end
 
- TG -->|Attack traffic| TA
- TG -->|Attack traffic| TB
+    TG -->|Attack traffic| TA
+    TG -->|Attack traffic| TB
 
- NETA -->|"① Send local weights<br>(NumPy arrays via gRPC)"| FS
- NETB -->|"① Send local weights<br>(NumPy arrays via gRPC)"| FS
- GM -->|"② Broadcast global weights<br>(updated θ_global)"| CA
- GM -->|"② Broadcast global weights<br>(updated θ_global)"| CB
+    NETA -->|"① Send local weights<br>(NumPy arrays via gRPC)"| FS
+    NETB -->|"① Send local weights<br>(NumPy arrays via gRPC)"| FS
+    GM -->|"② Broadcast global weights<br>(updated θ_global)"| CA
+    GM -->|"② Broadcast global weights<br>(updated θ_global)"| CB
 ```
 
 ---
@@ -239,15 +243,17 @@ Where:
 **In plain English:** If a weight was critical for detecting SSH brute force, EWC makes it expensive to change that weight while learning DoS patterns. The model finds alternative weights to represent the new knowledge.
 
 ```mermaid
-graph LR
- subgraph WithoutEWC ["Without EWC"]
- W1["Round 1: Learns SSH-BF [PASS]"] --> W2["Round 2: Learns DoS [PASS] <br/> (Forgets SSH-BF [FAIL])"]
- W2 --> W3["Round 3: Learns Botnet [PASS] <br/> (Forgets DoS [FAIL])"]
- end
- subgraph WithEWC ["With EWC"]
- E1["Round 1: Learns SSH-BF [PASS]"] --> E2["Round 2: Learns DoS [PASS] <br/> (Retains SSH-BF [PASS])"]
- E2 --> E3["Round 3: Learns Botnet [PASS] <br/> (Retains SSH-BF + DoS [PASS])"]
- end
+flowchart LR
+    subgraph WithoutEWC ["Without EWC"]
+        direction LR
+        W1["Round 1: Learns SSH-BF [PASS]"] --> W2["Round 2: Learns DoS [PASS] <br/> (Forgets SSH-BF [FAIL])"]
+        W2 --> W3["Round 3: Learns Botnet [PASS] <br/> (Forgets DoS [FAIL])"]
+    end
+    subgraph WithEWC ["With EWC"]
+        direction LR
+        E1["Round 1: Learns SSH-BF [PASS]"] --> E2["Round 2: Learns DoS [PASS] <br/> (Retains SSH-BF [PASS])"]
+        E2 --> E3["Round 3: Learns Botnet [PASS] <br/> (Retains SSH-BF + DoS [PASS])"]
+    end
 ```
 
 #### 3.3.3 Class Weighting for Imbalanced Traffic
@@ -257,7 +263,7 @@ The `CrossEntropyLoss` is configured with per-class weights from the experiment 
 ```yaml
 # configs/experiment.yaml
 training:
- class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
+  class_weights: [1.0, 250.0, 2.0, 5.0, 50.0]
 ```
 
 This tells the optimizer to pay **250× more attention** to misclassifying Botnet (class 1) compared to **1× for Normal** (class 0). Without these weights, the model would ignore rare attack classes in favor of maximizing accuracy on the dominant Normal class.
@@ -288,15 +294,15 @@ This returns a list of NumPy arrays representing:
 
 ```mermaid
 sequenceDiagram
- participant A as Defender A
- participant AG as FL Aggregator
- participant B as Defender B
+    participant A as Defender A
+    participant AG as FL Aggregator
+    participant B as Defender B
 
- Note over A: NO raw data leaves Org A
- A->>AG: Send weights [w1, b1, w2, b2, w3, b3] (via gRPC)
- Note over B: NO raw data leaves Org B
- B->>AG: Send weights [w1, b1, w2, b2, w3, b3] (via gRPC)
- Note over AG: Receives weight updates from both clients
+    Note over A: NO raw data leaves Org A
+    A->>AG: Send weights [w1, b1, w2, b2, w3, b3] (via gRPC)
+    Note over B: NO raw data leaves Org B
+    B->>AG: Send weights [w1, b1, w2, b2, w3, b3] (via gRPC)
+    Note over AG: Receives weight updates from both clients
 ```
 
 ---
@@ -485,42 +491,42 @@ After this call, the local model on each defender is now synchronized with the g
 
 ```mermaid
 sequenceDiagram
- participant TG as Traffic Generator
- participant TA as Target A1
- participant DA as Defender A
- participant AGG as Aggregator
- participant DB as Defender B
- participant TB as Target B1
+    participant TG as Traffic Generator
+    participant TA as Target A1
+    participant DA as Defender A
+    participant AGG as Aggregator
+    participant DB as Defender B
+    participant TB as Target B1
 
- Note over TG,TB: Attack traffic flows through the network
+    Note over TG,TB: Attack traffic flows through the network
 
- TG->>TA: Send attack traffic (SSH / DoS / Botnet)
- TG->>TB: Send attack traffic (SSH / DoS / Botnet)
+    TG->>TA: Send attack traffic (SSH / DoS / Botnet)
+    TG->>TB: Send attack traffic (SSH / DoS / Botnet)
 
- Note over DA: NFStream captures mirrored packets on ens19
- TA-->>DA: Port-mirrored traffic (tc rules)
- TB-->>DB: Port-mirrored traffic (tc rules)
+    Note over DA: NFStream captures mirrored packets on ens19
+    TA-->>DA: Port-mirrored traffic (tc rules)
+    TB-->>DB: Port-mirrored traffic (tc rules)
 
- Note over DA,DB: Step 1-2: Extract features & label flows locally
+    Note over DA,DB: Step 1-2: Extract features & label flows locally
 
- AGG->>DA: ② Broadcast global θ_global (start of round)
- AGG->>DB: ② Broadcast global θ_global (start of round)
+    AGG->>DA: ② Broadcast global θ_global (start of round)
+    AGG->>DB: ② Broadcast global θ_global (start of round)
 
- Note over DA: Step 3: Train locally with EWC
- DA->>DA: load_ramdisk_flows() → StandardScaler → EWC.train()
- Note over DB: Step 3: Train locally with EWC
- DB->>DB: load_ramdisk_flows() → StandardScaler → EWC.train()
+    Note over DA: Step 3: Train locally with EWC
+    DA->>DA: load_ramdisk_flows() → StandardScaler → EWC.train()
+    Note over DB: Step 3: Train locally with EWC
+    DB->>DB: load_ramdisk_flows() → StandardScaler → EWC.train()
 
- Note over DA,DB: Step 4: Export weight "recipe"
- DA->>AGG: ① Send θ_A (local weights + sample count)
- DB->>AGG: ① Send θ_B (local weights + sample count)
+    Note over DA,DB: Step 4: Export weight "recipe"
+    DA->>AGG: ① Send θ_A (local weights + sample count)
+    DB->>AGG: ① Send θ_B (local weights + sample count)
 
- Note over AGG: Step 5: Aggregate via FedAvg
- AGG->>AGG: θ_global = (N_A·θ_A + N_B·θ_B) / (N_A + N_B)
- AGG->>AGG: Log metrics to MLflow
+    Note over AGG: Step 5: Aggregate via FedAvg
+    AGG->>AGG: θ_global = (N_A·θ_A + N_B·θ_B) / (N_A + N_B)
+    AGG->>AGG: Log metrics to MLflow
 
- Note over AGG: Step 6: Save checkpoint & repeat
- AGG->>AGG: torch.save(model_latest.pt)
+    Note over AGG: Step 6: Save checkpoint & repeat
+    AGG->>AGG: torch.save(model_latest.pt)
 ```
 
 ---
@@ -582,7 +588,7 @@ All tunable parameters are centralized in [`configs/experiment.yaml`](../configs
 
 ```text
 Class 1 (Botnet) accuracy too low?
- → Increase class_weights[1] (currently 20.0)
+ → Increase class_weights[1] (currently 250.0)
  → Ensure attack_flow.py --mode botnet is running long enough
 
 Class 3 (BruteForce) accuracy dropping after new attacks?

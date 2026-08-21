@@ -9,26 +9,28 @@
 All nodes sit on a flat Layer 2 network over the Proxmox bridge `vmbr1` using the `10.10.0.0/16` subnet. Logical separation is achieved through IP prefixing, not routing.
 
 ```mermaid
-graph TD
- Aggregator["FL Aggregator (LXC 300)<br/>10.10.130.10<br/>Runs: server.py, MLflow"]
- TG["Traffic Generator (VM 400)<br/>10.10.140.10<br/>Runs: attack_flow.py"]
+flowchart TD
+    Aggregator["FL Aggregator (LXC 300)<br/>10.10.130.10<br/>Runs: server.py, MLflow"]
+    TG["Traffic Generator (VM 400)<br/>10.10.140.10<br/>Runs: attack_flow.py"]
 
- subgraph OrgA ["Organization A Zone"]
- DefenderA["Defender A (VM 310)<br/>10.10.130.11<br/>Runs: extractor.py, client.py<br/>Captures via: ens19"]
- TargetA["Target A1 (VM 311)<br/>10.10.110.15<br/>Runs: busybox httpd"]
- TargetA -->|Port Mirror| DefenderA
- end
+    subgraph OrgA ["Organization A Zone"]
+        direction TB
+        DefenderA["Defender A (VM 310)<br/>10.10.130.11<br/>Runs: extractor.py, client.py<br/>Captures via: ens19"]
+        TargetA["Target A1 (VM 311)<br/>10.10.110.15<br/>Runs: busybox httpd"]
+        TargetA -->|Port Mirror| DefenderA
+    end
 
- subgraph OrgB ["Organization B Zone"]
- DefenderB["Defender B (VM 320)<br/>10.10.130.12<br/>Runs: extractor.py, client.py<br/>Captures via: ens19"]
- TargetB["Target B1 (VM 321)<br/>10.10.120.15<br/>Runs: busybox httpd"]
- TargetB -->|Port Mirror| DefenderB
- end
+    subgraph OrgB ["Organization B Zone"]
+        direction TB
+        DefenderB["Defender B (VM 320)<br/>10.10.130.12<br/>Runs: extractor.py, client.py<br/>Captures via: ens19"]
+        TargetB["Target B1 (VM 321)<br/>10.10.120.15<br/>Runs: busybox httpd"]
+        TargetB -->|Port Mirror| DefenderB
+    end
 
- DefenderA <-->|gRPC Weight Sync| Aggregator
- DefenderB <-->|gRPC Weight Sync| Aggregator
- TG -->|Simulated Attacks| TargetA
- TG -->|Simulated Attacks| TargetB
+    DefenderA <-->|gRPC Weight Sync| Aggregator
+    DefenderB <-->|gRPC Weight Sync| Aggregator
+    TG -->|Simulated Attacks| TargetA
+    TG -->|Simulated Attacks| TargetB
 ```
 
 ### Node Summary Table
@@ -847,7 +849,7 @@ To evaluate system stability, plasticity, and security under varying deployment 
 
 ### 11.3 Key Architectural Lessons & Validation Mechanics
 
-1. **Inverse-Frequency Loss Multipliers**: Setting `class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]` grants $15\times$ relative gradient strength to minority classes (Botnet & DoS), preventing majority Normal traffic ($8,200+$ samples) from eroding minority gradients under DP noise and label poisoning.
+1. **Inverse-Frequency Loss Multipliers**: The benchmark sweep configs use `class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]` to grant $15\times$ relative gradient strength to minority classes (Botnet & DoS), preventing majority Normal traffic ($8,200+$ samples) from eroding minority gradients. In the primary 100-round production baseline (`configs/experiment.yaml`), the Botnet weight is further scaled to `[1.0, 250.0, 2.0, 5.0, 50.0]` to resist Fisher collapse during extreme sample scarcity.
 2. **Adaptive Byzantine TrimmedMean Median**: In small topology clusters ($N \le 3$), `server.py` adaptively falls back to coordinate-wise `FedMedian`. This mathematically guarantees 100% elimination of outlier updates from 1 corrupted defender node in a 2-node cluster, restoring DoS F1 score to **0.9675** under 20% label poisoning.
 3. **Automated Deployment Command**: Run the entire 9-stage testing sequence directly on the physical testbed from the repository root:
  ```bash

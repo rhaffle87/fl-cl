@@ -248,3 +248,4 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/cross_dataset_benchmark.py --ch
 | [09 Domain Model & Glossary](docs/09_glossary.md) | Technical glossary of FL, CL, ETA, and MLOps domain terminology |
 | [Tech Stack](TECH_STACK.md) | Full technology inventory per layer |
 | [Production Training Report](data/reports/training_results_report.md) | Consolidated multi-track empirical results & benchmarks |
+| [Thesis Defense Dossier](docs/10_arguments.md) | Comprehensive attack-and-rebuttal analysis across 21 challenge categories with empirical anchors and code evidence |

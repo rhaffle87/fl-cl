@@ -71,9 +71,6 @@ A temporary file storage facility located entirely in volatile virtual memory (`
 ### TorchScript JIT
 A statically typed intermediate representation of PyTorch models that can be serialized (`.pt`) and executed in high-performance C++ runtimes (LibTorch) without requiring a Python interpreter.
 
-### Dynamic INT8 Quantization
-A model compression technique that converts 32-bit floating-point (`FP32`) linear layer weights to 8-bit integers (`INT8`), reducing memory footprint by **50%** while executing fast integer matrix multiplication.
-
 ### Model Registry Aliases
 Semantic identifiers assigned in the MLflow Model Registry:
 - `champion`: The production-active model version.
@@ -81,3 +78,72 @@ Semantic identifiers assigned in the MLflow Model Registry:
 - `champion-transformer`: Dedicated alias for the high-precision self-attention backbone.
 - `champion-cnn`: Dedicated alias for the 1D-CNN temporal feature extractor.
 - `champion-mlp`: Dedicated alias for the ultra-low latency feedforward backbone.
+
+### ONNX Runtime
+An open-source, cross-platform inference engine (Microsoft) that executes models in the Open Neural Network Exchange (`.onnx`) format. On x86-64 CPUs, it uses AVX2 SIMD vectorization to accelerate matrix multiplications, delivering up to **9.64x** throughput over vanilla PyTorch FP32 at batch size 16 for `CyberDefenseCNN`.
+
+### Dynamic INT8 Quantization
+A model compression technique that converts 32-bit floating-point (`FP32`) linear layer weights to 8-bit integers (`INT8`), reducing memory footprint by **50%** (93 KB → 46 KB for `CyberDefenseCNN`). Runtime scale factors are computed per-batch, which introduces overhead on small batches ($N \le 64$). Use ONNX Runtime for maximum edge throughput instead.
+
+---
+
+## 5. Privacy and Security Terminology
+
+### Differential Privacy (DP) and DP-SGD
+**Differential Privacy** provides a mathematical guarantee that the output of an algorithm does not significantly change if any single training record is added or removed. **DP-SGD** (Abadi et al., 2016) achieves this during neural network training by:
+1. Clipping per-sample gradients to a maximum norm $C$ (configured: $C = 1.0$).
+2. Adding calibrated Gaussian noise $\mathcal{N}(0, \sigma^2 C^2 I)$ to the aggregate gradient before the weight update.
+
+The noise multiplier $\sigma$ controls the privacy-utility tradeoff:
+
+| $\sigma$ | Accuracy | Botnet F1 | Interpretation |
+| :---: | :---: | :---: | :--- |
+| 0.00 | 99.64% | 0.7119 | No privacy bound |
+| 0.10 | 99.61% | 0.7085 | Low-noise regime |
+| 0.20 | 99.51% | 0.6980 | **Production deployment** (all gates pass) |
+| 0.30 | 99.10% | 0.6450 | High-privacy degradation |
+
+Implemented via the **Opacus** library (`opacus>=1.4`) wrapping the PyTorch optimizer.
+
+### Fisher Information Matrix Collapse
+A failure mode of Elastic Weight Consolidation under extreme class imbalance. The Fisher diagonal $F_i$ is estimated via expectation over the training dataset:
+$$F_i = \mathbb{E}_{(x,y) \sim \mathcal{D}} \left[ \left( \frac{\partial \log p(y|x,\theta)}{\partial \theta_i} \right)^2 \right]$$
+When the training batch contains ~2000 Normal flows and ~12 Botnet flows, $F_{\text{Normal}} \gg F_{\text{Botnet}} \approx 0$. Botnet-sensitive weights receive near-zero EWC penalty and are overwritten by subsequent tasks, resulting in **BWT = -0.8544** and **0% Botnet recall**. GEM eliminates this failure by replacing the Fisher penalty with direct gradient projection constraints.
+
+### Non-IID (Non-Independently and Identically Distributed)
+A data heterogeneity condition in federated learning where each client's local dataset has a different class distribution. In `fl-cl`, Defender A primarily observes SSH brute-force and benign traffic, while Defender B observes DoS and C2 beaconing. Neither node has sufficient Botnet samples in isolation. FL aggregation allows cross-organization knowledge transfer, enabling each defender to detect threat classes it has not directly observed.
+
+### GEM Memory Strength (`gem_memory_strength`, $s$)
+A scalar hyperparameter (range: 0.0–1.0) controlling the strictness of the GEM gradient projection margin constraint. Lower values enforce tighter projection, reducing false positives at the cost of slightly higher gradient correction overhead.
+
+| $s$ | Botnet Recall | Botnet F1 | FP Rate | Status |
+| :---: | :---: | :---: | :---: | :--- |
+| 0.5 | 100% | 0.5275 | Moderate | Initial recovery (v33) |
+| 0.2 | 100% | **0.6905** | **Low** | **Production tuned (v34)** |
+
+### TrimmedMean Beta ($\beta$)
+The fraction of extreme client updates trimmed per coordinate before averaging. At $\beta = 0.10$ with $K = 2$ clients, exactly $\lfloor 0.10 \times 2 \rfloor = 0$ values are trimmed per coordinate — meaning TrimmedMean's resilience in this 2-client setup derives from the sorting step aligning outlier detection, not from literal trimming. The production champion (v35) was validated under this constraint: **99.53% accuracy, 100% Botnet recall** against 20% label poisoning.
+
+### Backward Transfer (BWT) — Extended
+A signed scalar metric for per-task forgetting. Extended interpretation table:
+
+| BWT Range | Meaning | Observed In |
+| :--- | :--- | :--- |
+| $\approx 0.000$ | No forgetting — perfect stability | Normal, Exfil, DoS across all tracks |
+| $-0.01$ to $-0.10$ | Mild forgetting — acceptable | SSH BruteForce (EWC baseline) |
+| $-0.50$ to $-0.90$ | Severe forgetting — GEM required | Botnet (EWC baseline: -0.8544) |
+| $= 0.000$ after GEM | Full recovery | Botnet (GEM v33/v34: 100% recall) |
+
+---
+
+## 6. Benchmark Datasets
+
+### USTC-TFC2016
+A benchmark dataset from the University of Science and Technology of China containing 10 malware traffic classes and 10 benign application classes, all captured as encrypted flows. Used in `fl-cl` for multi-class baseline training to establish the 5-class threat taxonomy.
+
+### CIC-IDS2017 / CIC-IDS2018
+Intrusion detection datasets from the Canadian Institute for Cybersecurity. CIC-IDS2017 spans Monday–Friday with distinct attack profiles per day (DoS, DDoS, brute force, web attacks, infiltration), making it ideal for sequencing Continual Learning tasks across temporal sessions. CIC-IDS2018 extends the attack diversity.
+
+### CIRA-CIC-DoHBrw-2020
+A dataset capturing DNS-over-HTTPS (DoH) traffic from both malicious exfiltration tools and legitimate DoH browsers. Used in `fl-cl` to train the DNS Exfiltration threat class against benign HTTPS-tunneled DNS.
+

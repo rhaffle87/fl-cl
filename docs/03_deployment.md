@@ -13,13 +13,14 @@ Traditional machine learning assumes **stationary** data distributions (identica
 This testbed combines **Federated Learning (FL)** for collaborative decentralized knowledge aggregation and **Continual Learning (CL)** to adapt to non-stationary data streams without forgetting previously learned patterns (catastrophic forgetting).
 
 ```mermaid
-graph RL
- subgraph Conceptual_Pipeline ["Federated Continual Learning Cycle"]
- DataStream["Encrypted Traffic Stream <br> (Non-Stationary)"] -->|Layer 4: NFStream <br> Extraction| FeatureTensors["Feature Vectors <br> (32 features)"]
- FeatureTensors -->|Layer 5: Local CL <br> with EWC| LocalUpdates["Local Parameter Updates <br> (Regularized by FIM)"]
- LocalUpdates -->|Layer 6: FL Sync - <br> Flower and gRPC| GlobalAggregator["Global Aggregation <br> (FedAvg)"]
- GlobalAggregator -->|Broadcast <br> Global Model| DataStream
- end
+flowchart RL
+    subgraph Conceptual_Pipeline ["Federated Continual Learning Cycle"]
+        direction RL
+        DataStream["Encrypted Traffic Stream <br> (Non-Stationary)"] -->|Layer 4: NFStream <br> Extraction| FeatureTensors["Feature Vectors <br> (32 features)"]
+        FeatureTensors -->|Layer 5: Local CL <br> with EWC| LocalUpdates["Local Parameter Updates <br> (Regularized by FIM)"]
+        LocalUpdates -->|Layer 6: FL Sync - <br> Flower and gRPC| GlobalAggregator["Global Aggregation <br> (FedAvg)"]
+        GlobalAggregator -->|Broadcast <br> Global Model| DataStream
+    end
 ```
 
 ### The Stability-Plasticity Dilemma
@@ -68,20 +69,21 @@ The underlying infrastructure consists of three physical servers connected to an
 3. **Node `pve`**: Light-compute node hosting the FL aggregator. Connected via a single physical NIC to `vmbr1`.
 
 ```mermaid
-graph LR
- subgraph physical_nodes ["Physical Nodes"]
- its["its (Compute Node A)<br/>bond0 (LACP)"]
- node2["node2 (Compute Node B)<br/>bond0 (LACP)"]
- pve["pve (Orchestration Node)<br/>eth0"]
- end
- 
- subgraph network_fabric ["Network Fabric"]
- Switch["L2 Managed Switch<br/>802.1Q Trunking"]
- end
+flowchart LR
+    subgraph physical_nodes ["Physical Nodes"]
+        direction TB
+        its["its (Compute Node A)<br/>bond0 (LACP)"]
+        node2["node2 (Compute Node B)<br/>bond0 (LACP)"]
+        pve["pve (Orchestration Node)<br/>eth0"]
+    end
 
- its <==>|LACP Trunk| Switch
- node2 <==>|LACP Trunk| Switch
- pve <==>|Trunk Link| Switch
+    subgraph network_fabric ["Network Fabric"]
+        Switch["L2 Managed Switch<br/>802.1Q Trunking"]
+    end
+
+    its <==>|LACP Trunk| Switch
+    node2 <==>|LACP Trunk| Switch
+    pve <==>|Trunk Link| Switch
 ```
 
 #### Step 1.1: Standardize Node Host Resolution
@@ -124,12 +126,13 @@ This creates a systemd service (`promisc-bond.service`) that automatically execu
 Network isolation and routing boundaries are enforced using Proxmox native Linux Bridges configured as VLAN-aware.
 
 ```mermaid
-graph TD
- subgraph node_its ["Node 'its'"]
- bond0["Physical bond0 (PROMISC ON)"] <--> vmbr1["vmbr1 (PROMISC ON)"]
- vmbr1 <-->|Flat L2| tap310i1["tap310i1 (Defender A Capture)"]
- vmbr1 <-->|Flat L2| tap311i0["tap311i0 (Target A1 Access)"]
- end
+flowchart TD
+    subgraph node_its ["Node 'its'"]
+        direction TB
+        bond0["Physical bond0 (PROMISC ON)"] <--> vmbr1["vmbr1 (PROMISC ON)"]
+        vmbr1 <-->|Flat L2| tap310i1["tap310i1 (Defender A Capture)"]
+        vmbr1 <-->|Flat L2| tap311i0["tap311i0 (Target A1 Access)"]
+    end
 ```
 
 #### Step 2.1: Enable VLAN Awareness on vmbr1
@@ -217,18 +220,18 @@ To resolve this, we implement a Proxmox Lifecycle Hookscript that automatically 
 
 ```mermaid
 sequenceDiagram
- participant PVE as Proxmox host (its)
- participant VM311 as Target VM (311)
- participant VM310 as Defender VM (310)
+    participant PVE as Proxmox host (its)
+    participant VM311 as Target VM (311)
+    participant VM310 as Defender VM (310)
 
- VM311->>PVE: Boot Trigger (qm start 311)
- PVE->>PVE: Create interface tap311i0
- PVE->>PVE: Run mirror-hook.sh (post-start)
- Note over PVE: Wait 3 seconds for bridge attachment
- PVE->>PVE: Set tap311i0 and tap310i1 to promisc
- PVE->>PVE: Apply tc ingress/egress mirror rules
- PVE->>VM311: VM execution begins
- VM311->>VM310: Traffic duplicated to tap310i1 in background
+    VM311->>PVE: Boot Trigger (qm start 311)
+    PVE->>PVE: Create interface tap311i0
+    PVE->>PVE: Run mirror-hook.sh (post-start)
+    Note over PVE: Wait 3 seconds for bridge attachment
+    PVE->>PVE: Set tap311i0 and tap310i1 to promisc
+    PVE->>PVE: Apply tc ingress/egress mirror rules
+    PVE->>VM311: VM execution begins
+    VM311->>VM310: Traffic duplicated to tap310i1 in background
 ```
 
 #### Step 3.1: Enable Snippet Storage
@@ -324,10 +327,10 @@ qm set 321 --hookscript local:snippets/mirror-hook-b.sh
 Within each Defender VM, network packets duplicated from the targets are captured in real-time on interface `ens19` (mapped from PVE bridge `vmbr1`).
 
 ```mermaid
-graph TD
- Target["Target VM Interface"] -->|SPAN| ens19["Defender Interface ens19"]
- ens19 --> Engine["NFStream Engine"]
- Engine -->|Extract Features| Buffer["tmpfs RAM Disk Buffer<br/>(/mnt/ramdisk/flows/)"]
+flowchart TD
+    Target["Target VM Interface"] -->|SPAN| ens19["Defender Interface ens19"]
+    ens19 --> Engine["NFStream Engine"]
+    Engine -->|Extract Features| Buffer["tmpfs RAM Disk Buffer<br/>(/mnt/ramdisk/flows/)"]
 ```
 
 #### Step 4.1: Bypass I/O Bottlenecks with a tmpfs RAM Disk
@@ -441,13 +444,13 @@ def get_continual_learner(model, device, ewc_lambda=0.8, class_weights=None):
 Federated coordination uses the **Flower** framework. Local parameter updates are aggregated at the central Aggregator Node (`LXC 300`) using the Federated Averaging (`FedAvg`) aggregation algorithm.
 
 ```mermaid
-graph TD
- Aggregator["FL Aggregator (LXC 300)"]
- DefenderA["Defender A"]
- DefenderB["Defender B"]
+flowchart TD
+    Aggregator["FL Aggregator (LXC 300)"]
+    DefenderA["Defender A"]
+    DefenderB["Defender B"]
 
- Aggregator <-->|gRPC / TLS| DefenderA
- Aggregator <-->|gRPC / TLS| DefenderB
+    Aggregator <-->|gRPC / TLS| DefenderA
+    Aggregator <-->|gRPC / TLS| DefenderB
 ```
 
 #### Step 6.1: Run the Flower Server (`server.py` on LXC 300)
@@ -520,9 +523,9 @@ if __name__ == "__main__":
 To evaluate the learning stability and detection performance of the system, the Traffic Generator VM (`VM 400`) initiates attack sessions and background traffic.
 
 ```mermaid
-graph TD
- TG["Traffic Generator VM 400"] --> TargetA["Target A1 (10.10.110.15/16)"]
- TG --> TargetB["Target B1 (10.10.120.15/16)"]
+flowchart TD
+    TG["Traffic Generator VM 400"] --> TargetA["Target A1 (10.10.110.15/16)"]
+    TG --> TargetB["Target B1 (10.10.120.15/16)"]
 ```
 
 #### Step 7.1: Network Reachability on the Flat L2 Subnet
@@ -632,10 +635,10 @@ netstat -antp | grep 8080
 Follow this execution sequence to start the FCL framework:
 
 ```mermaid
-graph LR
- PVE["1. PVE Network Config"] --> VMs["2. Boot target VMs"]
- VMs --> Orch["3. Launch Automated Orchestrator"]
- Orch --> MLflow["4. Monitor via MLflow UI"]
+flowchart LR
+    PVE["1. PVE Network Config"] --> VMs["2. Boot target VMs"]
+    VMs --> Orch["3. Launch Automated Orchestrator"]
+    Orch --> MLflow["4. Monitor via MLflow UI"]
 ```
 
 * [x] **Phase 1**: Set up `vmbr1` on all physical nodes with `10.10.0.0/16` logical ranges.

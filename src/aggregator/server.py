@@ -5,7 +5,7 @@ Orchestrates global model training by collecting and averaging weight updates
 from all defender client nodes via gRPC and logging metrics to MLflow.
 
 Research Citations:
-- [23] McMahan, et al. (2017). Communication-Efficient Learning of Deep Networks from Decentralized Data. AISTATS.
+- [26] McMahan, et al. (2017). Communication-Efficient Learning of Deep Networks from Decentralized Data. AISTATS.
   (Core methodology for the FedAvg aggregation utilized).
 - [27] Beutel, et al. (2020). Flower: A Friendly Federated Learning Research Framework. arXiv.
   (Framework backbone orchestrating the client-server gRPC synchronization).

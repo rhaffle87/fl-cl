@@ -7,7 +7,7 @@ global Federated Learning aggregation (Flower FedAvg).
 Research Citations:
 - [4] Zhang, et al. (2023). FedSI: Federated Learning with Sequential Intrusion Data.
   (Precedent for handling highly non-IID sequential streaming traffic at the edge).
-- [10] [Anonymous] (2025). Dataset-centric FL-IDS study on CIC-IDS2017.
+- [13] Bilal, et al. (2026). Dataset-centric evaluation of federated intrusion detection models in IoT networks.
   (Numerical baseline justification for the dynamic label parsing and JSD shift thresholds).
 
 Per federated round:

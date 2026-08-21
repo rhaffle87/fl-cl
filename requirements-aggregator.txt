@@ -1,0 +1,18 @@
+﻿# requirements-aggregator.txt
+# Dependencies for LXC 300 (fl-aggregator): Flower server + MLflow tracking
+# Deploy: pip install -r requirements-aggregator.txt
+# Target host: Ubuntu 24.04 LTS, Python 3.11+
+
+# ── Federated Learning Server ────────────────────────────────
+flwr==1.32.1
+
+# ── Experiment Tracking & Model Registry ─────────────────────
+mlflow==3.15.1
+
+# ── Headless Visualization (confusion matrix heatmaps) ────────
+matplotlib>=3.7,<4.0
+
+# ── Numerical & Data Utilities ───────────────────────────────
+numpy>=1.24,<3.0
+pandas>=2.0,<3.0
+scikit-learn>=1.3,<2.0

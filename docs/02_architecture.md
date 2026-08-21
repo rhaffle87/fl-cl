@@ -20,46 +20,50 @@ The testbed is designed to investigate **Hybrid Federated-Continual Learning (FL
 To simulate a multi-tenant collaborative defense environment while bypassing physical switch VLAN constraints, the testbed utilizes a flat, untagged Layer 2 network on `vmbr1` using a `/16` subnet (`10.10.0.0/16`). Logical separation between organizational zones is maintained using dedicated IP prefixes within the `/16` range (Organization A: `10.10.110.x`, Organization B: `10.10.120.x`, Aggregator: `10.10.130.x`, Traffic Gen: `10.10.140.x`). Management and internet access flow through a separate bridge (`vmbr0`).
 
 ```mermaid
-graph TD
- subgraph PVE_Cluster ["Proxmox VE Cluster"]
- subgraph WAN_Mgmt["WAN / Management Bridge (vmbr0)"]
- Router[PVE Gateway / Internet]
- end
+flowchart TD
+    subgraph PVE_Cluster ["Proxmox VE Cluster"]
+        direction TB
+        subgraph WAN_Mgmt ["WAN / Management Bridge (vmbr0)"]
+            Router["PVE Gateway / Internet"]
+        end
 
- subgraph SDN["Internal Bridge (vmbr1) – Flat L2 (10.10.0.0/16)"]
- subgraph CentralZone["Central Zone (10.10.130.x)"]
- Aggregator["FL Aggregator<br/>LXC 300 – Ubuntu 24.04"]
- end
- 
- subgraph OrgA["Organization A (10.10.110.x)"]
- DefenderA["Defender Node A<br/>VM 310 – Ubuntu 24.04"]
- TargetA["Target Host A1<br/>VM 311 – Alpine Linux"]
- MirrorA["TAP/Bridge Mirror"]
- end
+        subgraph SDN ["Internal Bridge (vmbr1) – Flat L2 (10.10.0.0/16)"]
+            direction TB
+            subgraph CentralZone ["Central Zone (10.10.130.x)"]
+                Aggregator["FL Aggregator<br/>LXC 300 – Ubuntu 24.04"]
+            end
 
- subgraph OrgB["Organization B (10.10.120.x)"]
- DefenderB["Defender Node B<br/>VM 320 – Ubuntu 24.04"]
- TargetB["Target Host B1<br/>VM 321 – Alpine Linux"]
- MirrorB["TAP/Bridge Mirror"]
- end
- 
- subgraph TrafficZone["Traffic Generator Zone (10.10.140.x)"]
- Attacker["Traffic Generator<br/>VM 400 – Kali Linux"]
- end
- end
- end
+            subgraph OrgA ["Organization A (10.10.110.x)"]
+                direction TB
+                DefenderA["Defender Node A<br/>VM 310 – Ubuntu 24.04"]
+                TargetA["Target Host A1<br/>VM 311 – Alpine Linux"]
+                MirrorA["TAP/Bridge Mirror"]
+            end
 
- Attacker -->|Encrypted Attacks / Benign Traffic| TargetA
- Attacker -->|Encrypted Attacks / Benign Traffic| TargetB
- 
- TargetA <--> MirrorA
- TargetB <--> MirrorB
- 
- MirrorA -.->|Port Mirroring via tc| DefenderA
- MirrorB -.->|Port Mirroring via tc| DefenderB
+            subgraph OrgB ["Organization B (10.10.120.x)"]
+                direction TB
+                DefenderB["Defender Node B<br/>VM 320 – Ubuntu 24.04"]
+                TargetB["Target Host B1<br/>VM 321 – Alpine Linux"]
+                MirrorB["TAP/Bridge Mirror"]
+            end
 
- DefenderA <==>|gRPC FL Updates over TLS| Aggregator
- DefenderB <==>|gRPC FL Updates over TLS| Aggregator
+            subgraph TrafficZone ["Traffic Generator Zone (10.10.140.x)"]
+                Attacker["Traffic Generator<br/>VM 400 – Kali Linux"]
+            end
+        end
+    end
+
+    Attacker -->|Encrypted Attacks / Benign Traffic| TargetA
+    Attacker -->|Encrypted Attacks / Benign Traffic| TargetB
+
+    TargetA <--> MirrorA
+    TargetB <--> MirrorB
+
+    MirrorA -.->|Port Mirroring via tc| DefenderA
+    MirrorB -.->|Port Mirroring via tc| DefenderB
+
+    DefenderA <==>|gRPC FL Updates over TLS| Aggregator
+    DefenderB <==>|gRPC FL Updates over TLS| Aggregator
 ```
 
 ### VM / Container Breakdown
@@ -120,11 +124,11 @@ For future deployments requiring cross-host mirroring, the PVE SDN feature with 
 With port mirroring delivering packets to the defender nodes (Section 3), this section defines the feature extraction pipeline that converts raw encrypted traffic into training-ready vectors for the ML model (Section 5).
 
 ```mermaid
-graph LR
- Raw["Raw Packets (ens19)"] --> NFStream["[ NFStream ]"]
- NFStream --> CSV["Flow Records (CSV)"]
- CSV --> Scale["[ Scaling & Encoding ]"]
- Scale --> Tensor["PyTorch Tensor"]
+flowchart LR
+    Raw["Raw Packets (ens19)"] --> NFStream["[ NFStream ]"]
+    NFStream --> CSV["Flow Records (CSV)"]
+    CSV --> Scale["[ Scaling & Encoding ]"]
+    Scale --> Tensor["PyTorch Tensor"]
 ```
 
 ### 4.1 Feature Extraction with NFStream
@@ -188,29 +192,31 @@ These features are extracted without decryption, preserving end-to-end encryptio
 The core innovation is combining **Flower** (a lightweight FL framework) with **Avalanche** (the leading library for Continual Learning). This section presents the four code components that together implement the hybrid FL-CL training loop, consuming the ETA features from Section 4.
 
 ```mermaid
-graph TD
- Aggregator["Central FL Aggregator<br/>(Flower Server – LXC 300)"]
- 
- subgraph DefenderA ["Defender Node A"]
- ClientA["Flower Client"]
- CL_A["Avalanche EWC<br/>(CL Strategy)"]
- PipeA["NFStream Pipeline<br/>(Section 4)"]
- 
- ClientA --> CL_A
- CL_A --> PipeA
- end
+flowchart TD
+    Aggregator["Central FL Aggregator<br/>(Flower Server – LXC 300)"]
 
- subgraph DefenderB ["Defender Node B"]
- ClientB["Flower Client"]
- CL_B["Avalanche EWC<br/>(CL Strategy)"]
- PipeB["NFStream Pipeline<br/>(Section 4)"]
- 
- ClientB --> CL_B
- CL_B --> PipeB
- end
+    subgraph DefenderA ["Defender Node A"]
+        direction TB
+        ClientA["Flower Client"]
+        CL_A["Avalanche EWC<br/>(CL Strategy)"]
+        PipeA["NFStream Pipeline<br/>(Section 4)"]
 
- ClientA <-->|gRPC Weight Sync| Aggregator
- ClientB <-->|gRPC Weight Sync| Aggregator
+        ClientA --> CL_A
+        CL_A --> PipeA
+    end
+
+    subgraph DefenderB ["Defender Node B"]
+        direction TB
+        ClientB["Flower Client"]
+        CL_B["Avalanche EWC<br/>(CL Strategy)"]
+        PipeB["NFStream Pipeline<br/>(Section 4)"]
+
+        ClientB --> CL_B
+        CL_B --> PipeB
+    end
+
+    ClientA <-->|gRPC Weight Sync| Aggregator
+    ClientB <-->|gRPC Weight Sync| Aggregator
 ```
 
 ### 5.1 PyTorch Neural Network Architectures (`model.py`)
@@ -399,11 +405,11 @@ if __name__ == "__main__":
 To close the MLOps loop, the pipeline triggers an automated post-training analysis workflow upon completion:
 
 ```mermaid
-graph LR
- Orchestrate["orchestrate.py"] --> Report["generate_llm_report.py"]
- Report --> Proxy["Nginx Proxy"]
- Proxy --> Ollama["Ollama (llama3.1:8b)"]
- Proxy -->|markdown report| MLflow["MLflow Runs / Artifacts"]
+flowchart LR
+    Orchestrate["orchestrate.py"] --> Report["generate_llm_report.py"]
+    Report --> Proxy["Nginx Proxy"]
+    Proxy --> Ollama["Ollama (llama3.1:8b)"]
+    Proxy -->|markdown report| MLflow["MLflow Runs / Artifacts"]
 ```
 
 1. **Analytical Assessment**: The aggregator collects the training results (validation losses, final class-specific detection accuracies, and EWC backward transfer metrics).

@@ -70,7 +70,7 @@ Factory function to dynamically instantiate neural network backbones.
  * `ewc_lambda`: Fisher regularization coefficient (default: 0.8).
  * `patterns_per_exp`: Memory buffer pattern capacity for GEM (default: 256–512).
  * `memory_strength`: Quadratic programming constraint projection margin for GEM (default: 0.2–0.5).
- * `class_weights`: List of 5 class weights (default: `[1.0, 15.0, 2.0, 4.0, 15.0]`).
+ * `class_weights`: List of 5 class weights (default: `[1.0, 250.0, 2.0, 5.0, 50.0]`).
 * **Returns**: Avalanche strategy object (`EWC`, `GEM`, or `Naive`).
 
 ---

@@ -7,8 +7,8 @@ catastrophic forgetting when training on sequential attack tasks.
 Research Citations:
 - [1] Kirkpatrick, J., et al. (2017). Overcoming catastrophic forgetting in neural networks. PNAS.
   (Theoretical foundation for the EWC penalty mechanism applied below).
-- [3] [Anonymous] (2025). NeurIPS 2025 empirical evaluation.
-  (Empirical justification for the ewc_lambda hyperparameter sweep and bounds).
+- [3] Lopez-Paz, D. & Ranzato, M. (2017). Gradient Episodic Memory for Continual Learning. NeurIPS.
+  (Methodological foundation for GEM projection constraints on minority threat classes).
 
 The ewc_lambda parameter (default: 0.8) balances:
   - Plasticity: ability to learn new attack patterns
