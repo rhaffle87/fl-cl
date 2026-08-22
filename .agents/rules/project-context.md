@@ -1,4 +1,4 @@
-﻿# FL-CL Project Context
+# FL-CL Project Context
 
 > Workspace-scoped rule file. All agents working in this repository must read and internalize this context before taking action.
 > Last updated: 2026-08-16
@@ -280,8 +280,8 @@ Formal records in `docs/decisions/`:
 
 **Verify Before Claiming Done**:
 ```
-python scratch/test_models.py        # Forward pass + TorchScript + quantization check
-python scratch/test_local_train.py   # End-to-end training convergence on synthetic data
+python tools/test_models.py        # Forward pass + TorchScript + quantization check
+python tools/test_local_train.py   # End-to-end training convergence on synthetic data
 ```
 
 ---

@@ -11,7 +11,12 @@ Usage (SCP to defender, then run):
 
 import argparse
 import sys
+import os
+from pathlib import Path
 
+repo_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(repo_root / "src" / "defender"))
+sys.path.insert(0, str(repo_root / "src"))
 sys.path.append("/root")
 
 import numpy as np

@@ -80,14 +80,14 @@ Applies custom class-weighted EWC penalty calculations. It ensures that the impo
 
 ## 5. Verification & Testing
 
-Always validate the architectural changes and training loop before committing. Use the pre-existing test suites in the `scratch/` directory:
+Always validate the architectural changes and training loop before committing. Use the pre-existing test suites in the `tools/` directory:
 
 ### Run Model Verification Suite
 
 Checks model forward pass compatibility, TorchScript compilation, 8-bit dynamic quantization, and Fisher-guided pruning.
 
 ```bash
-python scratch/test_models.py
+python tools/test_models.py
 ```
 
 ### Run Local Training Verification
@@ -95,5 +95,5 @@ python scratch/test_models.py
 Verifies end-to-end training convergence on a synthetic/dummy 5-class traffic flow dataset.
 
 ```bash
-python scratch/test_local_train.py
+python tools/test_local_train.py
 ```

@@ -695,7 +695,7 @@ esac
 ### 12.7 FedAvg vs. Isolated Training — The FL Value Argument
 
 ```python
-# scratch/fedavg_value_demonstration.py
+# tools/fedavg_value_demonstration.py
 # Illustrates why a single-client model cannot match the federated global model.
 # This is the fundamental empirical motivation for FL in this context.
 
@@ -789,7 +789,7 @@ The hyperparameter search was deliberately constrained, not exhaustive:
 
 1. **Full Specification Published**: Chapter 3 provides the complete hardware inventory (CPUs, RAM, disk), Proxmox version (8.x), VM configurations (vCPU, RAM, disk sizes), IP addressing scheme, and LACP bond mode. Chapter 4 provides the exact `tc mirred` hookscript with line-by-line comments. Any lab with 3 commodity x86 machines running Proxmox VE can reproduce the setup.
 
-2. **Infrastructure ≠ Model**: The model architecture (`CyberDefenseNet` MLP, `CyberDefenseCNN`, `CyberDefenseTransformer`) and the continual learning strategies (EWC, GEM) are pure PyTorch code with no hardware dependencies. The model verification suite (`scratch/test_models.py`) validates forward pass, TorchScript compilation, INT8 quantization, and Fisher pruning on any x86_64 machine.
+2. **Infrastructure ≠ Model**: The model architecture (`CyberDefenseNet` MLP, `CyberDefenseCNN`, `CyberDefenseTransformer`) and the continual learning strategies (EWC, GEM) are pure PyTorch code with no hardware dependencies. The model verification suite (`tools/test_models.py`) validates forward pass, TorchScript compilation, INT8 quantization, and Fisher pruning on any x86_64 machine.
 
 3. **Dataset Lineage**: SHA-256 hashes are recorded for all training datasets (Defender A: `cb64509b`, Defender B: `14bca927`, Combined: `17d96260`). The traffic generation strategy (Chapter 5) uses Metasploit, Hydra, and Selenium — all open-source tools with deterministic seed support.
 
@@ -853,7 +853,7 @@ This section addresses rigorous, implementation-level attacks questioning algori
 2. **Avalanche Dataloader Isolation**: Avalanche's supervised training loop executes forward-backward passes iteratively per mini-batch, invoking `optimizer.zero_grad()` at the start of every iteration. This completely resets the `.grad` tensor buffer to zero, preventing any lingering noise accumulation or cross-batch gradient bleed.
 3. **Gradient Clip Norm Invariant**: The implementation applies `clip_grad_norm_(model.parameters(), max_norm=dp_max_grad_norm)` *before* noise addition, guaranteeing that the sensitivity bound $C=1.0$ holds strictly across all network parameters.
 
-> **Code Reference**: [`src/defender/cl_strategy.py:80-99`](../src/defender/cl_strategy.py#L80-L99) | [`scratch/test_local_train.py`](../scratch/test_local_train.py)
+> **Code Reference**: [`src/defender/cl_strategy.py:80-99`](../src/defender/cl_strategy.py#L80-L99) | [`tools/test_local_train.py`](../tools/test_local_train.py)
 
 ---
 
@@ -920,10 +920,10 @@ This section addresses rigorous, implementation-level attacks questioning algori
 **Defense**:
 
 1. **Dynamic Leading Batch Dimension**: In PyTorch JIT graph tracing, `Conv1d`, `Linear`, `BatchNorm1d`, `LayerNorm`, and `Dropout` record symbolic computational graphs where the leading batch dimension is treated as a dynamic symbol (dimension `-1`).
-2. **Multi-Batch Verification**: The model test suite (`scratch/test_models.py`) explicitly validates compiled TorchScript models across single-flow ($N=1$), edge batch ($N=16$), and volumetric flood ($N=500$) tensors, confirming zero dimension runtime errors and 100% numerical parity against eager PyTorch.
+2. **Multi-Batch Verification**: The model test suite (`tools/test_models.py`) explicitly validates compiled TorchScript models across single-flow ($N=1$), edge batch ($N=16$), and volumetric flood ($N=500$) tensors, confirming zero dimension runtime errors and 100% numerical parity against eager PyTorch.
 3. **Zero Python Edge Dependency**: The resulting `model_latest_scripted.pt` runs standalone inside C++ / LibTorch edge inference loops without requiring Python runtime interpreters.
 
-> **Code Reference**: [`src/aggregator/server.py:1220-1245`](../src/aggregator/server.py#L1220-L1245) | [`tools/validate_model.py`](../tools/validate_model.py) | [`tools/benchmark_inference_latency.py`](../tools/benchmark_inference_latency.py) | [`scratch/test_models.py`](../scratch/test_models.py)
+> **Code Reference**: [`src/aggregator/server.py:1220-1245`](../src/aggregator/server.py#L1220-L1245) | [`tools/validate_model.py`](../tools/validate_model.py) | [`tools/benchmark_inference_latency.py`](../tools/benchmark_inference_latency.py) | [`tools/test_models.py`](../tools/test_models.py)
 
 ---
 

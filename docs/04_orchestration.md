@@ -826,7 +826,7 @@ To audit feature-level distributions manually, researchers can use `tools/check_
 
 ## 11. Automated Testbed Benchmarking Suite & Core Experiments Matrix
 
-To evaluate system stability, plasticity, and security under varying deployment strains, the platform includes an automated execution framework orchestrated by `scratch/deploy_to_testbed.py`. This script runs both the 5 core experimental scenarios and the 4-tier benchmark suite directly on the 3-node physical Proxmox VE testbed (`10.10.130.10`).
+To evaluate system stability, plasticity, and security under varying deployment strains, the platform includes an automated execution framework orchestrated by `tools/deploy_to_testbed.py`. This script runs both the 5 core experimental scenarios and the 4-tier benchmark suite directly on the 3-node physical Proxmox VE testbed (`10.10.130.10`).
 
 ### 11.1 Core Experimental Configurations Matrix
 
@@ -853,7 +853,7 @@ To evaluate system stability, plasticity, and security under varying deployment 
 2. **Adaptive Byzantine TrimmedMean Median**: In small topology clusters ($N \le 3$), `server.py` adaptively falls back to coordinate-wise `FedMedian`. This mathematically guarantees 100% elimination of outlier updates from 1 corrupted defender node in a 2-node cluster, restoring DoS F1 score to **0.9675** under 20% label poisoning.
 3. **Automated Deployment Command**: Run the entire 9-stage testing sequence directly on the physical testbed from the repository root:
  ```bash
- python scratch/deploy_to_testbed.py
+ python tools/deploy_to_testbed.py
  ```
  Execution logs stream live to terminal and `deploy.log`.
 
