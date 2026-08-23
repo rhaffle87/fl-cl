@@ -227,46 +227,35 @@ def get_continual_learner(model, device, ewc_lambda=0.8, class_weights=None):
  )
 ```
 
-**How EWC prevents catastrophic forgetting:**
+**How EWC operates and its vulnerability to Fisher collapse:**
 
-After training on historical attack data (e.g., SSH brute force), EWC computes the **Fisher Information Matrix (FIM)** — a measure of how important each weight is for classifying those attacks. When new attack data arrives (e.g., DoS traffic), the training loss is augmented with a penalty term:
+After training on historical attack data, EWC computes the diagonal **Fisher Information Matrix (FIM)**:
 
 $$\mathcal{L}(\theta) = \mathcal{L}_{\text{new}}(\theta) + \frac{\lambda}{2} \sum_{i} F_i (\theta_i - \theta_i^*)^2$$
 
-Where:
+Where $F_i = \mathbb{E}_{(x,y)} \left[ \left(\frac{\partial \log p(y|x, \theta)}{\partial \theta_i}\right)^2 \right]$. Under severe class imbalance (where Normal flows exceed $94\%$ and Botnet flows constitute $<0.6\%$), $F_{\text{Botnet}} \approx 0$, causing EWC to offer near-zero regularization for minority threat weights, leading to catastrophic forgetting (Botnet recall collapsing to $0.00\%$, $\text{BWT} = -0.8544$).
 
-- $\mathcal{L}_{\text{new}}(\theta)$ is the cross-entropy loss on the new attack data
-- $\theta_i^*$ are the optimal weights from the previous task
-- $F_i$ is the Fisher Information for weight $i$ (how important it is)
-- $\lambda$ (`ewc_lambda`) controls the penalty strength
+#### 3.3.3 The GEM Geometric Resolution
 
-**In plain English:** If a weight was critical for detecting SSH brute force, EWC makes it expensive to change that weight while learning DoS patterns. The model finds alternative weights to represent the new knowledge.
+To guarantee minority threat retention, FL-CL implements **Gradient Episodic Memory (GEM)**. GEM maintains an episodic buffer $\mathcal{M}_k$ of $P=512$ patterns per class ($2,560$ flow records, occupying $327.68\,\text{KB}$ in CPU L2 cache). When optimizing the current task, GEM enforces:
+
+$$\langle g, g_k \rangle \ge s \|g_k\|_2^2 \quad \forall k < t$$
+
+If $\langle g, g_k \rangle < 0$, GEM projects the gradient via dual Quadratic Programming ($\mathcal{O}(T \cdot d) + \mathcal{O}(T^3)$ operations). Tightening the margin constraint to $s=0.2$ bounds divergence to $\theta \le \arccos(0.2) \approx 78.46^\circ$, restoring Botnet recall to **$100.00\%$** (24/24 true positives), boosting F1 by **$+30.9\%$** ($0.5275 \rightarrow 0.6905$), and eliminating catastrophic forgetting ($\text{BWT} = 0.0000$).
 
 ```mermaid
 flowchart LR
-    subgraph WithoutEWC ["Without EWC"]
+    subgraph EWC_Collapse ["EWC under Imbalance"]
         direction LR
-        W1["Round 1: Learns SSH-BF [PASS]"] --> W2["Round 2: Learns DoS [PASS] <br/> (Forgets SSH-BF [FAIL])"]
-        W2 --> W3["Round 3: Learns Botnet [PASS] <br/> (Forgets DoS [FAIL])"]
+        E1["Normal Traffic >94%"] --> E2["Fisher Diagonal F_Botnet ≈ 0"]
+        E2 --> E3["Botnet Recall: 0.00%<br/>(BWT = -0.8544)"]
     end
-    subgraph WithEWC ["With EWC"]
+    subgraph GEM_Restoration ["GEM with Geometric Margin"]
         direction LR
-        E1["Round 1: Learns SSH-BF [PASS]"] --> E2["Round 2: Learns DoS [PASS] <br/> (Retains SSH-BF [PASS])"]
-        E2 --> E3["Round 3: Learns Botnet [PASS] <br/> (Retains SSH-BF + DoS [PASS])"]
+        G1["Episodic Buffer P=512"] --> G2["Dual QP Gradient Projection"]
+        G2 --> G3["Botnet Recall: 100.00%<br/>(BWT = 0.0000, F1 = 0.6905)"]
     end
 ```
-
-#### 3.3.3 Class Weighting for Imbalanced Traffic
-
-The `CrossEntropyLoss` is configured with per-class weights from the experiment config:
-
-```yaml
-# configs/experiment.yaml
-training:
-  class_weights: [1.0, 250.0, 2.0, 5.0, 50.0]
-```
-
-This tells the optimizer to pay **250× more attention** to misclassifying Botnet (class 1) compared to **1× for Normal** (class 0). Without these weights, the model would ignore rare attack classes in favor of maximizing accuracy on the dominant Normal class.
 
 ---
 

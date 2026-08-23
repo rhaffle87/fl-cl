@@ -6,7 +6,7 @@ Complete technology inventory organized by system layer. Each entry specifies th
 
 ## Layer 1: Hypervisor (PVE Host Nodes)
 
-These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
+These run directly on the bare-metal Proxmox VE hosts (`its`, `node2` - Dell PowerEdge R630; `pve` - Dell PowerEdge R760xs).
 
 | Technology | Version | Purpose | Install / Enable |
 | :--- | :--- | :--- | :--- |
@@ -19,7 +19,7 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2`, `pve`).
 | **LVM-Thin** | lvm2 | Thin-provisioned storage with fast snapshot/rollback | PVE default storage layout |
 | **Corosync** | 3.x | Cluster quorum and node health | Pre-installed with PVE |
 | **ifupdown2** | 0.x | Hot-reload network config without reboot | `apt install ifupdown2` |
-| **Dell PERC H755** | Firmware | Hardware RAID controller (1.20 TB logical volume) | Hardware — no software install |
+| **Dell PERC H755 / H730** | Firmware | Hardware RAID controllers | Hardware — no software install |
 
 ---
 
@@ -59,7 +59,8 @@ These packages run inside VM 310 and VM 320.
 | :--- | :--- | :--- | :--- |
 | **Python** | 3.11+ | Runtime | `apt install python3 python3-venv` |
 | **PyTorch** | 2.x | Deep learning framework (CyberDefenseNet MLP, 1D-CNN, Transformer) | `pip install torch --index-url .../cpu` |
-| **Avalanche** | 0.5+ | Continual Learning library (EWC strategy) | `pip install avalanche-lib` |
+| **ONNX Runtime** | 1.19+ | High-throughput CPU inference engine (AVX2 SIMD acceleration) | `pip install onnxruntime` |
+| **Avalanche** | 0.5+ | Continual Learning library (EWC and GEM strategies) | `pip install avalanche-lib` |
 | **Flower (flwr)** | 1.x | Federated Learning client | `pip install flwr` |
 | **Opacus** | 1.x | Client-side Differential Privacy (DP-SGD) | `pip install opacus` |
 | **NFStream** | 6.x | Encrypted traffic feature extraction (JA3, flow stats) | `pip install nfstream` |
@@ -77,7 +78,7 @@ These packages run inside VM 310 and VM 320.
 | Package | Version | Purpose | Install |
 | :--- | :--- | :--- | :--- |
 | **Python** | 3.11+ | Runtime | `apt install python3 python3-venv` |
-| **Flower (flwr)** | 1.x | Federated Learning server (FedAvg) | `pip install flwr` |
+| **Flower (flwr)** | 1.x | Federated Learning server (FedAvg, TrimmedMean, FedMedian, Krum) | `pip install flwr` |
 | **MLflow** | 3.x | Experiment tracking, metric logging, LoggedModel entities | `pip install mlflow` |
 | **matplotlib** | 3.x | Render per-round evaluation confusion matrix heatmaps (headless) | `pip install matplotlib` |
 

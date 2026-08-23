@@ -106,11 +106,16 @@ mlops:
 
 ### 2. Champion/Challenger Promotion Gating
 
-On validation rounds, the aggregator automatically decides whether to promote the model using strict criteria:
+On validation rounds, the CI/CD promotion engine evaluates candidate models against 5 strict per-class F1 gates before promoting to the `champion` alias:
 
-- **Per-class F1-score**: Evaluates each class individually.
-- **Catastrophic Forgetting Prevention**: Verifies that Backward Transfer (BWT) $\ge 0$. Any drop below 0 is flagged as forgetting and blocks promotion.
-- **Communication Budget**: Rejects models with client-aggregator transmission overhead $> 200$ MB.
+- **Per-class F1 Thresholds**:
+  - Normal $\ge 0.50$
+  - Botnet $\ge 0.60$
+  - Exfiltration $\ge 0.70$
+  - BruteForce $\ge 0.50$
+  - DoS $\ge 0.70$
+- **Catastrophic Forgetting Prevention**: Asserts Backward Transfer $\text{BWT} \ge 0.0000$.
+- **Composite Promotion Index (CPI)**: Evaluates weighted combination of Macro F1, BWT stability, and inference latency score. Candidate Model v35 achieved $\text{CPI} = 0.864$, qualifying for automatic production `champion` promotion.
 
 ### 3. Automated Telegram Alerts & LLM Reporting
 

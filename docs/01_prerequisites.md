@@ -6,17 +6,16 @@
 
 ## 1. Hardware & System Requirements
 
-The testbed runs across a 3-node Proxmox VE cluster hosting 6 VMs/LXCs totaling ~26 vCPUs, 46 GB RAM, and 320 GB disk. Your hardware choices determine the complexity of models you can train and the fidelity of traffic capture.
+The testbed is deployed on an enterprise-grade 3-node Proxmox VE cluster composed of two Dell PowerEdge R630 servers (nodes `its` and `node2`) and one Dell PowerEdge R760xs server (node `pve`), hosting 6 VMs/LXCs across isolated Layer-2 VLANs.
 
 ### A. Compute & Acceleration (CPU/GPU)
 
-* **GPU Passthrough (Recommended):** Deep learning models used for Encrypted Traffic Analysis—particularly 1D-CNNs or LSTMs applied to SPLT (Sequence of Packet Lengths and Times) features—train significantly faster on GPUs.
- * **Action:** Allocate a consumer GPU (e.g., NVIDIA RTX 3060/4060 or Tesla T4/P4) for PCIe passthrough to one of the defender VMs. Configure `vfio` drivers on the PVE host. The workload placement in [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 2 allocates Defender A (VM 310) to node `its`, which is the recommended GPU passthrough host.
-* **RAM Capacity:**
- * **Minimum:** 32 GB per node (PVE overhead + VM allocations).
- * **Recommended:** 64 GB+ per node. Each defender VM requires 16 GB to load large network flow datasets into PyTorch memory during training.
+* **Physical Nodes:** Two Dell PowerEdge R630 servers and one Dell PowerEdge R760xs server interconnected via high-throughput interfaces and flat virtual bridges (`vmbr0`, `vmbr1`).
+* **RAM Capacity & In-Memory Pipeline:**
+  * **Aggregator & Defenders:** 8 GB RAM allocated per VM/LXC instance.
+  * **RAMDisk Buffer (`tmpfs`):** Each defender mounts a volatile 2.0 GB RAMDisk (`/mnt/ramdisk/flows/`) to achieve zero-contention flow serialization during multi-gigabit traffic bursts.
 * **Storage Speed (SSD/NVMe):**
- * Continuous flow extraction via NFStream (see [02_architecture.md](02_architecture.md) Section 4) and model checkpointing create sustained disk I/O. **Do not use HDDs.** Use NVMe SSDs or SSD arrays behind the RAID controller (Dell PERC H755 on the current cluster). The RAM disk buffer described in [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 3.B further mitigates I/O contention.
+  * Continuous flow extraction via NFStream and frequent federated checkpointing require high-IOPS storage. NVMe SSD storage pools back all core virtual disks.
 
 ---
 
@@ -90,22 +89,25 @@ Each attack campaign constitutes a distinct Continual Learning task. The recomme
 
 ### A. Python Environment
 
-Set up a standardized virtual environment (`venv`) across all defender nodes and the aggregator. The dependency stack aligns with the code components in [02_architecture.md](02_architecture.md) Section 5:
+Set up a standardized virtual environment (`venv`) with Python 3.10+ across all defender nodes and the aggregator. The core dependency stack:
 
 ```bash
-# Deep learning framework (model.py)
-pip install torch torchvision torchaudio
+# Deep learning runtime & inference compilation
+pip install torch torchvision torchaudio onnxruntime
 
-# Continual learning suite (cl_strategy.py)
+# Continual learning strategy suite (EWC, GEM)
 pip install avalanche-lib
 
-# Federated learning framework (client.py, server.py)
+# Federated learning framework (Flower server & clients)
 pip install flwr
 
-# Feature extraction from encrypted traffic (extractor.py)
+# Encrypted traffic flow feature extraction (32-dim ETA vectors)
 pip install nfstream
 
-# Data engineering & evaluation
+# MLOps tracking and model registry
+pip install mlflow
+
+# Data engineering, evaluation & array math
 pip install scikit-learn pandas numpy
 ```
 

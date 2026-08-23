@@ -17,8 +17,8 @@ flowchart RL
     subgraph Conceptual_Pipeline ["Federated Continual Learning Cycle"]
         direction RL
         DataStream["Encrypted Traffic Stream <br> (Non-Stationary)"] -->|Layer 4: NFStream <br> Extraction| FeatureTensors["Feature Vectors <br> (32 features)"]
-        FeatureTensors -->|Layer 5: Local CL <br> with EWC| LocalUpdates["Local Parameter Updates <br> (Regularized by FIM)"]
-        LocalUpdates -->|Layer 6: FL Sync - <br> Flower and gRPC| GlobalAggregator["Global Aggregation <br> (FedAvg)"]
+        FeatureTensors -->|Layer 5: Local CL <br> (GEM / EWC)| LocalUpdates["Local Parameter Updates <br> (Projected by GEM QP)"]
+        LocalUpdates -->|Layer 6: Robust FL Sync - <br> Flower and gRPC| GlobalAggregator["Robust Global Aggregator <br> (TrimmedMean / Median)"]
         GlobalAggregator -->|Broadcast <br> Global Model| DataStream
     end
 ```

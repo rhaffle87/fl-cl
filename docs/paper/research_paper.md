@@ -4,8 +4,7 @@
 **Academic Topic**: Undergraduate Thesis in Telecommunications Engineering  
 **Department**: Department of Electrical Engineering, Faculty of Intelligent Electrical and Informatics Technology (F-ELECTICS)  
 **Institution**: Institut Teknologi Sepuluh Nopember (ITS), Surabaya, East Java, Indonesia  
-**Date**: August 2026  
-**Version**: 3.0.0 (Comprehensive Empirical Validation & Production Edition)
+**Date**: August 2026
 
 ---
 
@@ -1511,6 +1510,17 @@ While the current model is highly effective for a robust proof of concept, SOTA 
 | **Privacy Guarantees** | Implements DP-SGD batch-level gradient regularization. | DP-SGD + Secure Multi-Party Computation (SMPC). | **Good** |
 | **Feature Scaling** | Static scale parameters from `baseline_feature_stats.json`. | Global online scaling or adaptive normalization. | **Excellent** (Prevents client-side covariate shift) |
 
+#### Table 10.2: Architectural and Methodological Comparison with Closely Related Literature
+
+| Framework | Target Domain | CL Strategy | Byzantine Defense | Testbed Type | Primary Metric / Focus | Inference Latency |
+| :--- | :--- | :--- | :--- | :--- | :--- | :---: |
+| **FL-IIDS** (Jin et al., 2024) | Plaintext (CIC-IDS) | Replay + Custom Loss | None (FedAvg) | Simulation | 97.80% Acc. [Static Split] | Not Reported$^*$ |
+| **GFCL** (Talpur & Gurusamy, 2022) | Connected Vehicles (IoV) | EWC Baseline | Heuristic Check | Simulation | [BWT Degradation Focus] | Not Reported$^*$ |
+| **FedSI** (Zhang et al., 2023) | General Non-IID Proxies | Synaptic Intelligence | None (FedAvg) | Simulation | [Compression Ratio Focus] | Not Reported$^*$ |
+| **EWC-DR** (Liu et al., 2026) | Vision-Lang. (Centralized) | EWC + Replay Adj. | None (Centralized) | Standalone | [Fisher Vanishing Analysis] | Not Reported$^*$ |
+| **FL-CL (Ours)** | **TLS 1.3 Encrypted Traffic** | **GEM ($P=512, s=0.2$)** | **TrimMean / Median** | **Physical PVE** | **99.53% Acc., 100% Recall** | **7.10 $\mu$s (ONNX)** |
+
+$^*$*Values marked "Not Reported" are absent from the cited source publications. Qualitative descriptors in brackets denote the specific empirical focus evaluated in each source paper.*
 
 ---
 

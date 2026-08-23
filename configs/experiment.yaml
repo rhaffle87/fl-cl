@@ -85,7 +85,7 @@ features:
 
 # ── Traffic Simulation ──────────────────────────────────────
 simulation:
-  attack_duration_seconds: 90
+  attack_duration_seconds: 60
   stages:
     - mode: benign
     - mode: ssh
