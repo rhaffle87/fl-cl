@@ -1,3 +1,17 @@
+"""
+test_comprehensive.py — Comprehensive End-to-End System, Model, and Strategy Test Suite.
+
+Performs offline integration tests validating:
+1. Multi-backbone instantiation and dynamic tensor calculations
+2. Continual learning (EWC & GEM) gradient constraints and Fisher penalties
+3. Dynamic INT8 quantization and TorchScript compilation
+4. Fisher-guided unstructured model pruning
+5. Robust federated aggregation strategies (FedAvg, TrimmedMean, FedMedian, Krum)
+
+Usage:
+    python3 tools/test_comprehensive.py
+"""
+
 import os
 import sys
 import copy

@@ -13,7 +13,7 @@ Deploying continual federated learning models to edge defense gateways without a
 3. **Edge Deployment Latency & Footprint**: Edge defenders need deployment-ready compiled graphs (TorchScript) and optimized low-precision formats (INT8 dynamic quantization) without external Python runtime dependencies.
 
 ## Decision
-We establish an automated CI/CD validation gate and model registry promotion lifecycle in `tools/ci_cd_promote.py` and `src/orchestrate.py`:
+We establish an automated CI/CD validation gate and model registry promotion lifecycle in `tools/validate_promotion.py` and `src/orchestrate.py`:
 
 ### 1. Multi-Gate Promotion Pipeline
 Candidate model versions registered as `challenger` in MLflow are transferred to an independent physical defender node and validated against held-out ramdisk flow datasets before promotion:

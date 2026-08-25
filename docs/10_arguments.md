@@ -839,7 +839,7 @@ This section addresses rigorous, implementation-level attacks questioning algori
 2. **Zero Memory & Device Safety**: The dummy tensor `torch.zeros(1, 1, input_dim)` allocates a negligible ~128 bytes in CPU scratch memory inside a `torch.no_grad()` context. It is garbage-collected immediately upon constructor completion. Because module parameter instantiation occurs on CPU before any `.to(device)` call, no CUDA context is polluted and no thread contention occurs.
 3. **Canonical PyTorch Idiom**: Dynamic dimension probing during initialization is the established design pattern across leading PyTorch ecosystems (including PyTorch Lightning and TorchVision feature extractors) to guarantee shape safety without hardcoded magic numbers.
 
-> **Code Reference**: [`src/defender/model.py:46-51`](../src/defender/model.py#L46-L51) | [ADR-002](../docs/decisions/ADR-002_multi_backbone_model_factory.md)
+> **Code Reference**: [`src/defender/model.py:46-51`](../src/defender/model.py#L46-L51) | [ADR-002](../docs/decisions/ADR-002_model_factory.md)
 
 ---
 
@@ -867,7 +867,7 @@ This section addresses rigorous, implementation-level attacks questioning algori
 2. **Atomic In-Memory Write Flush**: In `src/defender/extractor.py` (lines 94–99), flow records are accumulated in Python memory and serialized to CSV in a single atomic filesystem operation (`pd.DataFrame(batch).to_csv(filename, index=False)`). On a `tmpfs` RAM disk filesystem, this in-memory page write completes in $<0.4\text{ ms}$ for 500 rows, reducing the collision window to near zero.
 3. **Batch Number Monotonicity**: Files are named monotonically (`flows_000001.csv`, `flows_000002.csv`), and sorting ensures historical completed batches are read in deterministic order.
 
-> **Code Reference**: [`src/defender/client.py:183-206`](../src/defender/client.py#L183-L206) | [`src/defender/extractor.py:93-100`](../src/defender/extractor.py#L93-L100) | [ADR-003](../docs/decisions/ADR-003_nfstream_tmpfs_flow_extraction.md)
+> **Code Reference**: [`src/defender/client.py:183-206`](../src/defender/client.py#L183-L206) | [`src/defender/extractor.py:93-100`](../src/defender/extractor.py#L93-L100) | [ADR-003](../docs/decisions/ADR-003_flow_extraction.md)
 
 ---
 
@@ -877,11 +877,11 @@ This section addresses rigorous, implementation-level attacks questioning algori
 
 **Defense**:
 
-1. **Domain-Specific Parameter Footprint**: In the FL-CL architecture, models are deliberately lightweight: `CyberDefenseCNN` has **17,669 parameters** (70 KB), `CyberDefenseNet` has **4,357 parameters** (17 KB), and `CyberDefenseTransformer` has **131,205 parameters** (512 KB).
+1. **Domain-Specific Parameter Footprint**: In the FL-CL architecture, models are deliberately lightweight: `CyberDefenseCNN` has **18,405 parameters** (73.6 KB), `CyberDefenseNet` has **4,357 parameters** (17.4 KB), and `CyberDefenseTransformer` has **18,725 parameters** (74.9 KB) in standard edge configuration (and up to 131,205 parameters for scaled deep variants).
 2. **Empirical Aggregation Latency**: On the LXC 300 aggregator, stacking and coordinate-wise NumPy sorting (`np.sort(stacked_weights, axis=0)`) across $N=4$ clients takes **$<4.2\text{ ms}$** for CNN and **$<18.5\text{ ms}$** for Transformer.
 3. **Computation vs. Communication Ratio**: A single federated round requires 20–60 seconds for client-side local continual training and gRPC transfer. A 4.2 ms aggregation step represents $<0.02\%$ of the total round time, making coordinate sorting completely negligible in edge IDS federations.
 
-> **Code Reference**: [`src/aggregator/server.py:105-145`](../src/aggregator/server.py#L105-L145) | [ADR-004](../docs/decisions/ADR-004_flower_federated_aggregation_robust_trimmed_mean.md)
+> **Code Reference**: [`src/aggregator/server.py:105-145`](../src/aggregator/server.py#L105-L145) | [ADR-004](../docs/decisions/ADR-004_federated_aggregation.md)
 
 ---
 
@@ -909,7 +909,7 @@ This section addresses rigorous, implementation-level attacks questioning algori
 2. **Preserving Relative Loss Ratios**: The normalization formula `(w / sum(w)) * 5` enforces that $\frac{1}{C} \sum_{c=1}^C w_c = 1.0$, maintaining an average loss scale identical to standard unweighted Cross-Entropy while strictly preserving the relative penalty ratios ($w_{\text{Botnet}} / w_{\text{Normal}} = 250.0$).
 3. **Gradient Stability Safeguard**: This normalization, combined with `_GRAD_CLIP_MAX_NORM = 1.0`, mathematically prevents loss divergence while forcing SGD backpropagation to prioritize rare Botnet boundary separation.
 
-> **Code Reference**: [`src/defender/cl_strategy.py:65-79`](../src/defender/cl_strategy.py#L65-L79) | [ADR-001](../docs/decisions/ADR-001_avalanche_continual_learning_ewc_gem.md)
+> **Code Reference**: [`src/defender/cl_strategy.py:65-79`](../src/defender/cl_strategy.py#L65-L79) | [ADR-001](../docs/decisions/ADR-001_continual_learning.md)
 
 ---
 
@@ -923,7 +923,7 @@ This section addresses rigorous, implementation-level attacks questioning algori
 2. **Multi-Batch Verification**: The model test suite (`tools/test_models.py`) explicitly validates compiled TorchScript models across single-flow ($N=1$), edge batch ($N=16$), and volumetric flood ($N=500$) tensors, confirming zero dimension runtime errors and 100% numerical parity against eager PyTorch.
 3. **Zero Python Edge Dependency**: The resulting `model_latest_scripted.pt` runs standalone inside C++ / LibTorch edge inference loops without requiring Python runtime interpreters.
 
-> **Code Reference**: [`src/aggregator/server.py:1220-1245`](../src/aggregator/server.py#L1220-L1245) | [`tools/validate_model.py`](../tools/validate_model.py) | [`tools/benchmark_inference_latency.py`](../tools/benchmark_inference_latency.py) | [`tools/test_models.py`](../tools/test_models.py)
+> **Code Reference**: [`src/aggregator/server.py:1220-1245`](../src/aggregator/server.py#L1220-L1245) | [`tools/validate_model.py`](../tools/validate_model.py) | [`tools/benchmark_latency.py`](../tools/benchmark_latency.py) | [`tools/test_models.py`](../tools/test_models.py)
 
 ---
 

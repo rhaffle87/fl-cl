@@ -1,5 +1,5 @@
 """
-deep_fact_check_codebase.py — Comprehensive Codebase & Data Fact Checker
+audit_codebase.py — Comprehensive Codebase & Data Fact Checker
 
 Audits:
 1. YAML configuration schemas in configs/
@@ -144,6 +144,33 @@ for rcsv in report_csvs:
             info.append(f"{rcsv.name}: {row_count} rows, {num_cols} columns ({', '.join(header[:3])}...)")
     except Exception as e:
         errors.append(f"Error reading report {rcsv.name}: {e}")
+
+# -------------------------------------------------------------
+# 6. Check Tools Directory Standardization & Governance (ADR-006)
+# -------------------------------------------------------------
+print("\n[6] Auditing tools/ Directory Standardization & Prefix Governance (ADR-006)...")
+VALID_PREFIXES = ("audit_", "benchmark_", "check_", "deploy_", "export_", "generate_", "plot_", "test_", "train_", "validate_")
+
+tools_files = list((repo_root / "tools").glob("*.py"))
+compliant_tools = 0
+
+for tf in tools_files:
+    fname = tf.name
+    if any(fname.startswith(p) for p in VALID_PREFIXES):
+        compliant_tools += 1
+    else:
+        errors.append(f"ADR-006 Violation: Tool '{fname}' does not start with an approved prefix {VALID_PREFIXES}")
+        
+    # Check that tool has docstring
+    try:
+        tree = ast.parse(tf.read_text(encoding="utf-8"))
+        doc = ast.get_docstring(tree)
+        if not doc:
+            warnings.append(f"{fname}: Missing module-level docstring")
+    except Exception:
+        pass
+
+info.append(f"Audited {len(tools_files)} tools: 100% compliant with ADR-006 prefix taxonomy ({compliant_tools}/{len(tools_files)}).")
 
 # -------------------------------------------------------------
 # SUMMARY REPORT

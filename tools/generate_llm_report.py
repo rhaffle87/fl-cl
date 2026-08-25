@@ -1,9 +1,23 @@
+"""
+generate_llm_report.py — Automated Post-Run LLM Threat Intelligence Summary Generator.
+
+Queries a local Ollama LLM endpoint (e.g. qwen-flcl:3b or llama3.1:8b) to synthesize
+an executive cybersecurity report, loss dynamics analysis, and continual learning retention
+evaluation based on active MLflow run metrics.
+
+Usage:
+    python3 tools/generate_llm_report.py --run-id <MLFLOW_RUN_ID> [--cl-strategy GEM]
+"""
+
 import os
 import sys
 import json
 import requests
+import urllib3
 import argparse
 from mlflow.tracking import MlflowClient
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def load_env(env_name: str = ".env"):
     """Load environment variables from a .env file searching upward from the script directory."""
@@ -34,7 +48,7 @@ def generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds, cl_strategy
     """Queries the local LLM model via the Tailscale Ollama proxy."""
     endpoint = os.getenv("OLLAMA_ENDPOINT")
     key = os.getenv("OLLAMA_KEY")
-    model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+    model = os.getenv("OLLAMA_MODEL", "qwen-flcl:3b")
 
     if not endpoint or not key:
         print("[!] Warning: OLLAMA_ENDPOINT or OLLAMA_KEY is not set in .env. Skipping LLM report generation.")
@@ -82,15 +96,15 @@ Please write your evaluation report. Start directly with the section header "## 
         "stream": False,
         "options": {
             "num_thread": 4,
+            "num_ctx": 4096,
             "temperature": 0.3,
             "num_predict": 512
         }
     }
 
-
     try:
         print(f"[*] Querying local AI model '{model}' at '{endpoint}'...")
-        response = requests.post(url, headers=headers, json=payload, timeout=300)
+        response = requests.post(url, headers=headers, json=payload, verify=False, timeout=180)
         if response.status_code == 200:
             result = response.json()
             return result.get("response", "").strip()
@@ -114,7 +128,7 @@ def append_and_upload_report(run_dir, run_id, final_metrics, lambda_ewc, rounds,
         return False
 
     # Get model name again for heading reference
-    model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+    model = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:3b")
     print(f"[*] Appending local AI analysis ({model}) to {summary_path}...")
     try:
         if cl_strategy.upper() == "EWC":

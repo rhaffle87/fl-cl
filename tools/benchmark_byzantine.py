@@ -1,5 +1,5 @@
 """
-benchmark_byzantine_suite.py — Multi-Aggregator Byzantine Robustness Benchmark
+benchmark_byzantine.py — Multi-Aggregator Byzantine Robustness Benchmark
 
 Benchmarks FedAvg, TrimmedMean, FedMedian, Krum, MultiKrum, and Bulyan across:
 1. Clean federated baseline

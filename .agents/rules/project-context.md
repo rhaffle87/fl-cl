@@ -29,8 +29,8 @@ The workspace root is `fl-cl/`. Key directories and their purpose:
 - `data/reports/` — Empirical training results (`training_results_report.md`)
 - `docs/` — All documentation (thesis chapters, ADRs, arguments dossier, support figures)
 - `docs/paper/research_paper.md` — Full thesis monograph (primary paper)
-- `docs/arguments.md` — Thesis defense dossier (21 attack categories)
-- `docs/decisions/` — Architecture Decision Records ADR-001 to ADR-005
+- `docs/10_arguments.md` — Thesis defense dossier (21 attack categories)
+- `docs/decisions/` — Architecture Decision Records ADR-001 to ADR-006
 - `infra/` — PVE host configs, VM provision scripts, hookscripts, guest setup
 - `src/aggregator/server.py` — Flower FL server, FedAvg/TrimmedMean, MLflow tracking
 - `src/defender/model.py` — CyberDefenseNet (MLP), CyberDefenseCNN, CyberDefenseTransformer + factory
@@ -40,9 +40,9 @@ The workspace root is `fl-cl/`. Key directories and their purpose:
 - `src/defender/inference_loop.py` — Real-time per-flow inference + alert dispatch
 - `src/orchestrate.py` — Master training pipeline controller (entry point)
 - `tools/` — Evaluation, CI/CD, benchmarking, plotting utilities
-- `tools/ci_cd_promote.py` — MLflow model promotion gate automation
-- `tools/benchmark_inference_latency.py` — FP32 vs INT8 throughput benchmarking
-- `tools/bwt_eval_suite.py` — Backward Transfer Metric evaluation suite
+- `tools/validate_promotion.py` — MLflow model promotion gate automation
+- `tools/benchmark_latency.py` — FP32 vs INT8 throughput benchmarking
+- `tools/validate_bwt.py` — Backward Transfer Metric evaluation suite
 - `scratch/` — Local test scripts only, NOT production code
 
 ---
@@ -238,7 +238,7 @@ Key config keys and their meaning:
 
 ## MLOps Promotion Gate
 
-Per-class F1 thresholds enforced by `tools/ci_cd_promote.py`. ALL must pass for `champion` alias assignment.
+Per-class F1 thresholds enforced by `tools/validate_promotion.py`. ALL must pass for `champion` alias assignment.
 
 | Class | Threshold | Champion v35 (20% poison) |
 | :--- | :---: | :---: |
@@ -260,7 +260,8 @@ Formal records in `docs/decisions/`:
 | ADR-002 | Dynamic Multi-Backbone Model Architecture Factory | src/defender/model.py |
 | ADR-003 | NFStream ETA + tmpfs RAMDisk Storage | src/defender/extractor.py |
 | ADR-004 | Flower FL Architecture + TrimmedMean Robust Aggregation | src/aggregator/server.py |
-| ADR-005 | Automated CI/CD Promotion Gate + INT8 Quantization | tools/ci_cd_promote.py |
+| ADR-005 | Automated CI/CD Promotion Gate + INT8 Quantization | tools/validate_promotion.py |
+| ADR-006 | Tools Directory Standardization and Governance | tools/ |
 
 ---
 
@@ -301,5 +302,5 @@ All numbers from `data/reports/training_results_report.md`. Do not estimate or i
 | GEM Botnet recall recovery | 100% | benchmark_gem_botnet.yaml — MLflow v33 |
 | GEM tuned Botnet F1 | 0.6905 | benchmark_gem_precision.yaml — MLflow v34 |
 | Aggregate cluster throughput (FP32) | 101,258 flows/sec | Dual-node live inference bench |
-| Per-flow inference latency (defender-a) | 17.47 us | tools/benchmark_inference_latency.py |
+| Per-flow inference latency (defender-a) | 17.47 us | tools/benchmark_latency.py |
 | FL weight payload per round | 294.5 KB | baseline_coldstart_100r.yaml |

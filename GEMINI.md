@@ -76,6 +76,11 @@ Applies custom class-weighted EWC penalty calculations. It ensures that the impo
 > [!WARNING]
 > **Standard Libraries & PyTorch Primitives First (Ponytail Rule)**: Avoid wrapper libraries for model utilities. Favor native `torch` modules (e.g. `nn.TransformerEncoderLayer`, `nn.Linear`) over custom implementations.
 
+<!-- -->
+
+> [!IMPORTANT]
+> **Script Placement & Organization**: Always place single-use, temporary, or exploratory scripts strictly in `scratch/`. The `tools/` directory is reserved exclusively for significant, reusable, production-grade utilities (benchmarking, evaluation, auditing, and system operations).
+
 ---
 
 ## 5. Verification & Testing

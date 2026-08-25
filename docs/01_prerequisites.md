@@ -1,6 +1,6 @@
 # Prerequisites & Lab Preparation Guide: FL-CL Cyber Defense
 
-> **Role in the documentation set**: This document specifies the hardware, network equipment, benchmark datasets, traffic generation tools, and MLOps environment required *before* deploying the testbed. For the conceptual architecture these prerequisites support, see [02_architecture.md](02_architecture.md). For the cluster-specific deployment steps, see [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md). For the fully integrated research paper, see [paper/manuscript.md](paper/manuscript.md) (this document corresponds to Paper Chapter 3 Section 3.1, Chapter 5 Section 5.1, and Chapter 8 Section 8.3).
+> **Role in the documentation set**: This document specifies the hardware, network equipment, benchmark datasets, traffic generation tools, and MLOps environment required *before* deploying the testbed. For the conceptual architecture these prerequisites support, see [02_architecture.md](02_architecture.md). For the cluster-specific deployment steps, see [07_troubleshooting.md](07_troubleshooting.md). For the fully integrated research paper, see [paper/manuscript.md](paper/manuscript.md) (this document corresponds to Paper Chapter 3 Section 3.1, Chapter 5 Section 5.1, and Chapter 8 Section 8.3).
 
 ---
 
@@ -24,7 +24,7 @@ The testbed is deployed on an enterprise-grade 3-node Proxmox VE cluster compose
 The testbed operates entirely within virtualized Proxmox networks by default. However, if you plan to capture and defend against *real* physical network traffic (extending beyond synthetic VM-generated flows):
 
 * **Managed Network Switch:** A switch supporting **L2 Managed Port Mirroring / SPAN** and **802.1Q VLANs** (e.g., Ubiquiti UniFi, TP-Link JetStream, or Cisco Catalyst). This mirrors traffic from physical devices into a dedicated NIC on the Proxmox server, complementing the virtual `tc`-based port mirroring described in [02_architecture.md](02_architecture.md) Section 3.
-* **Multi-Port NIC on PVE Server:** An Intel-based dual-port or quad-port Gigabit Ethernet PCIe card (e.g., Intel i350-T4) configured in bridged mode, providing dedicated physical interfaces for each VLAN. The current cluster uses LACP-bonded interfaces (`bond0`) on nodes `its` and `node2`; see [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 1.C for bridge reconciliation details.
+* **Multi-Port NIC on PVE Server:** An Intel-based dual-port or quad-port Gigabit Ethernet PCIe card (e.g., Intel i350-T4) configured in bridged mode, providing dedicated physical interfaces for each VLAN. The current cluster uses LACP-bonded interfaces (`bond0`) on nodes `its` and `node2`; see [07_troubleshooting.md](07_troubleshooting.md) Section 1.C for bridge reconciliation details.
 * **Hardware TAP (Optional):** An inline network TAP (e.g., Throwing Star LAN Tap or Dualcomm) for passive capture between router and modem without requiring switch-level SPAN configuration.
 
 ---
@@ -111,7 +111,7 @@ pip install mlflow
 pip install scikit-learn pandas numpy
 ```
 
-For detailed installation steps inside each VM, see [07_troubleshooting_and_workarounds.md](07_troubleshooting_and_workarounds.md) Section 4, Phase 4.
+For detailed installation steps inside each VM, see [07_troubleshooting.md](07_troubleshooting.md) Section 4, Phase 4.
 
 ### B. MLOps & Experiment Tracking
 

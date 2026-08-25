@@ -78,8 +78,7 @@ fl-cl/
  tools/ # → Diagnostics & Pre-deployment Validation
  check_dataset.py # Inspect label distributions on ramdisk
  check_features.py # Compute feature statistics per class to check overlap
- enable_wal.py # Enable WAL mode on MLflow SQLite database
- local_train.py # Local training diagnostic tool with confusion matrix
+ train_local.py # Local training diagnostic tool with confusion matrix
  plot_metrics.py # Post-training convergence plot generator (per-class)
  validate_model.py # Model validation gate (asserts minimum per-class F1 score)
 ```
@@ -826,7 +825,7 @@ To audit feature-level distributions manually, researchers can use `tools/check_
 
 ## 11. Automated Testbed Benchmarking Suite & Core Experiments Matrix
 
-To evaluate system stability, plasticity, and security under varying deployment strains, the platform includes an automated execution framework orchestrated by `tools/deploy_to_testbed.py`. This script runs both the 5 core experimental scenarios and the 4-tier benchmark suite directly on the 3-node physical Proxmox VE testbed (`10.10.130.10`).
+To evaluate system stability, plasticity, and security under varying deployment strains, the platform includes an automated execution framework orchestrated by `tools/deploy_testbed.py`. This script runs both the 5 core experimental scenarios and the 4-tier benchmark suite directly on the 3-node physical Proxmox VE testbed (`10.10.130.10`).
 
 ### 11.1 Core Experimental Configurations Matrix
 
@@ -852,9 +851,9 @@ To evaluate system stability, plasticity, and security under varying deployment 
 1. **Inverse-Frequency Loss Multipliers**: The benchmark sweep configs use `class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]` to grant $15\times$ relative gradient strength to minority classes (Botnet & DoS), preventing majority Normal traffic ($8,200+$ samples) from eroding minority gradients. In the primary 100-round production baseline (`configs/experiment.yaml`), the Botnet weight is further scaled to `[1.0, 250.0, 2.0, 5.0, 50.0]` to resist Fisher collapse during extreme sample scarcity.
 2. **Adaptive Byzantine TrimmedMean Median**: In small topology clusters ($N \le 3$), `server.py` adaptively falls back to coordinate-wise `FedMedian`. This mathematically guarantees 100% elimination of outlier updates from 1 corrupted defender node in a 2-node cluster, restoring DoS F1 score to **0.9675** under 20% label poisoning.
 3. **Automated Deployment Command**: Run the entire 9-stage testing sequence directly on the physical testbed from the repository root:
- ```bash
- python tools/deploy_to_testbed.py
- ```
- Execution logs stream live to terminal and `deploy.log`.
+  ```bash
+  python tools/deploy_testbed.py
+  ```
+  Execution logs stream live to terminal and `deploy.log`.
 
 

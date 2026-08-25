@@ -1,0 +1,108 @@
+# ── FL-CL Experiment: production_track_d_100r.yaml ──────────────────────────
+# Track D Production Benchmark: 100-Round Federated Continual Learning (GEM)
+#
+# Key Features:
+#   1. Model Backbone: CyberDefenseCNN (1D-CNN)
+#   2. Continual Learning: Avalanche GEM (P=512 patterns, memory_strength s=0.2)
+#   3. Robust Aggregation: TrimmedMean (beta=0.10)
+#   4. Adversarial Threat: 20% Byzantine label poisoning on Defender B
+#   5. Extended Traffic Stage: 120 seconds per threat stage for high flow density
+#   6. Post-Run AI MLOps: Automated evaluation report via qwen-flcl:3b
+# ──────────────────────────────────────────────────────────────────────────
+
+experiment_name: "FL-CL-Production-TrackD-GEM-100R"
+
+experiment:
+  name: "FL-CL-Production-TrackD-GEM-100R"
+  description: "100-round production GEM continual learning with 1D-CNN and TrimmedMean under 20% Byzantine poisoning"
+
+# ── Federated Learning Parameters ───────────────────────────
+fl:
+  rounds: 100
+  min_clients: 2
+  fraction_fit: 1.0
+  fraction_evaluate: 1.0
+
+# ── Continual Learning (GEM) ────────────────────────────────
+cl:
+  strategy: "GEM"
+  ewc_lambda: 100.0
+  gem_patterns_per_exp: 512
+  gem_memory_strength: 0.2
+  task_sequence: "benign,ssh,slowloris,dns_exfil,botnet"
+  complexity_score: 1.4
+  comm_overhead_budget: 200000000
+
+# ── Schema for forward-compatibility ────────────────────────
+fl_cl:
+  rounds: 100
+  min_fit_clients: 2
+  min_evaluate_clients: 2
+  min_available_clients: 2
+  sample_fraction_fit: 1.0
+  cl_strategy: "GEM"
+  ewc_lambda: 100.0
+  gem_patterns: 512
+  gem_memory_strength: 0.2
+
+# ── Physical Testbed Topology ───────────────────────────────
+topology:
+  aggregator: "10.10.130.10"
+  defender_a: "10.10.130.11"
+  defender_b: "10.10.130.12"
+  target_a: "10.10.110.15"
+  target_b: "10.10.120.15"
+  traffic_gen: "10.10.140.10"
+  flower_port: 8080
+  mlflow_port: 5000
+
+# ── Threat Simulation Workload ──────────────────────────────
+simulation:
+  duration_seconds: 120
+  attack_duration_seconds: 120
+  threat_stage_duration: 120
+  attack_modes: ["benign", "ssh", "slowloris", "dns_exfil", "botnet"]
+  stages:
+    - mode: benign
+    - mode: ssh
+    - mode: slowloris
+    - mode: dns_exfil
+    - mode: botnet
+
+# ── Model Architecture ──────────────────────────────────────
+model:
+  type: "cnn"
+  prune_fraction: 0.0
+  input_dim: 32
+  num_classes: 5
+  hidden_layers: [64, 32]
+  dropout: 0.2
+
+# ── Training Hyperparameters ────────────────────────────────
+training:
+  optimizer: "SGD"
+  lr: 0.005
+  momentum: 0.9
+  batch_size: 32
+  epochs_per_round: 1
+  class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
+
+# ── Security, Privacy & Byzantine Defense ───────────────────
+security:
+  poison_enabled: true
+  poison_client_ids: ["defender-b"]
+  poison_rate: 0.20
+  poison_from_class: 1
+  poison_to_class: 0
+  dp_enabled: false
+  aggregation_strategy: "TrimmedMean"
+  trimmed_mean_beta: 0.10
+
+# ── MLOps & Tracking ────────────────────────────────────────
+mlops:
+  mode: "production"
+  production_strategy: "fresh"
+  jsd_threshold: 0.30
+  gate_action: "warn"
+  baseline_stats_path: "configs/baseline_feature_stats.json"
+  auto_promote: false

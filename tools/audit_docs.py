@@ -1,5 +1,5 @@
 """
-check_all_docs.py — Documentation Link, Image, and Placeholder Auditor
+audit_docs.py — Documentation Link, Image, and Placeholder Auditor
 
 Recursively audits all Markdown documentation in docs/ and the repository root
 to guarantee 0 broken relative links, 0 missing image references, and 0 unresolved placeholders.

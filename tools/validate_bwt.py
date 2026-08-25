@@ -1,9 +1,12 @@
 """
-bwt_eval_suite.py — Standardized BWT evaluation suite for FL-CL.
+validate_bwt.py — Cryptographic Backward Transfer (BWT) Evaluation & Quality Gate.
 
-Acts as the single source of truth for BWT verification across configurations.
-Computes class-wise accuracy, F1-scores, and BWT deltas on a fixed test dataset
-(or fallback synthetic data) and outputs a cryptographically signed CSV report.
+Evaluates a loaded model checkpoint on a target test flow dataset (or fallback synthetic data),
+computes class-wise accuracy, F1-scores, and BWT degradation against peak historical milestones,
+and outputs a cryptographically signed SHA-256 lineage report.
+
+Usage:
+    python3 tools/validate_bwt.py --checkpoint /path/to/model.pt [--test-dir /mnt/ramdisk/flows]
 """
 
 import argparse
@@ -12,13 +15,13 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 
-# Resolve imports for local/remote paths
-current_dir = os.path.dirname(os.path.abspath(__file__))
-workspace_root = os.path.abspath(os.path.join(current_dir, ".."))
-sys.path.append(workspace_root)
-sys.path.append(os.path.join(workspace_root, "src/defender"))
-sys.path.append(os.path.join(workspace_root, "src/aggregator"))
+# Standard path resolution
+repo_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(repo_root))
+sys.path.insert(0, str(repo_root / "src" / "defender"))
+sys.path.insert(0, str(repo_root / "src" / "aggregator"))
 sys.path.append("/root")
 
 import numpy as np
@@ -29,7 +32,6 @@ from torch.utils.data import DataLoader, TensorDataset
 try:
     import client
 except ImportError:
-    # Minimal fallback import in case client.py path is completely missing
     import client as client
 
 LABEL_NAMES = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: "DoS"}
@@ -92,7 +94,6 @@ def generate_signature(model_path, dataset_hash, results):
             model_sha.update(chunk)
     model_hash = model_sha.hexdigest()
 
-    # Create stable representation of results
     results_str = json.dumps(results, sort_keys=True)
     combined = f"{model_hash}:{dataset_hash}:{results_str}"
     signature = hashlib.sha256(combined.encode("utf-8")).hexdigest()
@@ -100,15 +101,17 @@ def generate_signature(model_path, dataset_hash, results):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Standardized BWT Evaluation Suite")
+    parser = argparse.ArgumentParser(description="Cryptographic Backward Transfer (BWT) Evaluation Suite")
     parser.add_argument("--checkpoint", required=True, help="Path to TorchScript checkpoint (.pt)")
     parser.add_argument("--test-dir", default="/mnt/ramdisk/flows", help="Test flow CSV directory")
-    parser.add_argument("--output", default=os.path.join("data", "reports", "benchmark_evaluation_report.csv"), help="Output path for signed CSV")
+    parser.add_argument("--output", default=str(repo_root / "data" / "reports" / "benchmark_evaluation_report.csv"), help="Output path for signed CSV")
     parser.add_argument("--peak-f1", default="1.0,1.0,1.0,1.0,1.0", help="Comma-separated peak historical F1-scores for class 0-4")
     parser.add_argument("--mlflow-run-id", help="Active MLflow run ID to upload the artifact directly")
     args = parser.parse_args()
 
-    print(f"[*] Standardized Evaluation starting...")
+    print("========================================================================")
+    print("      FL-CL Cryptographic Backward Transfer (BWT) Validation Suite")
+    print("========================================================================")
     print(f"[*] Loading model checkpoint: {args.checkpoint}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     try:
@@ -156,7 +159,6 @@ def main():
 
     print(f"[*] Overall Accuracy: {overall_acc:.4f} | Macro F1: {macro_f1:.4f} | Avg BWT: {avg_bwt:.4f}")
 
-    # Create stable results dictionary for signing
     results_to_sign = {
         "overall_accuracy": f"{overall_acc:.6f}",
         "average_loss": f"{avg_loss:.6f}",
@@ -169,63 +171,56 @@ def main():
         results_to_sign[f"accuracy_class_{label}"] = f"{class_accs[label]:.6f}"
         results_to_sign[f"bwt_class_{label}"] = f"{bwt_deltas[label]:.6f}"
 
-    # Sign lineage artifact
     model_hash, signature = generate_signature(args.checkpoint, dataset_hash, results_to_sign)
     print(f"[*] Model SHA-256: {model_hash}")
     print(f"[*] Validation Signature: {signature}")
 
-    # Construct formatted report table
-    report_rows = []
-    # Add meta entries
-    report_rows.append({"Category": "Meta", "Metric": "Model_Hash", "Value": model_hash})
-    report_rows.append({"Category": "Meta", "Metric": "Dataset_Hash", "Value": dataset_hash})
-    report_rows.append({"Category": "Meta", "Metric": "Validation_Signature", "Value": signature})
-    report_rows.append({"Category": "Meta", "Metric": "Timestamp", "Value": str(time.time())})
+    report_rows = [
+        {"Category": "Meta", "Metric": "Model_Hash", "Value": model_hash},
+        {"Category": "Meta", "Metric": "Dataset_Hash", "Value": dataset_hash},
+        {"Category": "Meta", "Metric": "Validation_Signature", "Value": signature},
+        {"Category": "Meta", "Metric": "Timestamp", "Value": str(time.time())},
+        {"Category": "Overall", "Metric": "Accuracy", "Value": f"{overall_acc:.6f}"},
+        {"Category": "Overall", "Metric": "Loss", "Value": f"{avg_loss:.6f}"},
+        {"Category": "Overall", "Metric": "Total_Samples", "Value": str(total_samples)},
+        {"Category": "Overall", "Metric": "Macro_F1", "Value": f"{macro_f1:.6f}"},
+        {"Category": "Overall", "Metric": "Average_BWT", "Value": f"{avg_bwt:.6f}"}
+    ]
 
-    # Add overall metrics
-    report_rows.append({"Category": "Overall", "Metric": "Accuracy", "Value": f"{overall_acc:.6f}"})
-    report_rows.append({"Category": "Overall", "Metric": "Loss", "Value": f"{avg_loss:.6f}"})
-    report_rows.append({"Category": "Overall", "Metric": "Total_Samples", "Value": str(total_samples)})
-    report_rows.append({"Category": "Overall", "Metric": "Macro_F1", "Value": f"{macro_f1:.6f}"})
-    report_rows.append({"Category": "Overall", "Metric": "Average_BWT", "Value": f"{avg_bwt:.6f}"})
-
-    # Add class metrics
     for label in range(5):
         name = LABEL_NAMES[label]
         report_rows.append({"Category": f"Class_{name}", "Metric": "F1_Score", "Value": f"{class_f1s[label]:.6f}"})
         report_rows.append({"Category": f"Class_{name}", "Metric": "Accuracy", "Value": f"{class_accs[label]:.6f}"})
         report_rows.append({"Category": f"Class_{name}", "Metric": "BWT_Delta", "Value": f"{bwt_deltas[label]:.6f}"})
 
-    # Write CSV
+    out_path = Path(args.output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(report_rows)
-    df.to_csv(args.output, index=False)
-    print(f"[*] Successfully wrote signed CSV report: {args.output}")
+    df.to_csv(out_path, index=False)
+    print(f"[*] Successfully wrote signed CSV report: {out_path}")
 
-    # Log to MLflow if run-id is specified or active
-    mlflow_logged = False
+    # MLflow logging
     try:
         import mlflow
-        # Check if we should log to specific run or active run
         if args.mlflow_run_id:
             with mlflow.start_run(run_id=args.mlflow_run_id):
-                mlflow.log_artifact(args.output, artifact_path="benchmarks")
-                # Log metrics as numeric values too
+                mlflow.log_artifact(str(out_path), artifact_path="benchmarks")
                 mlflow.log_metric("benchmark_macro_f1", macro_f1)
                 mlflow.log_metric("benchmark_avg_bwt", avg_bwt)
                 mlflow.log_metric("benchmark_accuracy", overall_acc)
                 print(f"[*] Logged signed report to MLflow Run: {args.mlflow_run_id}")
-                mlflow_logged = True
         elif mlflow.active_run():
-            mlflow.log_artifact(args.output, artifact_path="benchmarks")
+            mlflow.log_artifact(str(out_path), artifact_path="benchmarks")
             mlflow.log_metric("benchmark_macro_f1", macro_f1)
             mlflow.log_metric("benchmark_avg_bwt", avg_bwt)
             mlflow.log_metric("benchmark_accuracy", overall_acc)
             print(f"[*] Logged signed report to active MLflow Run: {mlflow.active_run().info.run_id}")
-            mlflow_logged = True
     except Exception as mlflow_err:
         print(f"[*] Warning: Could not log signed report to MLflow: {mlflow_err}")
 
-    print(f"[*] BWT evaluation complete. Success: {not mlflow_logged or mlflow_logged}")
+    print("\n[OK] Cryptographic BWT validation complete.")
+    print("========================================================================\n")
+    sys.exit(0)
 
 
 if __name__ == "__main__":

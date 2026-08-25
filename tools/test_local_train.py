@@ -1,3 +1,14 @@
+"""
+test_local_train.py — Offline Synthetic Local Training Convergence Unit Test.
+
+Generates a synthetic 5-class mock flow dataset in scratch/mock_flows, simulates
+local training loops across MLP, CNN, and Transformer backbones, and asserts
+convergence and batch dimension safety without requiring live hardware.
+
+Usage:
+    python3 tools/test_local_train.py
+"""
+
 import os
 import sys
 import shutil

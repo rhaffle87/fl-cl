@@ -1,5 +1,5 @@
 """
-cross_dataset_benchmark.py — Cross-dataset generalization benchmark.
+benchmark_cross_dataset.py — Cross-dataset generalization benchmark.
 
 Evaluates FCL model checkpoints on heterogeneous datasets to measure real-world
 IDS utility. Compares performance on Dataset A (CIC-IDS2017) vs. Dataset B

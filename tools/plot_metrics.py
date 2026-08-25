@@ -1,3 +1,13 @@
+"""
+plot_metrics.py — FL-CL Training Curves, F1 Score Trends, and Loss Visualization Utility.
+
+Connects to the remote aggregator or local MLflow SQLite database, extracts round-by-round
+training dynamics and per-class F1 metrics, and generates high-resolution convergence plots.
+
+Usage:
+    python3 tools/plot_metrics.py [--aggregator-ip 10.10.130.10] [--run-id <RUN_ID>]
+"""
+
 import os
 import sys
 import sqlite3

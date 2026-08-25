@@ -1,12 +1,12 @@
 """
-ci_cd_promote.py — CI/CD Automated Model Validation and Champion Promotion.
+validate_promotion.py — CI/CD Automated Model Validation Gate and Champion Promotion Utility.
 
 Queries MLflow for the latest registered model version under the 'challenger' alias,
-runs the validation gate (tools/validate_model.py) locally or remotely on defender-a,
-and promotes the version to the 'champion' alias if validation passes.
+runs the validation gate (tools/validate_model.py) locally or remotely on defender nodes,
+and promotes the version to the 'champion' alias if per-class F1 and accuracy bounds pass.
 
 Usage:
-    python3 tools/ci_cd_promote.py
+    python3 tools/validate_promotion.py [--model-name CyberDefenseNet] [--mlflow-uri http://10.10.130.10:5000]
 """
 
 import os
@@ -17,20 +17,23 @@ import json
 import argparse
 from pathlib import Path
 
-# Add project root to sys.path to import modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
+# Standard path resolution
+repo_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(repo_root))
+sys.path.insert(0, str(repo_root / "src"))
+sys.path.insert(0, str(repo_root / "src" / "defender"))
+sys.path.insert(0, str(repo_root / "src" / "aggregator"))
 
 import mlflow
 from src.notifications import TelegramNotifier
 
 
 def load_env(env_name: str = ".env"):
-    """Load environment variables from .env."""
-    current_dir = os.path.dirname(os.path.abspath(__file__))
+    """Load environment variables from .env searching upward from the script directory."""
+    current_dir = Path(__file__).resolve().parent
     while True:
-        env_path = os.path.join(current_dir, env_name)
-        if os.path.exists(env_path):
+        env_path = current_dir / env_name
+        if env_path.exists():
             with open(env_path, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
@@ -42,10 +45,9 @@ def load_env(env_name: str = ".env"):
                         val = val.strip().strip('"').strip("'")
                         os.environ[key] = val
             break
-        parent = os.path.dirname(current_dir)
-        if parent == current_dir:
+        if current_dir.parent == current_dir:
             break
-        current_dir = parent
+        current_dir = current_dir.parent
 
 
 # Load environment variables
@@ -58,9 +60,8 @@ def get_git_key_path():
     if env_path and os.path.exists(env_path):
         return env_path
     
-    # Check default locations
-    home = str(Path.home())
-    for name in ["id_ed25519", "id_rsa"]:
+    home = os.path.expanduser("~")
+    for name in ["id_rsa", "id_ed25519"]:
         p = os.path.join(home, ".ssh", name)
         if os.path.exists(p):
             return p
@@ -81,12 +82,12 @@ def scp_file_to_remote(ip, local_path, remote_path, key_path=None):
     scp_cmd = ["scp", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5"]
     if key_path:
         scp_cmd += ["-i", key_path]
-    scp_cmd += [local_path, f"root@{ip}:{remote_path}"]
+    scp_cmd += [str(local_path), f"root@{ip}:{remote_path}"]
     return subprocess.run(scp_cmd, capture_output=True, text=True)
 
 
 def safe_print(text):
-    """Print text safely, replacing characters that cannot be encoded by the stdout encoding."""
+    """Print text safely, replacing characters that cannot be encoded by stdout."""
     try:
         print(text)
     except UnicodeEncodeError:
@@ -186,11 +187,11 @@ def format_validation_logs_to_markdown(validation_output, version_num, validatio
 
 
 def main():
-    parser = argparse.ArgumentParser(description="CI/CD Model Promotion Gate")
-    parser.add_argument("--model-name", default="CyberDefenseNet", help="Registered model name in MLflow")
+    parser = argparse.ArgumentParser(description="CI/CD Model Promotion Gate & Challenger Validation")
+    parser.add_argument("--model-name", default="CyberDefenseNet", help="Registered model name in MLflow (default: CyberDefenseNet)")
     parser.add_argument("--mlflow-uri", default="http://10.10.130.10:5000", help="MLflow Tracking Server URI")
     parser.add_argument("--defender-ip", default="10.10.130.11", help="Defender VM IP for validation run")
-    parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV folder (if running locally)")
+    parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV folder on defender ramdisk")
     args = parser.parse_args()
 
     # Load notifications credentials
@@ -227,8 +228,7 @@ def main():
             dst_path=str(temp_dir)
         )
     except Exception as e:
-        print(f"[CI/CD] Error downloading artifact: {e}")
-        # Try fall back to unscripted state dict
+        print(f"[CI/CD] Error downloading scripted artifact: {e}")
         try:
             artifact_path = client.download_artifacts(
                 run_id=run_id,
@@ -242,7 +242,7 @@ def main():
     print(f"[CI/CD] Downloaded model path: {artifact_path}")
 
     # Determine execution environment (local on defender vs remote over SSH)
-    is_local_defender = os.path.exists(args.flows_dir) and os.path.exists("/root/fl-cl/tools/validate_model.py")
+    is_local_defender = os.path.exists(args.flows_dir) and (repo_root / "tools" / "validate_model.py").exists()
     key_path = get_git_key_path()
 
     validation_passed = False
@@ -250,7 +250,7 @@ def main():
 
     if is_local_defender:
         print("[CI/CD] Running validation locally on defender node...")
-        local_val_script = "/root/fl-cl/tools/validate_model.py"
+        local_val_script = str(repo_root / "tools" / "validate_model.py")
         run_cmd = [
             sys.executable, local_val_script,
             "--checkpoint", artifact_path,
@@ -270,7 +270,7 @@ def main():
             sys.exit(1)
             
         # SCP validate_model.py to defender
-        local_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "validate_model.py"))
+        local_script = str(repo_root / "tools" / "validate_model.py")
         scp_script_res = scp_file_to_remote(args.defender_ip, local_script, "~/validate_model.py", key_path=key_path)
         if scp_script_res.returncode != 0:
             print(f"[CI/CD] SCP validate_model.py transfer failed:\n{scp_script_res.stderr}")
@@ -288,9 +288,7 @@ def main():
     safe_print(validation_output.strip())
     print("=" * 62)
 
-    # Extract metrics or accuracy values from logs for Telegram summary
     eval_metrics = {"run_id": run_id, "tracking_uri": mlflow_uri}
-    # Parse overall accuracy from string "Overall Accuracy: 0.XXXX"
     for line in validation_output.split("\n"):
         if "Overall Accuracy:" in line:
             try:
@@ -303,7 +301,6 @@ def main():
             except ValueError:
                 pass
 
-    # Update model version description with rich Markdown formatting
     md_desc = format_validation_logs_to_markdown(validation_output, version_num, validation_passed)
     
     if validation_passed:
@@ -314,7 +311,6 @@ def main():
             version=str(version_num)
         )
         
-        # Update description with success prefix
         success_desc = f"**Model version v{version_num} promoted to 'champion' via CI/CD Pipeline**.\n\n{md_desc}"
         client.update_model_version(
             name=args.model_name,
@@ -322,7 +318,6 @@ def main():
             description=success_desc
         )
         
-        # Send Telegram notification
         notifier.notify_promotion(
             model_name=args.model_name,
             version=int(version_num),
@@ -332,10 +327,8 @@ def main():
         sys.exit(0)
     else:
         print(f"\n[CI/CD] FAIL: Model version {version_num} failed validation thresholds.")
-        # Tag run as validation_failed
         client.set_tag(run_id, "validation_status", "FAILED")
         
-        # Update description with failure prefix
         failure_desc = f"**Model version v{version_num} failed validation via CI/CD Pipeline**.\n\n{md_desc}"
         client.update_model_version(
             name=args.model_name,
@@ -343,14 +336,13 @@ def main():
             description=failure_desc
         )
         
-        # Send Telegram failure alert
         notifier.notify_promotion_failure(
             model_name=args.model_name,
             candidate_version=int(version_num),
             metrics=eval_metrics,
             failure_reason="One or more per-class validation metrics fell below acceptable production thresholds."
         )
-        sys.exit(1)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

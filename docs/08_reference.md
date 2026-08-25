@@ -124,14 +124,24 @@ Converts raw flow DataFrame into normalized 32-dimensional PyTorch tensors with 
 
 ---
 
-## 6. MLOps Automated Promotion Gate (`tools/ci_cd_promote.py`)
+## 6. Operational & MLOps Tools Reference (ADR-006)
 
-### `evaluate_candidate_model(...)`
-Validates candidate TorchScript models against live flow test sets:
+### `tools/validate_promotion.py`
+Automated candidate model validation and champion promotion gate:
 * **Per-Class F1 Thresholds**:
- * Normal (0): $\ge 0.50$
- * Botnet (1): $\ge 0.60$
- * Exfiltration (2): $\ge 0.70$
- * BruteForce (3): $\ge 0.50$
- * DoS (4): $\ge 0.70$
-* **Promotion Action**: Assigns `champion` alias in MLflow Model Registry upon 100% threshold compliance.
+  * Normal (0): $\ge 0.50$
+  * Botnet (1): $\ge 0.60$
+  * Exfiltration (2): $\ge 0.70$
+  * BruteForce (3): $\ge 0.50$
+  * DoS (4): $\ge 0.70$
+* **Promotion Action**: Assigns `champion` alias in MLflow Model Registry upon 100% threshold compliance and notifies Telegram.
+
+### `tools/validate_bwt.py`
+Computes class-wise accuracy, F1-scores, and BWT forgetting deltas against historical baseline milestones with cryptographic SHA-256 validation signing.
+
+### `tools/train_local.py`
+Runs standalone local defender training outside Flower FL loops to diagnose convergence and print full confusion matrices.
+
+### `tools/deploy_testbed.py`
+Orchestrates multi-tier benchmark execution across Proxmox nodes (`10.10.130.10–12`) via passwordless SSH and synchronizes run exports.
+

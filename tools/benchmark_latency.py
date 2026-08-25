@@ -1,5 +1,5 @@
 """
-benchmark_inference_latency.py — Automated Inference Latency & Quantization Benchmark Tool.
+benchmark_latency.py — Automated Inference Latency & Quantization Benchmark Tool.
 
 Measures FP32 TorchScript vs. INT8 dynamic quantization throughput (flows/sec and latency per 1,000 flows)
 across 1D-CNN, Transformer, and MLP backbones.

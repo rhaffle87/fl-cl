@@ -1,18 +1,20 @@
 """
-local_train.py — Standalone local training + confusion matrix.
+train_local.py — Standalone Local Training & Confusion Matrix Diagnostic Utility.
 
-Trains the CyberDefenseNet model locally on a defender's ramdisk data
-(outside the Flower FL loop) to diagnose classification issues.
+Trains the CyberDefenseNet backbone locally on an edge defender's ramdisk flow dataset
+(outside the distributed Flower FL loop) to diagnose classification convergence or label imbalance.
 
-Usage (SCP to defender, then run):
-    python3 local_train.py [--flows-dir /mnt/ramdisk/flows] [--epochs 40]
+Usage:
+    python3 tools/train_local.py [--flows-dir /mnt/ramdisk/flows] [--epochs 40] [--model-type cnn]
 """
 
 import argparse
 import sys
 import os
 from pathlib import Path
+from collections import Counter
 
+# Standard path resolution
 repo_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(repo_root / "src" / "defender"))
 sys.path.insert(0, str(repo_root / "src"))
@@ -22,7 +24,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from collections import Counter
 from torch.optim import Adam
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -33,34 +34,37 @@ LABEL_NAMES = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: 
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Local training with confusion matrix")
-    parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory")
-    parser.add_argument("--epochs", type=int, default=40, help="Training epochs")
-    parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
-    parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
-    parser.add_argument("--model-type", default="cnn", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
+    parser = argparse.ArgumentParser(description="Standalone local defender training with confusion matrix")
+    parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory on ramdisk (default: /mnt/ramdisk/flows)")
+    parser.add_argument("--epochs", type=int, default=40, help="Training epochs (default: 40)")
+    parser.add_argument("--lr", type=float, default=0.005, help="Learning rate (default: 0.005)")
+    parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms (default: 2000.0)")
+    parser.add_argument("--model-type", default="cnn", choices=["mlp", "cnn", "transformer"], help="Model architecture type (default: cnn)")
     args = parser.parse_args()
 
-    print("Loading ramdisk flows...")
+    print("========================================================================")
+    print("       FL-CL Standalone Local Defender Training Diagnostic Suite")
+    print("========================================================================")
+    print(f"[*] Loading ramdisk flows from: {args.flows_dir}")
     try:
         X, y = client.load_ramdisk_flows(args.flows_dir, dos_threshold_ms=args.dos_threshold_ms)
     except Exception as e:
-        print(f"Error loading flows: {e}")
-        return
+        print(f"[FAIL] Error loading flows: {e}")
+        sys.exit(1)
 
-    print(f"Loaded X shape: {X.shape}, y shape: {y.shape}")
-    print(f"Label count: {Counter(y.numpy())}")
+    print(f"[*] Loaded X shape: {X.shape}, y shape: {y.shape}")
+    print(f"[*] Label distribution: {dict(Counter(y.numpy()))}")
 
     dataset = TensorDataset(X, y)
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = get_model(args.model_type).to(device)
+    model = get_model(args.model_type, input_dim=X.shape[1], num_classes=5).to(device)
 
     optimizer = Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
 
-    print(f"\nTraining model locally for {args.epochs} epochs...")
+    print(f"\n[*] Training {args.model_type.upper()} locally for {args.epochs} epochs on {device}...")
     model.train()
     for epoch in range(args.epochs):
         total_loss, correct, total = 0.0, 0, 0
@@ -105,6 +109,10 @@ def main():
             print(f"  {label} ({LABEL_NAMES[label]:>13s}): {acc:.4f}  ({mask.sum()} samples)")
         else:
             print(f"  {label} ({LABEL_NAMES[label]:>13s}): N/A     (0 samples)")
+
+    print("\n[OK] Local training diagnostic complete.")
+    print("========================================================================\n")
+    sys.exit(0)
 
 
 if __name__ == "__main__":

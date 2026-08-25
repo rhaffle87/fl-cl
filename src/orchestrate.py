@@ -872,8 +872,8 @@ def main():
         # Trigger automated promotion gate validation
         print("\n=== Phase 8d: Launching Model Validation and Promotion Gate ===")
         try:
-            promote_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tools", "ci_cd_promote.py"))
-            # Execute tools/ci_cd_promote.py locally
+            promote_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tools", "validate_promotion.py"))
+            # Execute tools/validate_promotion.py locally
             res = subprocess.run([sys.executable, promote_script], capture_output=True, text=True, encoding="utf-8")
             safe_print(res.stdout)
             if res.stderr:

@@ -1,5 +1,5 @@
 """
-benchmark_dp_sensitivity.py — Differential Privacy Noise Sensitivity Curve Suite
+benchmark_dp.py — Differential Privacy Noise Sensitivity Curve Suite
 
 Evaluates model convergence, loss, and per-class F1 score retention under varying
 client DP noise multipliers (sigma in [0.0, 0.01, 0.05, 0.10, 0.20]) and max grad norm 1.0.
@@ -118,8 +118,9 @@ def evaluate_dp_curve():
         q = 32 / len(train_ds)
         T = epochs * len(train_loader)
         if sigma > 0.0:
-            eps_approx = (np.sqrt(2 * np.log(1e-5) * (q ** 2) * T) / sigma) if sigma > 0 else float("inf")
-            eps_val = round(abs(float(eps_approx)), 2)
+            delta = 1e-5
+            eps_approx = (np.sqrt(2 * np.log(1.0 / delta) * (q ** 2) * T) / sigma)
+            eps_val = round(float(eps_approx), 2)
         else:
             eps_val = "Infinity (No DP)"
 

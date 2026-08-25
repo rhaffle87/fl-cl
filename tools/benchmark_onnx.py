@@ -1,5 +1,5 @@
 """
-benchmark_onnx_latency.py — Multi-Runtime Edge Inference Benchmark
+benchmark_onnx.py — Multi-Runtime Edge Inference Benchmark
 
 Compares PyTorch FP32, PyTorch Dynamic INT8, and ONNX Runtime CPU execution provider
 across varied batch sizes (1, 16, 64, 256) for all three model backbones.

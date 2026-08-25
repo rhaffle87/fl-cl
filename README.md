@@ -25,17 +25,18 @@ fl-cl/
 │   └── reports/                  <- Consolidated technical results reports (.md, .csv)
 │
 ├── docs/                         <- System documentation & Architecture Decision Records
-│   ├── decisions/                <- Formal Architecture Decision Records (ADR-001 to ADR-005)
+│   ├── decisions/                <- Formal Architecture Decision Records (ADR-001 to ADR-006)
 │   ├── paper/                    <- IEEE LaTeX manuscript, BibTeX citations & vector figures
 │   ├── 01_prerequisites.md       <- Hardware, datasets, traffic tools
 │   ├── 02_architecture.md        <- Conceptual blueprint & C4 diagrams
 │   ├── 03_deployment.md          <- Step-by-step cluster setup
 │   ├── 04_orchestration.md       <- Training and attack execution
-│   ├── 05_continual_learning_fcl.md <- End-to-end FCL technical explanation
-│   ├── 06_training_and_mlops_guide.md <- Training guidebook, CLI flags, MLOps perks
-│   ├── 07_troubleshooting_and_workarounds.md <- Cluster-specific fixes & failure modes ledger
-│   ├── 08_api_reference.md       <- Comprehensive API and module reference
-│   └── 09_glossary.md            <- Domain model & technical terminology glossary
+│   ├── 05_continual.md           <- End-to-end FCL technical explanation
+│   ├── 06_training.md            <- Training guidebook, CLI flags, MLOps perks
+│   ├── 07_troubleshooting.md     <- Cluster-specific fixes & failure modes ledger
+│   ├── 08_reference.md           <- Comprehensive API and module reference
+│   ├── 09_glossary.md            <- Domain model & technical terminology glossary
+│   └── 10_arguments.md           <- Defense dossier & rebuttals
 │
 ├── infra/                        <- Infrastructure-as-Code (shell scripts)
 │   ├── 01_host_config/           <- PVE hypervisor-level configuration
@@ -62,16 +63,30 @@ fl-cl/
 │   ├── orchestrate.py            <- Local workstation orchestrator
 │   └── sweep.py                  <- Hyperparameter grid search controller
 │
-└── tools/                        <- Diagnostic & validation utilities
+└── tools/                        <- Diagnostic, benchmarking & validation utilities
+    ├── audit_codebase.py         <- Comprehensive AST and codebase invariant auditor
+    ├── audit_docs.py             <- Markdown documentation and figure link validator
+    ├── benchmark_byzantine.py    <- Multi-aggregator Byzantine robustness benchmark
+    ├── benchmark_cross_dataset.py <- Heterogeneous generalization benchmark (shift simulator)
+    ├── benchmark_dp.py           <- Differential Privacy noise sensitivity sweep
+    ├── benchmark_latency.py      <- PyTorch FP32 vs INT8 inference throughput benchmark
+    ├── benchmark_onnx.py         <- Multi-runtime (PyTorch vs ONNX Runtime) latency benchmark
     ├── check_dataset.py          <- Inspect ramdisk flow label distribution
     ├── check_features.py         <- Per-class feature statistics
-    ├── ci_cd_promote.py          <- Automated CI/CD validation & registry promotion gate
-    ├── bwt_eval_suite.py         <- Standardized BWT validation suite with signatures
-    ├── cross_dataset_benchmark.py <- Heterogeneous generalization benchmark (shift simulator)
+    ├── deploy_testbed.py         <- Automated multi-track testbed deployment runner
+    ├── export_onnx.py            <- ONNX model graph exporter
     ├── generate_llm_report.py    <- Post-training local LLM threat report generator
-    ├── local_train.py            <- Standalone training + confusion matrix
+    ├── generate_paper_figures.py <- Publication vector figure generator
+    ├── generate_paper_pdf.py     <- Academic LaTeX paper compiler
+    ├── plot_cicids2017.py        <- CIC-IDS2017 dataset visualization suite
     ├── plot_metrics.py           <- Post-training convergence plot generator
-    └── validate_model.py         <- Pre-deployment model validation gate
+    ├── test_comprehensive.py     <- Comprehensive unit and integration test suite
+    ├── test_local_train.py       <- Local training loop verification test
+    ├── test_models.py            <- Architecture, TorchScript, INT8 & pruning tests
+    ├── train_local.py            <- Standalone training + confusion matrix
+    ├── validate_bwt.py           <- Standardized BWT validation suite with signatures
+    ├── validate_model.py         <- Pre-deployment model validation gate
+    └── validate_promotion.py     <- Automated CI/CD validation & registry promotion gate
 ```
 
 ---
@@ -176,8 +191,9 @@ The sweep controller will:
 | **TorchScript Export** | Production model exported for deployment validation |
 | **Data Quality Gate** | Pre-training label distribution check on both defenders |
 | **Model Validation** | `tools/validate_model.py` — per-class F1 score thresholds |
-| **BWT Evaluation Suite** | `tools/bwt_eval_suite.py` — computes BWT deltas with SHA-256 validation signing |
-| **Generalization Benchmark** | `tools/cross_dataset_benchmark.py` — cross-dataset validation under simulated covariate shift |
+| **BWT Validation Suite** | `tools/validate_bwt.py` — computes BWT deltas with SHA-256 validation signing |
+| **Model Promotion Gate** | `tools/validate_promotion.py` — automated candidate evaluation & champion promotion |
+| **Generalization Benchmark** | `tools/benchmark_cross_dataset.py` — cross-dataset validation under simulated covariate shift |
 | **Confusion Matrix Tracking** | Per-round 5x5 matrix summation at aggregator with automated MLflow heatmap plots |
 | **Class-Weighted Loss** | Per-class weights `[1.0, 250.0, 2.0, 5.0, 50.0]` for imbalanced data |
 | **Experiment Tracking** | MLflow at `http://10.10.130.10:5000` with git hash tagging, parameters, and metrics tracking |
@@ -185,9 +201,9 @@ The sweep controller will:
 
 ---
 
-## Diagnostic Tools
+## Diagnostic & Operational Tools
 
-SCP any tool to a defender VM and run:
+The `tools/` directory is governed by **ADR-006** (Prefix Taxonomy & Standardization). All utilities support standard `--help` and work both locally and via SCP on defender nodes:
 
 ```bash
 # Check flow label distribution
@@ -199,20 +215,20 @@ scp tools/check_features.py root@10.10.130.11:~/
 ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/check_features.py"
 
 # Train locally and print confusion matrix
-scp tools/local_train.py root@10.10.130.11:~/
-ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/local_train.py --epochs 40"
+scp tools/train_local.py root@10.10.130.11:~/
+ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/train_local.py --epochs 40"
 
 # Validate a saved model checkpoint
 scp tools/validate_model.py root@10.10.130.11:~/
 ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/validate_model.py --checkpoint /path/to/model.pt"
 
 # Run standardized BWT evaluation suite with cryptographic signing
-scp tools/bwt_eval_suite.py root@10.10.130.11:~/
-ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/bwt_eval_suite.py --checkpoint /path/to/model.pt"
+scp tools/validate_bwt.py root@10.10.130.11:~/
+ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/validate_bwt.py --checkpoint /path/to/model.pt"
 
 # Run cross-dataset generalization benchmark under simulated shift
-scp tools/cross_dataset_benchmark.py root@10.10.130.11:~/
-ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/cross_dataset_benchmark.py --checkpoint /path/to/model.pt"
+scp tools/benchmark_cross_dataset.py root@10.10.130.11:~/
+ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/benchmark_cross_dataset.py --checkpoint /path/to/model.pt"
 ```
 
 ---
@@ -234,17 +250,17 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/cross_dataset_benchmark.py --ch
 
 | Document | Purpose |
 | :--- | :--- |
-| [Architecture Decision Records (ADRs)](docs/decisions/README.md) | Formal records of major technical decisions (ADR-001 to ADR-005) |
+| [Architecture Decision Records (ADRs)](docs/decisions/README.md) | Formal records of major technical decisions (ADR-001 to ADR-006) |
 | [IEEE Research Manuscript (Markdown)](docs/paper/manuscript.md) | Publication-ready paper with mathematical proofs & embedded figures |
 | [IEEE Research Manuscript (LaTeX)](docs/paper/manuscript.tex) | 2-column IEEE Transactions LaTeX package & BibTeX citations |
 | [01 Prerequisites](docs/01_prerequisites.md) | Hardware, datasets, traffic generation tools |
 | [02 Architecture](docs/02_architecture.md) | Conceptual blueprint, C4 diagrams, code components |
 | [03 Deployment](docs/03_deployment.md) | Step-by-step cluster setup, provisioning, and installations |
 | [04 Orchestration](docs/04_orchestration.md) | Detailed guide to training and attack execution |
-| [05 Continual Federated Learning](docs/05_continual_learning_fcl.md) | End-to-end technical explanation of how FCL works |
-| [06 Training & MLOps Guide](docs/06_training_and_mlops_guide.md) | Training guidebook, CLI reference, MLOps behaviors |
-| [07 Troubleshooting & Workarounds](docs/07_troubleshooting_and_workarounds.md) | Cluster-specific fixes, workarounds, and failure modes ledger |
-| [08 API Reference](docs/08_api_reference.md) | Detailed technical reference for all Python classes, methods, and modules |
+| [05 Continual Federated Learning](docs/05_continual.md) | End-to-end technical explanation of how FCL works |
+| [06 Training & MLOps Guide](docs/06_training.md) | Training guidebook, CLI reference, MLOps behaviors |
+| [07 Troubleshooting & Workarounds](docs/07_troubleshooting.md) | Cluster-specific fixes, workarounds, and failure modes ledger |
+| [08 API Reference](docs/08_reference.md) | Detailed technical reference for all Python classes, methods, and modules |
 | [09 Domain Model & Glossary](docs/09_glossary.md) | Technical glossary of FL, CL, ETA, and MLOps domain terminology |
 | [Tech Stack](TECH_STACK.md) | Full technology inventory per layer |
 | [Production Training Report](data/reports/training_results_report.md) | Consolidated multi-track empirical results & benchmarks |

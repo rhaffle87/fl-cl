@@ -1,3 +1,14 @@
+"""
+test_models.py — Multi-Backbone Model Verification & Optimization Test Suite.
+
+Validates forward pass dimension handling, TorchScript JIT compilation, dynamic
+INT8 quantization, and Fisher-guided parameter pruning across MLP, 1D-CNN, and
+Transformer backbones.
+
+Usage:
+    python3 tools/test_models.py
+"""
+
 import sys
 import os
 import copy

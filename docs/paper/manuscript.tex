@@ -121,6 +121,7 @@ Z-score normalization is applied coordinate-wise against precomputed baseline st
 \section{Methodology}
 
 \subsection{Continual Learning: EWC vs. GEM Formulations}
+\label{sec:continual_learning}
 Under EWC~\cite{kirkpatrick2017overcoming}, the local optimization objective for task experience $t$ penalizes parameter deviation weighted by the diagonal of the empirical Fisher Information Matrix $F_i$ (see \eqref{eq:ewc}):
 \begin{equation}
 \mathcal{L}_{\text{EWC}}(\theta) = \mathcal{L}_{\text{current}}(\theta) + \sum_{i} \frac{\lambda_{\text{EWC}}}{2} F_i (\theta_i - \theta_{t-1, i}^*)^2,
@@ -414,9 +415,7 @@ The MLflow Model Registry evaluates candidate weights post-aggregation against f
 \section{Discussion}
 
 \subsection{EWC Fisher Collapse: A Systematic Failure Mode}
-The experimental evidence across Tracks~A and~B provides a mechanistic explanation for EWC's failure on minority classes under production conditions. When Normal flows constitute 94.8\% of a capture window, the Fisher Information Matrix diagonal for Botnet-sensitive parameters approaches zero (Section~IV-A). This is not a stochastic outlier but a structural consequence of the expectation in~(\ref{eq:fisher}): with $<$25 Botnet samples per training batch, the gradient variance contribution to $F_{\text{Botnet}}$ is orders of magnitude below $F_{\text{Normal}}$. The result is that EWC offers no effective penalty against Botnet weight drift during subsequent task training.
-
-This finding aligns with the theoretical analysis of Liu et al.~\cite{liu2026ewc}, who identified Fisher diagonal inaccuracy as the primary failure mode of EWC in imbalanced settings. Our contribution extends their observation from synthetic benchmarks to a production-scale federated IDS, demonstrating that the failure is amplified by the federated aggregation step: Fisher collapse on one client propagates through FedAvg to degrade the global model.
+As established in Section~\ref{sec:continual_learning}, the Fisher diagonal for Botnet-sensitive parameters effectively vanishes under production class ratios, rendering EWC incapable of preventing weight drift on minority threat vectors. This finding aligns with the theoretical analysis of Liu \emph{et al.}~\cite{liu2026ewc}, who identified Fisher diagonal inaccuracy as a primary failure mode of EWC in imbalanced domains. Our contribution extends their observation from centralized vision benchmarks to a decentralized production-scale federated IDS: the collapse is amplified by federated parameter averaging, where local Fisher failure on one client propagates through standard FedAvg to degrade global minority threat recall across all participating defense nodes.
 
 \subsection{GEM as a Geometric Alternative}
 GEM's gradient projection constraint~(\ref{eq:gem_constraint}) is fundamentally independent of sample frequency. By maintaining a fixed-size episodic buffer ($P=512$), GEM enforces non-negative inner products between current and historical task gradients regardless of the class distribution in the training batch. Tuning the margin constraint from $s=0.5$ to $s=0.2$ tightened the projection boundary against historical gradient interference, yielding a 30.9\% F1 improvement by suppressing false-positive drift on benign flows.
@@ -440,7 +439,7 @@ Table~\ref{tab:comparison_table} positions FL-CL relative to prior contributions
 \midrule
 FL-IIDS~\cite{jin2024fliids} & Plaintext (CIC-IDS) & Replay + Custom Loss & None (FedAvg) & Simulation & 97.80\% Acc. [Static Split] & Not Reported$^*$ \\
 GFCL~\cite{talpur2022gfcl} & Connected Vehicles (IoV) & EWC Baseline & Heuristic Check & Simulation & [BWT Degradation Focus] & Not Reported$^*$ \\
-FedSI~\cite{zhang2023fedsi} & General Non-IID Proxies & Synaptic Intelligence & None (FedAvg) & Simulation & [Compression Ratio Focus] & Not Reported$^*$ \\
+FedSI~\cite{zhang2023communication} & General Non-IID Proxies & Synaptic Intelligence & None (FedAvg) & Simulation & [Compression Ratio Focus] & Not Reported$^*$ \\
 EWC-DR~\cite{liu2026ewc} & Vision-Lang. (Centralized) & EWC + Replay Adj. & None (Centralized) & Standalone & [Fisher Vanishing Analysis] & Not Reported$^*$ \\
 \textbf{FL-CL (Ours)} & \textbf{TLS 1.3 Encrypted Traffic} & \textbf{GEM ($P{=}512, s{=}0.2$)} & \textbf{TrimMean / Median} & \textbf{Physical PVE} & \textbf{99.53\% Acc., 100\% Recall} & \textbf{7.10\,$\mu$s (ONNX)} \\
 \bottomrule
@@ -471,11 +470,11 @@ To facilitate replication and independent benchmarking, all system artifacts, co
 \section{Conclusion}
 \balance
 
-This paper presented FL-CL, an end-to-end framework for decentralized, continuous cyber defense on encrypted network flows without raw payload inspection. Systematic empirical evaluation across five production research tracks on a physical 3-node Proxmox VE hypervisor cluster yields three principal findings:
+This paper established that standard EWC undergoes systematic Fisher diagonal collapse under production-scale class imbalance in federated intrusion detection---a failure mode resolved by GEM gradient projection and neutralized under Byzantine adversarial conditions through coordinate-wise robust aggregation. Systematic empirical evaluation across five production research tracks on a physical 3-node Proxmox VE hypervisor cluster yields three principal findings:
 
 First, Elastic Weight Consolidation suffers from systematic Fisher Information Matrix diagonal collapse under production-scale class imbalance. Because benign traffic constitutes $>94\%$ of flow volume, the empirical Fisher expectation for minority classes ($<0.6\%$ volume) attenuates to near zero ($F_{\text{Botnet}} \approx 0$), resulting in complete catastrophic forgetting (Botnet recall collapsing to 0.00\%, $\text{BWT} = -0.8544$).
 
-Second, Gradient Episodic Memory eliminates this failure mode by enforcing hard geometric constraints on parameter updates ($\langle g, g_k \rangle \ge 0$). By maintaining an episodic cache of $P=512$ patterns per class, GEM completely eliminates backward transfer degradation ($\text{BWT} = 0.0000$) and restores minority threat recall to 100.00\% (24/24 true positive detections), while margin tuning ($s=0.2$) yields a 30.9\% F1 improvement ($0.5275 \rightarrow 0.6905$) and halves false alarms on benign traffic.
+Second, Gradient Episodic Memory eliminates this failure mode by enforcing hard geometric constraints on parameter updates ($\langle g, g_k \rangle \ge 0$). By maintaining an episodic cache of $P=512$ patterns per class, GEM completely eliminates backward transfer degradation ($\text{BWT} = 0.0000$) and restores minority threat recall to 100.00\% (24/24 true positive detections), while margin tuning ($s=0.2$) yields a 30.9\% F1 improvement (from $0.5275$ to $0.6905$) and halves false alarms on benign traffic.
 
 Third, coordinate-wise robust aggregation (TrimmedMean with adaptive FedMedian fallback) successfully isolates Byzantine model corruption, maintaining 99.53\% global accuracy and 100\% minority recall under active 20\% label poisoning attacks.
 

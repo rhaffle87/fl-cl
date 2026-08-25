@@ -16,7 +16,7 @@ Network Intrusion Detection Systems (NIDS) deployed across decentralized enterpr
 In this paper, we introduce **FL-CL**, an end-to-end framework integrating **Federated Learning (FL)** via Flower with **Continual Learning (CL)** via Avalanche on Encrypted Traffic Analysis (ETA) flow metadata. We analyze why Elastic Weight Consolidation (EWC) degrades under extreme class imbalance due to Fisher Information Matrix collapse, and formulate Gradient Episodic Memory (GEM) constraints to guarantee minority threat retention. Furthermore, we deploy coordinate-wise $\beta$-TrimmedMean aggregation to neutralize Byzantine label poisoning attacks. Evaluated on a physical 3-node Proxmox VE testbed processing live multi-gigabit traffic streams, our system achieves:
 - **99.53% Global Accuracy** under active 20% Byzantine label poisoning (champion model v35, MLflow registry).
 - **100.00% Botnet Recall** with **0.6905 F1-score** after GEM precision tuning ($P=512$, $s=0.2$, model v34).
-- **+30.9% Botnet F1 Improvement** from GEM initial recovery (0.5275 → 0.6905) through memory strength tuning.
+- **+30.9% Botnet F1 Improvement** from GEM initial recovery (increasing from 0.5275 to 0.6905) through memory strength tuning.
 - **Byzantine Robustness**: TrimmedMean ($\beta=0.10$) retains **95.9% accuracy** under 20% poisoning vs. FedAvg degrading to 75.80% (achieving 99.53% overall validation accuracy on champion model v35).
 - **99.51% Accuracy** retained under Differential Privacy noise $\sigma=0.20$ (Batch-level gradient clip $C=1.0$ + Gaussian noise injection).
 - **101,258.6 flows/sec Aggregate Edge Throughput** across dual physical defender nodes (17.47–22.72 $\mu\text{s}$ per-flow latency).
@@ -32,9 +32,9 @@ Simultaneously, over 95% of enterprise web traffic is encrypted with TLS 1.3, re
 
 ### The Continual Federated Learning Dilemma
 
-When edge gateways train local models on sequentially arriving threat streams (Normal $\rightarrow$ SSH Brute Force $\rightarrow$ Slowloris DoS $\rightarrow$ DNS Exfiltration $\rightarrow$ C2 Botnet), standard stochastic gradient descent overwrites older threat representations (**catastrophic forgetting**). While regularized continual learning algorithms like Elastic Weight Consolidation (EWC) protect majority classes, they collapse on rare minority classes when sample sizes during brief attack phases are limited.
+When edge gateways train local models on sequentially arriving threat streams (Normal, followed by SSH Brute Force, Slowloris DoS, DNS Exfiltration, and C2 Botnet), standard stochastic gradient descent overwrites older threat representations (**catastrophic forgetting**). While regularized continual learning algorithms like Elastic Weight Consolidation (EWC) protect majority classes, they collapse on rare minority classes when sample sizes during brief attack phases are limited.
 
-Furthermore, federated learning introduces vulnerability to **Byzantine poisoning**: an attacker compromising a single edge defender can flip threat labels (e.g., Botnet $\rightarrow$ Normal) to inject detection blindspots into the global model.
+Furthermore, federated learning introduces vulnerability to **Byzantine poisoning**: an attacker compromising a single edge defender can flip threat labels (e.g., flipping Botnet labels to Normal) to inject detection blindspots into the global model.
 
 ```mermaid
 flowchart TD
@@ -189,7 +189,7 @@ Evaluating DP-SGD noise perturbation across $\sigma \in [0.00, 0.20]$ under grad
 
 ## 6. Conclusion & Reproducibility
 
-FL-CL demonstrates that privacy-preserving, continual intrusion detection on encrypted traffic streams operates at multi-gigabit line rates on enterprise hypervisor infrastructure.
+This paper established that standard EWC undergoes systematic Fisher diagonal collapse under production-scale class imbalance in federated intrusion detection—a failure mode resolved by GEM gradient projection and neutralized under Byzantine adversarial conditions through coordinate-wise robust aggregation. Systematic empirical evaluation across five production research tracks on a physical 3-node Proxmox VE hypervisor cluster proves that privacy-preserving, continual threat defense operates at line rates on enterprise hypervisor infrastructure.
 
 ### Reproducibility Specification
 - **Hardware**: 3-node physical Proxmox VE cluster (2x Dell PowerEdge R630, 1x Dell PowerEdge R760xs) on isolated VLANs (`10.10.110.0/24`, `10.10.120.0/24`, `10.10.130.0/24`, `10.10.140.0/24`).

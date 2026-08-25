@@ -1282,7 +1282,7 @@ flowchart TB
     end
 ```
 
-To evaluate defense against compromised edge nodes injecting malicious model updates, we benchmarked 6 aggregation rules across 4 escalating adversarial scenarios with 5 simulated edge clients using the standalone Byzantine robustness suite (`tools/benchmark_byzantine_suite.py`). These simulations used the EWC continual learning strategy (not GEM), which — as demonstrated in Section 9.2 — causes Botnet class collapse under data imbalance. Consequently, Botnet F1 = 0.00 across all strategies in this simulation; the Botnet recovery via GEM is orthogonal and validated separately in Track D/E.
+To evaluate defense against compromised edge nodes injecting malicious model updates, we benchmarked 6 aggregation rules across 4 escalating adversarial scenarios with 5 simulated edge clients using the standalone Byzantine robustness suite (`tools/benchmark_byzantine.py`). These simulations used the EWC continual learning strategy (not GEM), which — as demonstrated in Section 9.2 — causes Botnet class collapse under data imbalance. Consequently, Botnet F1 = 0.00 across all strategies in this simulation; the Botnet recovery via GEM is orthogonal and validated separately in Track D/E.
 
 #### Table 9.2: Byzantine Robustness Benchmark — Measured Values (`data/reports/byzantine_robustness_benchmark.csv`)
 
@@ -1382,7 +1382,7 @@ flowchart LR
     Noise_Levels --> Threshold
 ```
 
-We evaluated the privacy-utility boundary by sweeping the DP Gaussian noise multiplier $\sigma \in [0.00, 0.20]$ under gradient clipping $C = 1.0$ using the standalone DP sensitivity benchmark (`tools/benchmark_dp_sensitivity.py`).
+We evaluated the privacy-utility boundary by sweeping the DP Gaussian noise multiplier $\sigma \in [0.00, 0.20]$ under gradient clipping $C = 1.0$ using the standalone DP sensitivity benchmark (`tools/benchmark_dp.py`).
 
 #### Table 9.4: Differential Privacy Noise Budget vs. Threat Classification F1-Score — Measured Values (`data/reports/privacy_utility_curve.csv`)
 
