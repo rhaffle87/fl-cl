@@ -1,4 +1,4 @@
-# ── FL-CL Experiment: baseline_coldstart_100r.yaml ───────────────────────
+# ── FL-CL Experiment: production_baseline_100r.yaml ──────────────────────
 # Full 100-Round Cold-Start Baseline
 #
 # Executes a complete 100-round fresh-start federated training run to produce

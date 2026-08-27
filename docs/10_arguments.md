@@ -118,7 +118,7 @@ The attack is correct in the general case. This is why the system implements Fed
 1. **TrimmedMean (beta=0.1)**: Trims the top and bottom 10% of client weight contributions per parameter before averaging, providing size-invariance alongside Byzantine robustness.
 2. **FedMedian (Adaptive Fallback)**: Applies coordinate-wise median aggregation when the number of active clients drops below the minimum threshold.
 
-The `robust_agg.yaml` experiment (MLflow v23) demonstrates that TrimmedMean achieves 99.64% validation accuracy under active 20% label poisoning — matching the clean FedAvg baseline while providing size-fairness and adversarial robustness simultaneously.
+The `scenario_robust_agg.yaml` experiment (MLflow v23) demonstrates that TrimmedMean achieves 99.64% validation accuracy under active 20% label poisoning — matching the clean FedAvg baseline while providing size-fairness and adversarial robustness simultaneously.
 
 > **Thesis Evidence**: [Chapter 9.3 — Multi-Aggregator Byzantine Robustness Suite](paper/research_paper.md) | [Chapter 3.3 — TrimmedMean Formulation](paper/manuscript.md)
 
@@ -257,7 +257,7 @@ The FL weight communication overhead is **bandwidth-independent** at the measure
 
 **Defense**:
 
-This attack is mathematically correct for the 2-client scenario and is openly acknowledged in the experimental results. The `robust_agg.yaml` experiment is scoped to test TrimmedMean against a **partially compromised defender** (20% label poisoning on Defender A's local training data), not a fully Byzantine client transmitting adversarially crafted weights.
+This attack is mathematically correct for the 2-client scenario and is openly acknowledged in the experimental results. The `scenario_robust_agg.yaml` experiment is scoped to test TrimmedMean against a **partially compromised defender** (20% label poisoning on Defender A's local training data), not a fully Byzantine client transmitting adversarially crafted weights.
 
 The distinction is critical:
 - **Partially compromised** (poisoned data): The attacker controls what training data flows into Defender A's local training pipeline. The resulting weights are biased but structurally valid gradient updates. TrimmedMean is effective here.
@@ -571,7 +571,7 @@ def privatize_gradients(
     Privacy guarantee: (epsilon, delta)-DP with delta=1e-5
     At sigma=0.30, epsilon < 1.0 per aggregation round.
 
-    Verified (dp_sgd.yaml, MLflow v21):
+    Verified (scenario_dp_sgd.yaml, MLflow v21):
       Server Accuracy:    99.51%
       Validation Accuracy: 99.59%
       DoS F1:             0.9776

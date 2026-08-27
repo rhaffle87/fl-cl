@@ -1,0 +1,28 @@
+# ─────────────────────────────────────────────────────────────
+# FL-CL Balanced Multi-Parameter Matrix Sweep (48 Combinations)
+# ─────────────────────────────────────────────────────────────
+# Tests all 6 core subsystems with representative values per domain:
+# - Backbones: MLP vs 1D-CNN vs Transformer
+# - Continual Learning: EWC vs GEM vs Naive
+# - Aggregation: FedAvg vs TrimmedMean vs FedMedian vs Krum
+# - Differential Privacy & Poisoning Defense
+# ─────────────────────────────────────────────────────────────
+
+experiment:
+  name: "FCL-Representative-Matrix-Sweep"
+  description: "Balanced multi-parameter sweep testing all 6 architectural subsystems"
+
+sweep:
+  parameters:
+    model.type: ["mlp", "cnn", "transformer"]
+    cl.strategy: ["EWC", "GEM"]
+    cl.ewc_lambda: [0.8]
+    cl.gem_patterns_per_exp: [128]
+    cl.gem_memory_strength: [0.3]
+    security.aggregation_strategy: ["FedAvg", "TrimmedMean", "FedMedian", "Krum"]
+    security.dp_enabled: [false, true]
+    security.poison_enabled: [false]
+    training.lr: [0.003]
+    training.batch_size: [32]
+    fl.rounds: [2]
+    simulation.duration: [10]

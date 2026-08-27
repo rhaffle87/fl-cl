@@ -127,23 +127,63 @@ def main():
 
                 
             for k, val in param_map.items():
-                if k == "cl.ewc_lambda":
+                if k in ("cl.ewc_lambda", "ewc_lambda"):
                     cmd.extend(["--lambda-ewc", str(val)])
-                elif k == "training.lr":
+                elif k in ("cl.strategy", "cl_strategy"):
+                    cmd.extend(["--cl-strategy", str(val)])
+                elif k in ("cl.gem_patterns_per_exp", "cl.gem_patterns", "gem_patterns"):
+                    cmd.extend(["--gem-patterns", str(val)])
+                elif k in ("cl.gem_memory_strength", "gem_memory_strength"):
+                    cmd.extend(["--gem-memory-strength", str(val)])
+                elif k in ("cl.task_sequence", "cl_task_sequence"):
+                    seq_str = ",".join(map(str, val)) if isinstance(val, list) else str(val)
+                    cmd.extend(["--cl-task-sequence", seq_str])
+                elif k in ("cl.complexity_score", "complexity_score"):
+                    cmd.extend(["--cl-complexity-score", str(val)])
+                elif k in ("cl.comm_overhead_budget", "comm_overhead_budget"):
+                    cmd.extend(["--comm-overhead-budget", str(val)])
+                elif k in ("training.lr", "lr"):
                     cmd.extend(["--lr", str(val)])
-                elif k == "training.batch_size":
+                elif k in ("training.momentum", "momentum"):
+                    cmd.extend(["--momentum", str(val)])
+                elif k in ("training.batch_size", "batch_size"):
                     cmd.extend(["--batch-size", str(val)])
-                elif k == "fl.rounds":
+                elif k in ("fl.rounds", "rounds"):
                     cmd.extend(["--rounds", str(val)])
-                elif k == "training.class_weights":
+                elif k in ("training.class_weights", "class_weights"):
                     weights_str = ",".join(map(str, val)) if isinstance(val, list) else str(val)
                     cmd.extend(["--class-weights", weights_str])
-                elif k == "model.type":
+                elif k in ("model.type", "model_type"):
                     cmd.extend(["--model-type", str(val)])
-                elif k == "model.prune_fraction":
+                elif k in ("model.prune_fraction", "prune_fraction"):
                     cmd.extend(["--prune-fraction", str(val)])
-                elif k == "simulation.duration":
+                elif k in ("simulation.duration", "duration"):
                     cmd.extend(["--duration", str(val)])
+                elif k in ("security.aggregation_strategy", "aggregation_strategy"):
+                    cmd.extend(["--aggregation-strategy", str(val)])
+                elif k in ("security.trimmed_mean_beta", "trimmed_mean_beta"):
+                    cmd.extend(["--trimmed-mean-beta", str(val)])
+                elif k in ("security.dp_enabled", "dp_enabled"):
+                    cmd.extend(["--dp-enabled", "true" if val is True or str(val).lower() == "true" else "false"])
+                elif k in ("security.dp_noise_multiplier", "dp_noise_multiplier"):
+                    cmd.extend(["--dp-noise-multiplier", str(val)])
+                elif k in ("security.dp_max_grad_norm", "dp_max_grad_norm"):
+                    cmd.extend(["--dp-max-grad-norm", str(val)])
+                elif k in ("security.poison_enabled", "poison_enabled"):
+                    cmd.extend(["--poison-enabled", "true" if val is True or str(val).lower() == "true" else "false"])
+                elif k in ("security.poison_client_ids", "poison_client_ids"):
+                    ids_str = ",".join(map(str, val)) if isinstance(val, list) else str(val)
+                    cmd.extend(["--poison-client-ids", ids_str])
+                elif k in ("security.poison_rate", "poison_rate"):
+                    cmd.extend(["--poison-rate", str(val)])
+                elif k in ("security.poison_from_class", "poison_from_class"):
+                    cmd.extend(["--poison-from-class", str(val)])
+                elif k in ("security.poison_to_class", "poison_to_class"):
+                    cmd.extend(["--poison-to-class", str(val)])
+                elif k in ("mlops.mode", "mlops_mode"):
+                    cmd.extend(["--mlops-mode", str(val)])
+                elif k in ("mlops.production_strategy", "production_strategy"):
+                    cmd.extend(["--production-strategy", str(val)])
             
             print(f"[*] Command: {' '.join(cmd)}")
             try:

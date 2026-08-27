@@ -831,20 +831,20 @@ To evaluate system stability, plasticity, and security under varying deployment 
 
 | Experiment Config | Simulation Duration | FL Rounds | EWC $\lambda$ | Aggregation Strategy | DP Noise / Security Settings | Validation Gate Result | MLflow Version Promoted |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `quick_test.yaml` | 30s | 3 | 0.8 | FedAvg | Clean Baseline | [PASS] PASS | Version 19 (`champion`) |
-| `baseline.yaml` | 60s | 5 | 0.8 | FedAvg | Clean Baseline | [PASS] PASS | Version 20 (`champion`) |
-| `dp_sgd.yaml` | 60s | 5 | 0.8 | FedAvg | DP Noise ($\sigma=0.3$, Clip 5.0) | [PASS] PASS | Version 21 (`champion`) |
-| `data_poisoning.yaml` | 60s | 5 | 0.8 | FedAvg | 20% Defender A Label Poison | [PASS] PASS | Version 22 (`champion`) |
-| `robust_agg.yaml` | 60s | 5 | 0.8 | TrimmedMean ($\beta=0.1$) | 20% Defender A Label Poison | [PASS] PASS | Version 23 (`champion` — Restored) |
+| `scenario_quick.yaml` | 30s | 3 | 0.8 | FedAvg | Clean Baseline | [PASS] PASS | Version 19 (`champion`) |
+| `scenario_baseline.yaml` | 60s | 5 | 0.8 | FedAvg | Clean Baseline | [PASS] PASS | Version 20 (`champion`) |
+| `scenario_dp_sgd.yaml` | 60s | 5 | 0.8 | FedAvg | DP Noise ($\sigma=0.3$, Clip 5.0) | [PASS] PASS | Version 21 (`champion`) |
+| `scenario_poisoning.yaml` | 60s | 5 | 0.8 | FedAvg | 20% Defender A Label Poison | [PASS] PASS | Version 22 (`champion`) |
+| `scenario_robust_agg.yaml` | 60s | 5 | 0.8 | TrimmedMean ($\beta=0.1$) | 20% Defender A Label Poison | [PASS] PASS | Version 23 (`champion` — Restored) |
 
 ### 11.2 Automated 4-Tier Benchmark Suite Matrix
 
 | Benchmark Tier | Config File | Simulation Duration | FL Rounds | EWC $\lambda$ | Aggregation Strategy | DP Noise / Security | Class Weights | Validation Result |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Tier 1 (Quick)** | `benchmark_quick.yaml` | 30s | 2 | 0.5 | FedAvg | Clean Baseline | `[1.0, 15.0, 2.0, 4.0, 15.0]` | [PASS] PASS (Model v24) |
-| **Tier 2 (Balanced)** | `benchmark_balanced.yaml` | 60s | 5 | 0.8 | FedAvg | Clean Baseline | `[1.0, 15.0, 2.0, 4.0, 15.0]` | [FAIL] FAIL (Model v25) |
-| **Tier 3 (Stressed)** | `benchmark_stressed.yaml` | 90s | 15 | 2.0 | FedAvg | Clean Baseline | `[1.0, 15.0, 2.0, 4.0, 15.0]` | [PASS] PASS (Model v26) |
-| **Tier 4 (Real-World)** | `benchmark_realworld.yaml` | 90s | 10 | 2.0 | TrimmedMean ($\beta=0.1$) | DP ($\sigma=0.15$), 20% Poison | `[1.0, 15.0, 2.0, 4.0, 15.0]` | [FAIL] FAIL (Model v27) |
+| **Tier 1 (Quick)** | `benchmark_tier1_quick.yaml` | 30s | 2 | 0.5 | FedAvg | Clean Baseline | `[1.0, 15.0, 2.0, 4.0, 15.0]` | [PASS] PASS (Model v24) |
+| **Tier 2 (Balanced)** | `benchmark_tier2_balanced.yaml` | 60s | 5 | 0.8 | FedAvg | Clean Baseline | `[1.0, 15.0, 2.0, 4.0, 15.0]` | [FAIL] FAIL (Model v25) |
+| **Tier 3 (Stressed)** | `benchmark_tier3_stressed.yaml` | 90s | 15 | 2.0 | FedAvg | Clean Baseline | `[1.0, 15.0, 2.0, 4.0, 15.0]` | [PASS] PASS (Model v26) |
+| **Tier 4 (Real-World)** | `benchmark_tier4_realworld.yaml` | 90s | 10 | 2.0 | TrimmedMean ($\beta=0.1$) | DP ($\sigma=0.15$), 20% Poison | `[1.0, 15.0, 2.0, 4.0, 15.0]` | [FAIL] FAIL (Model v27) |
 
 ### 11.3 Key Architectural Lessons & Validation Mechanics
 

@@ -5,6 +5,10 @@
 
 experiment_name: "FL-CL-Benchmark-NodeDropout"
 
+experiment:
+  name: "FL-CL-Benchmark-NodeDropout"
+  description: "50% Random Defender Node Disconnection / Client Dropout Stress Scenario"
+
 # ── Environment & Infrastructure ────────────────────────────
 topology:
   aggregator: "10.10.130.10"

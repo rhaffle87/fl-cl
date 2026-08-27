@@ -5,7 +5,7 @@ Executes configured benchmark experiment suites sequentially on the Proxmox test
 (aggregator: root@10.10.130.10) via passwordless SSH and synchronizes generated plots/reports.
 
 Usage:
-    python3 tools/deploy_testbed.py [--testbed root@10.10.130.10] [--configs quick_test.yaml baseline.yaml]
+    python3 tools/deploy_testbed.py [--testbed root@10.10.130.10] [--configs scenario_quick.yaml scenario_baseline.yaml]
 """
 
 import argparse
@@ -25,15 +25,15 @@ DEFAULT_PYTHON = "/opt/flower-env/bin/python3"
 LOG_FILE = PROJECT_ROOT / "deploy.log"
 
 DEFAULT_CONFIGS = [
-    "quick_test.yaml",
-    "baseline.yaml",
-    "dp_sgd.yaml",
-    "data_poisoning.yaml",
-    "robust_agg.yaml",
-    "benchmark_quick.yaml",
-    "benchmark_balanced.yaml",
-    "benchmark_stressed.yaml",
-    "benchmark_realworld.yaml",
+    "scenario_quick.yaml",
+    "scenario_baseline.yaml",
+    "scenario_dp_sgd.yaml",
+    "scenario_poisoning.yaml",
+    "scenario_robust_agg.yaml",
+    "benchmark_tier1_quick.yaml",
+    "benchmark_tier2_balanced.yaml",
+    "benchmark_tier3_stressed.yaml",
+    "benchmark_tier4_realworld.yaml",
 ]
 
 
