@@ -192,7 +192,7 @@ class RemoteNode:
             "-o", "ServerAliveInterval=10",
             "-o", "ServerAliveCountMax=3"
         ]
-        if self.key_path:
+        if self.key_path and os.path.exists(self.key_path):
             opts += ["-i", self.key_path]
         return opts
 

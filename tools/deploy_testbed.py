@@ -78,20 +78,32 @@ def run_benchmark(config: str, testbed: str, proj_dir: str, python_path: str) ->
 
 
 def sync_exports(testbed: str, proj_dir: str):
-    """Sync remote exports folder from testbed to local workspace."""
+    """Sync remote exports folder from testbed to local workspace via compressed archive."""
+    import base64
+    import io
+    import tarfile
+
     local_exports = PROJECT_ROOT / "exports"
     local_exports.mkdir(parents=True, exist_ok=True)
-    scp_cmd = [
-        "scp",
-        "-r",
+    key_path = Path.home() / ".ssh" / "id_ed25519"
+
+    ssh_opts = [
         "-o", "BatchMode=yes",
         "-o", "StrictHostKeyChecking=no",
-        f"{testbed}:{proj_dir}/exports/*",
-        str(local_exports),
     ]
+    if key_path.exists():
+        ssh_opts += ["-i", str(key_path)]
+
     print("\n[*] Syncing generated plot & run exports from testbed to local workspace...", flush=True)
     try:
-        subprocess.run(scp_cmd, check=True)
+        tar_cmd = ["ssh"] + ssh_opts + [testbed, f"cd {proj_dir} && tar -czf /tmp/fl_cl_exports.tar.gz $(find exports -mindepth 1 -maxdepth 1 -type d -mtime -2)"]
+        subprocess.run(tar_cmd, check=True, timeout=30)
+
+        b64_cmd = ["ssh"] + ssh_opts + [testbed, "base64 /tmp/fl_cl_exports.tar.gz"]
+        b64_output = subprocess.check_output(b64_cmd, timeout=60)
+        raw_tar = base64.b64decode(b64_output)
+        with tarfile.open(fileobj=io.BytesIO(raw_tar), mode="r:gz") as tar:
+            tar.extractall(path=str(PROJECT_ROOT))
         print("[+] Exports synchronized successfully to local exports/ directory!\n", flush=True)
     except Exception as e:
         print(f"[!] Warning: Could not sync exports folder: {e}\n", flush=True)
