@@ -4,8 +4,8 @@
 # =============================================================================
 # Run INSIDE: VM 400 (traffic-gen / Kali Linux) as root
 #
-# Installs: tcpreplay, hydra, metasploit (pre-installed on Kali),
-#           selenium, chromium-driver, locust, slowloris
+# Installs: tcpreplay, hydra, ncrack, medusa, slowhttptest, hping3, scapy,
+#           selenium, chromium-driver, locust, slowloris, metasploit
 #
 # Downloads: Benchmark PCAP datasets for replay
 # =============================================================================
@@ -19,13 +19,17 @@ echo "============================================"
 echo "[1/5] Updating system packages..."
 apt update && apt upgrade -y
 
-echo "[2/5] Installing traffic tools..."
+echo "[2/5] Installing traffic tools and attack binaries..."
 apt install -y \
     tcpreplay \
     hydra \
+    ncrack \
+    medusa \
+    slowhttptest \
     hping3 \
+    iodine \
     chromium-driver \
-    python3 python3-pip python3-venv
+    python3 python3-pip python3-venv python3-scapy
 
 echo "[3/5] Setting up Python automation environment..."
 # Create the virtual environment
@@ -37,9 +41,11 @@ source ~/traffic-env/bin/activate
 # Upgrade pip inside the environment
 pip install --upgrade pip
 
-# Install all Python dependencies inside the environment (including slowloris)
+# Install all Python dependencies inside the environment
 pip install \
     slowloris \
+    scapy \
+    paramiko \
     selenium \
     locust \
     requests
@@ -51,12 +57,14 @@ echo "    - USTC-TFC2016:        https://github.com/yungshenglu/USTC-TFC2016"
 echo "    - CIC-IDS2017:         https://www.unb.ca/cic/datasets/ids-2017.html"
 echo "    - CIRA-CIC-DoHBrw-2020: https://www.unb.ca/cic/datasets/dohbrw-2020.html"
 
-echo "[5/5] Verifying Metasploit (pre-installed on Kali)..."
-if command -v msfconsole &>/dev/null; then
-    echo "  ✓ Metasploit available"
-else
-    echo "  [!] Metasploit not found. Install with: apt install metasploit-framework"
-fi
+echo "[5/5] Verifying Metasploit & Attack Binaries..."
+for tool in hydra ncrack slowhttptest hping3 msfconsole; do
+    if command -v "$tool" &>/dev/null; then
+        echo "  ✓ $tool available"
+    else
+        echo "  [!] $tool not found in system PATH"
+    fi
+done
 
 echo ""
 echo "============================================"
@@ -64,15 +72,6 @@ echo " ✓ Traffic generator setup complete"
 echo "============================================"
 echo ""
 echo "Usage notes:"
-echo "  To run your Python tools (locust, slowloris), remember to activate the environment first:"
-echo "  source ~/traffic-env/bin/activate"
+echo "  To run traffic generation with modular engines (auto, kali, python):"
+echo "  ~/traffic-env/bin/python3 ~/attack_flow.py --mode <mode> --target <target_ip> --engine auto"
 echo ""
-echo "Usage examples:"
-echo "  # Replay benchmark PCAP over flat L2 network interface (eth1)"
-echo "  tcpreplay --intf1=eth1 --multiplier=2.0 --loop=5 /datasets/CIC-IDS2017-Friday.pcap"
-echo ""
-echo "  # SSH test"
-echo "  hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://${TARGET_A_HOST:-10.10.110.15}"
-echo ""
-echo "  # HTTPS slowloris (inside venv)"
-echo "  slowloris ${TARGET_A_HOST:-10.10.110.15} -p 443"

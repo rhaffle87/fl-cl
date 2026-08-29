@@ -1,104 +1,98 @@
-# ── FL-CL Experiment: benchmark_poisoning_dp.yaml ────────────────────────
-# Adversarial Label Poisoning & Differential Privacy Experiment (Track D)
-#
-# Simulates a Byzantine adversarial client (Client B) executing 20% label poisoning
-# on the minority Botnet class (flipping Botnet -> Normal) under TrimmedMean robust
-# aggregation and optional client Differential Privacy (DP) noise.
-# ──────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# FL-CL Experiment: benchmark_poisoning_dp.yaml
+# Track: Theme E: Adversarial Robustness & Differential Privacy (DP-SGD)
+# Description: Simulates 20% label poisoning on Defender A combined with TrimmedMean (beta=0.10) aggregation and client-side DP-SGD gradient noise (sigma=0.30, clip=1.0) to evaluate simultaneous privacy and Byzantine defense.
+# Expected Run Duration: ~12 minutes (10 FL rounds)
+# Attack Engine Mode: auto (auto-discovers Kali tools with Python fallback)
+# ==============================================================================
 
-experiment_name: "FL-CL-Poisoning-TrimmedMean-DP"
-
+experiment_name: FL-CL-Poisoning-TrimmedMean-DP
 experiment:
-  name: "FL-CL-Poisoning-TrimmedMean-DP"
-  description: "Label poisoning attack resiliency benchmark under TrimmedMean robust aggregation"
-
-# ── Federated Learning ──────────────────────────────────────
+  name: FL-CL-Poisoning-TrimmedMean-DP
+  description: Label poisoning attack resiliency benchmark under TrimmedMean robust
+    aggregation
 fl:
   rounds: 10
   min_clients: 2
   fraction_fit: 1.0
   fraction_evaluate: 1.0
-
-# ── Continual Learning (EWC) ────────────────────────────────
 cl:
-  strategy: "EWC"
+  strategy: EWC
   ewc_lambda: 0.8
   gem_patterns_per_exp: 256
   gem_memory_strength: 0.5
-  task_sequence: "benign,ssh,slowloris,dns_exfil,botnet"
+  task_sequence: benign,ssh,slowloris,dns_exfil,botnet
   complexity_score: 1.4
   comm_overhead_budget: 200000000
-
-# ── Topology & Infrastructure ───────────────────────────────
 topology:
-  aggregator: "10.10.130.10"
-  defender_a: "10.10.130.11"
-  defender_b: "10.10.130.12"
-  target_a: "10.10.110.15"
-  target_b: "10.10.120.15"
-  traffic_gen: "10.10.140.10"
+  aggregator: 10.10.130.10
+  defender_a: 10.10.130.11
+  defender_b: 10.10.130.12
+  target_a: 10.10.110.15
+  target_b: 10.10.120.15
+  traffic_gen: 10.10.140.10
   flower_port: 8080
   mlflow_port: 5000
-
-# ── Workload Simulation ─────────────────────────────────────
 simulation:
   duration_seconds: 60
   attack_duration_seconds: 60
   threat_stage_duration: 60
-  attack_modes: ["benign", "ssh", "slowloris", "dns_exfil", "botnet"]
-
-# ── Model Architecture ──────────────────────────────────────
+  attack_modes:
+  - benign
+  - ssh
+  - slowloris
+  - dns_exfil
+  - botnet
+  attack_engine: auto
 model:
-  type: "cnn"
+  type: cnn
   prune_fraction: 0.2
   input_dim: 32
   num_classes: 5
-  hidden_layers: [64, 32]
+  hidden_layers:
+  - 64
+  - 32
   dropout: 0.2
-
-# ── Training Hyperparameters ────────────────────────────────
 training:
-  optimizer: "SGD"
+  optimizer: SGD
   lr: 0.005
   momentum: 0.9
   batch_size: 32
   epochs_per_round: 1
-  class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
-
-# ── Security, Privacy & Defense (Theme E) ───────────────────
+  class_weights:
+  - 1.0
+  - 15.0
+  - 2.0
+  - 4.0
+  - 15.0
 security:
   poison_enabled: true
-  poison_client_ids: ["B"]       # Client B is Byzantine / compromised
-  poison_rate: 0.2               # 20% label poisoning rate
-  poison_from_class: 1           # Target Botnet class
-  poison_to_class: 0             # Flip to Normal
-  dp_enabled: false              # Differential Privacy noise off for run D2
-  dp_noise_multiplier: 0.1
+  poison_client_ids:
+  - B
+  poison_rate: 0.2
+  poison_from_class: 1
+  poison_to_class: 0
+  dp_enabled: false
+  dp_noise_multiplier: 0.3
   dp_max_grad_norm: 1.0
-  aggregation_strategy: "TrimmedMean"
-  trimmed_mean_beta: 0.1         # Trim top/bottom 10% outlier updates
-
-# ── MLOps & Tracking ────────────────────────────────────────
+  aggregation_strategy: TrimmedMean
+  trimmed_mean_beta: 0.1
 mlops:
-  mode: "experimental"
-  production_strategy: "fresh"
+  mode: experimental
+  production_strategy: fresh
   mlflow_port: 5000
-  registered_model_name: "CyberDefenseNet"
-
+  registered_model_name: CyberDefenseNet
 notifications:
   telegram:
     enabled: true
-
 checkpointing:
-  save_dir: "/opt/mlflow-artifacts/checkpoints"
+  save_dir: /opt/mlflow-artifacts/checkpoints
   save_best: true
   export_torchscript: true
-
 labeling:
   dos_duration_threshold_ms: 2000
-
 data_quality:
   jsd_threshold: 0.6
-  gate_action: "abort"
-  baseline_stats_path: "configs/baseline_feature_stats.json"
-  baseline_class_distribution: "2000,10,200,50,100"
+  gate_action: abort
+  baseline_stats_path: configs/baseline_feature_stats.json
+  baseline_class_distribution: 2000,10,200,50,100

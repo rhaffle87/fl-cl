@@ -5,10 +5,37 @@ Sends run status updates (start, complete, fail) to a Telegram bot.
 Used by the orchestrator to notify when experiments finish or error out.
 """
 
+import os
 import urllib.request
 import urllib.parse
 import json
+from pathlib import Path
 from datetime import datetime
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def load_env_file():
+    """Parse .env file if present in project root."""
+    env_path = PROJECT_ROOT / ".env"
+    if not env_path.exists():
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip("'\"")
+                if k not in os.environ:
+                    os.environ[k] = v
+    except Exception:
+        pass
+
+
+load_env_file()
 
 
 def escape_html(text: str) -> str:
@@ -23,12 +50,12 @@ class TelegramNotifier:
 
     API_URL = "https://api.telegram.org/bot{token}/sendMessage"
 
-    def __init__(self, bot_token: str, chat_id: str, enabled: bool = True):
-        self.bot_token = bot_token
-        self.chat_id = chat_id
+    def __init__(self, bot_token: str = None, chat_id: str = None, enabled: bool = True):
+        self.bot_token = bot_token or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        self.chat_id = chat_id or os.environ.get("TELEGRAM_CHAT_ID", "")
         
         # Disable notifications if placeholder values are used
-        if not bot_token or not chat_id or "YOUR_" in str(bot_token) or "YOUR_" in str(chat_id):
+        if not self.bot_token or not self.chat_id or "YOUR_" in str(self.bot_token) or "YOUR_" in str(self.chat_id):
             self.enabled = False
         else:
             self.enabled = enabled
@@ -234,3 +261,57 @@ class TelegramNotifier:
             f"----------------------------------------\n"
         )
         return self.send(msg, parse_mode="HTML")
+
+    def notify_sweep_summary(
+        self,
+        sweep_name: str,
+        total_runs: int,
+        finished_runs: int,
+        peak_accuracy: float,
+        min_loss: float,
+        peak_macro_f1: float,
+        pareto_config: str = "1D-CNN + A-GEM + TrimmedMean",
+        models_summary: dict = None,
+        duration_min: float = 0,
+        mlflow_uri: str = "http://10.10.130.10:5000",
+    ):
+        """Notify comprehensive summary for multi-run hyperparameter sweeps."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        name_esc = escape_html(sweep_name)
+        acc_esc = escape_html(f"{peak_accuracy * 100:.2f}%")
+        loss_esc = escape_html(f"{min_loss:.4f}")
+        f1_esc = escape_html(f"{peak_macro_f1 * 100:.2f}%")
+        pareto_esc = escape_html(pareto_config)
+        time_esc = escape_html(timestamp)
+        dur_esc = escape_html(f"{duration_min:.1f} min" if duration_min > 0 else "Completed")
+
+        msg = (
+            f"<b>[MLOps Sweep] Matrix Sweep Execution Summary</b>\n"
+            f"----------------------------------------\n"
+            f"<b>Environment:</b> <code>Proxmox-Cluster</code>\n"
+            f"<b>Sweep Name:</b> <code>{name_esc}</code>\n"
+            f"<b>Total Matrix Runs:</b> <code>{finished_runs}/{total_runs} (100% FINISHED)</code>\n"
+            f"<b>Total Execution Time:</b> <code>{dur_esc}</code>\n\n"
+            f"<b>Top Empirical Metrics:</b>\n"
+            f"- <b>Peak Global Accuracy:</b> <code>{acc_esc}</code>\n"
+            f"- <b>Lowest Convergence Loss:</b> <code>{loss_esc}</code>\n"
+            f"- <b>Peak Macro F1 Score:</b> <code>{f1_esc}</code>\n"
+            f"- <b>Recommended Pareto Frontier:</b> <code>{pareto_esc}</code>\n\n"
+        )
+
+        if models_summary:
+            msg += "<b>Evaluated Backbone Distribution:</b>\n"
+            for m_name, count in models_summary.items():
+                m_esc = escape_html(m_name.upper())
+                msg += f"- <code>{m_esc}</code>: <code>{count} combinations</code>\n"
+            msg += "\n"
+
+        if mlflow_uri:
+            msg += f"<b>Tracking Dashboard:</b> <a href=\"{mlflow_uri}\">{mlflow_uri}</a>\n\n"
+
+        msg += (
+            f"<b>Completed At:</b> <code>{time_esc}</code>\n"
+            f"----------------------------------------\n"
+        )
+        return self.send(msg, parse_mode="HTML")
+

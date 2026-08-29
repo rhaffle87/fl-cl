@@ -3,11 +3,14 @@
 # ─────────────────────────────────────────────────────────────
 experiment:
   name: "FCL-Parameter-Analysis-Sweep"
-  description: "Test run evaluating MLP vs CNN backbones and Naive vs EWC Continual Learning strategies."
+  description: "Targeted multi-parameter sweep evaluating CNN vs MLP vs Transformer backbones across EWC and GEM continual learning strategies."
 
 sweep:
   parameters:
     simulation.duration: [5]
+    simulation.attack_engine: ["auto"]
     fl.rounds: [2]
-    model.type: ["mlp", "cnn"]
+    model.type: ["cnn", "mlp", "transformer"]
+    cl.strategy: ["EWC", "GEM"]
     cl.ewc_lambda: [0.0, 0.8]
+    security.aggregation_strategy: ["TrimmedMean"]

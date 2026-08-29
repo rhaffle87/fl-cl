@@ -128,7 +128,7 @@ This script is a **long-running daemon** that:
 
 1. **Binds to the mirror interface** (`ens19`) using NFStream in promiscuous mode.
 2. **Reconstructs packets into flows** — grouping related packets by 5-tuple (src IP, dst IP, src port, dst port, protocol) with idle/active timeouts.
-3. **Extracts 17 metadata features** per flow, including:
+3. **Extracts 32 tabular metadata features** per flow, including:
  * TLS handshake fingerprints (`ja3_hash`, `ja3s_hash`)
  * Flow statistics (`bidirectional_packets`, `bidirectional_bytes`, `duration_ms`)
  * Directional metrics (`src2dst_packets`, `dst2src_bytes`)
@@ -248,51 +248,58 @@ When clients report different dataset sizes, naive averaging would be misleading
 
 ---
 
-### 3.6 `src/traffic_gen/attack_flow.py` — Threat Scenario Simulator
+### 3.6 `src/traffic_gen/attack_flow.py` — Modular Threat Scenario Simulator
 
 **Deployed to:** Traffic Generator (VM 400, Kali Linux)
 
-A CLI utility that generates one of five traffic patterns against a target IP:
+A modular CLI utility that generates traffic patterns against a target IP using either native Kali Linux security binaries or pure Python standard library/PyPI implementations.
 
-#### Mode: `benign`
+#### Engine Selection (`--engine auto|kali|python`)
+* **`auto` (Default)**: Automatically discovers available Kali tools on system `PATH` and `~/traffic-env`, falling back cleanly to pure Python implementations if tools are absent.
+* **`kali`**: Prioritizes standard Kali Linux security binaries (`ncrack`/`medusa`/`hydra` for SSH, `slowhttptest`/`hping3` for DoS, `scapy` for DNS/Botnet).
+* **`python`**: Uses 100% portable pure Python standard library (`socket`, `urllib`) and PyPI packages (`slowloris`).
 
+#### Attack Modes & Tool Matrix
+
+| Mode | Target Port | Label Class | Kali Native Engine | Python Native Engine |
+| :--- | :--- | :--- | :--- | :--- |
+| `benign` | 80 | **Class 0** (Normal) | `urllib.request` / `curl` loop | `urllib.request` loop |
+| `ssh` | 22 | **Class 3** (BruteForce) | `ncrack` -> `medusa` -> `hydra` | Pure socket auth negotiation loop |
+| `slowloris` | 80 / 443 | **Class 4** (DoS) | `slowhttptest` -> `hping3` | PyPI `slowloris` / socket partial HTTP headers |
+| `dns_exfil` | 53 | **Class 2** (Exfiltration) | `scapy` DNS TXT/CNAME packets | Pure socket UDP DNS query crafter |
+| `botnet` | 8080, 8888, 9000 | **Class 1** (Botnet) | `scapy` / C2 stager session | Multi-round HTTP POST beacon with jitter |
+
+#### Execution Examples
+
+##### Mode: `benign`
 ```bash
-~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.110.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode benign --target 10.10.110.15 --duration 30 --engine auto
 ```
+Sends HTTP GET requests to the target's port 80 every 0.3 seconds. Generates normal web browsing patterns classified as Class `0`.
 
-Sends HTTP GET requests to the target's port 80 every 0.3 seconds for the specified duration. Generates normal web browsing patterns that the model should classify as class `0`.
-
-#### Mode: `ssh`
-
+##### Mode: `ssh`
 ```bash
-~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.110.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode ssh --target 10.10.110.15 --duration 30 --engine auto
 ```
+Launches `ncrack`, `medusa`, or `hydra` against SSH port 22 (or pure socket brute-force emulation). Generates rapid auth attempts classified as Class `3`.
 
-Launches `hydra` with the `fasttrack.txt` wordlist against the target's SSH service (port 22). Generates rapid, failed authentication attempts that the model should classify as class `3`.
-
-#### Mode: `slowloris`
-
+##### Mode: `slowloris`
 ```bash
-~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration 30 --port 80
+~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target 10.10.110.15 --duration 30 --port 80 --engine auto
 ```
+Runs `slowhttptest`, `hping3`, or PyPI `slowloris` holding partial HTTP connections open. Generates long-duration DoS patterns classified as Class `4`.
 
-Runs `slowloris` with 100 concurrent sockets, sending partial HTTP headers to hold connections open. Generates DoS patterns that the model should classify as class `4`.
-
-#### Mode: `dns_exfil`
-
+##### Mode: `dns_exfil`
 ```bash
-~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target 10.10.110.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target 10.10.110.15 --duration 30 --engine auto
 ```
+Sends structured DNS query UDP datagrams to port 53 with high-entropy subdomains. Generates patterns classified as Class `2`.
 
-Sends crafted DNS-like UDP packets to port 53, simulating data exfiltration via DNS tunneling. Generates patterns that the model should classify as class `2`.
-
-#### Mode: `botnet`
-
+##### Mode: `botnet`
 ```bash
-~/traffic-env/bin/python3 attack_flow.py --mode botnet --target 10.10.110.15 --duration 30
+~/traffic-env/bin/python3 attack_flow.py --mode botnet --target 10.10.110.15 --duration 30 --engine auto
 ```
-
-Opens persistent TCP sessions on C2 ports (8080/8888/9000) with multi-round HTTP-based heartbeats. Generates beaconing patterns that the model should classify as class `1`.
+Opens persistent TCP sessions on C2 ports (8080/8888/9000) with multi-round HTTP POST heartbeats and randomized jitter. Generates beaconing patterns classified as Class `1`.
 
 ---
 
@@ -711,7 +718,7 @@ To optimize FCL performance (e.g., EWC stability penalty $\lambda$, learning rat
 
 ### 7.1 Sweep Configuration & Schema
 
-The controller accepts a sweep YAML config (e.g., `configs/sweep_grid.yaml` or `configs/sweep_verify.yaml`):
+The controller accepts a sweep YAML config (e.g., `configs/sweeps/sweep_grid.yaml` or `configs/sweeps/sweep_verify.yaml`):
 
 ```yaml
 experiment:

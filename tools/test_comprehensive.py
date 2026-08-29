@@ -586,6 +586,38 @@ def test_server_aggregation_and_drift():
     return True
 
 
+def test_energy_ood():
+    """Tests Free Energy Out-of-Distribution scoring function."""
+    print("\n--- TEST: Energy-Based OOD Scoring ---")
+    from extractor import calculate_energy_score
+    known_logits = np.array([5.0, 0.1, 0.1, 0.1, 0.1])
+    ood_logits = np.array([0.2, 0.2, 0.2, 0.2, 0.2])
+    
+    e_known = float(calculate_energy_score(known_logits, temperature=1.0))
+    e_ood = float(calculate_energy_score(ood_logits, temperature=1.0))
+    
+    print(f"  Known Flow Energy: {e_known:.4f} | OOD Flow Energy: {e_ood:.4f}")
+    assert e_known < e_ood, "Known flows should have lower Free Energy than OOD flows!"
+    print("  [OK] Free Energy OOD separation verified.")
+    return True
+
+
+def test_alerts_module():
+    """Tests incident and governance alerting module formats."""
+    print("\n--- TEST: Incident & Governance Alert Dispatcher ---")
+    try:
+        from alerts import send_alert, send_byzantine_alert, send_drift_alert, send_promotion_alert
+    except ImportError:
+        from src.aggregator.alerts import send_alert, send_byzantine_alert, send_drift_alert, send_promotion_alert
+    # Calling without credentials returns False gracefully without throwing
+    send_alert("Test Alert", "Unit test message", level="INFO")
+    send_byzantine_alert("client-A", "Sign Flipping", 4.25, "TrimmedMean")
+    send_drift_alert("client-B", 5, 0.72)
+    send_promotion_alert("CyberDefenseCNN", 36, {"Accuracy": 0.9953, "Botnet_F1": 0.6905})
+    print("  [OK] Alert dispatcher payloads and formatters executed cleanly.")
+    return True
+
+
 if __name__ == "__main__":
     print("======================================================================")
     print("FCL TEST SUITE: COMPLETE PARAMETER & FEATURE COMPREHENSIVE VERIFICATION")
@@ -598,6 +630,8 @@ if __name__ == "__main__":
     success &= test_differential_privacy()
     success &= test_label_poisoning()
     success &= test_server_aggregation_and_drift()
+    success &= test_energy_ood()
+    success &= test_alerts_module()
     
     print("======================================================================")
     if success:
@@ -606,3 +640,4 @@ if __name__ == "__main__":
     else:
         print("ALERT: ONE OR MORE INTEGRITY UNIT TESTS FAILED!")
         sys.exit(1)
+

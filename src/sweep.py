@@ -47,9 +47,11 @@ def load_yaml(path):
 
 def main():
     parser = argparse.ArgumentParser(description="FCL Hyperparameter Sweep Controller")
-    parser.add_argument("--config", default="configs/sweep_grid.yaml", help="Sweep configuration YAML file")
+    parser.add_argument("--config", default="configs/sweeps/sweep_grid.yaml", help="Sweep configuration YAML file")
     parser.add_argument("--key", default=None, help="Path to SSH private key")
     parser.add_argument("--dry-run", action="store_true", help="Print sweep combinations without executing")
+    parser.add_argument("--start-index", type=int, default=1, help="1-based index of the combination to start/resume from")
+    parser.add_argument("--parent-run-id", default=None, help="Existing parent run ID to attach child runs to")
     args = parser.parse_args()
 
     # Locate sweep config
@@ -59,8 +61,12 @@ def main():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(script_dir, "..", args.config)
         if not os.path.exists(config_path):
-            print(f"[!] Error: Sweep config file not found at {args.config} or {config_path}")
-            sys.exit(1)
+            alt_path = os.path.join(script_dir, "..", "configs", "sweeps", os.path.basename(args.config))
+            if os.path.exists(alt_path):
+                config_path = alt_path
+            else:
+                print(f"[!] Error: Sweep config file not found at {args.config} or {config_path}")
+                sys.exit(1)
 
     config = load_yaml(config_path)
     exp_config = config.get("experiment", {})
@@ -100,26 +106,32 @@ def main():
     parent_run_name = f"Sweep-Parent-{timestamp}"
     
     parent_run = None
-    parent_run_id = ""
-    try:
-        parent_run = mlflow.start_run(run_name=parent_run_name, tags={"sweep_parent": "true"})
-        parent_run_id = parent_run.info.run_id
-        print(f"[*] Started MLflow Parent Run: {parent_run_name} (ID: {parent_run_id})")
-        # Log sweep metadata
-        mlflow.log_params({f"sweep_space_{k.replace('.', '_')}": str(v) for k, v in parameters_dict.items()})
-    except Exception as e:
-        print(f"[!] Warning: Failed to start parent MLflow run: {e}")
-        print("[*] Proceeding with child runs only.")
+    parent_run_id = args.parent_run_id or ""
+    
+    if parent_run_id:
+        print(f"[*] Resuming sweep under existing MLflow Parent Run ID: {parent_run_id}")
+    else:
+        try:
+            parent_run = mlflow.start_run(run_name=parent_run_name, tags={"sweep_parent": "true"})
+            parent_run_id = parent_run.info.run_id
+            print(f"[*] Started MLflow Parent Run: {parent_run_name} (ID: {parent_run_id})")
+            # Log sweep metadata
+            mlflow.log_params({f"sweep_space_{k.replace('.', '_')}": str(v) for k, v in parameters_dict.items()})
+        except Exception as e:
+            print(f"[!] Warning: Failed to start parent MLflow run: {e}")
+            print("[*] Proceeding with child runs only.")
 
     try:
         for idx, combo in enumerate(combinations):
+            if (idx + 1) < args.start_index:
+                continue
             param_map = dict(zip(keys, combo))
             print(f"\n==================================================")
             print(f"[*] Executing Run {idx + 1}/{len(combinations)}")
             print(f"[*] Parameters: {param_map}")
             print(f"==================================================")
             
-            cmd = ["python", "src/orchestrate.py", "--mlops-mode", "experimental"]
+            cmd = [sys.executable, "src/orchestrate.py", "--mlops-mode", "experimental", "--config", args.config]
             if args.key:
                 cmd.extend(["--key", args.key])
             if parent_run_id:
@@ -159,6 +171,8 @@ def main():
                     cmd.extend(["--prune-fraction", str(val)])
                 elif k in ("simulation.duration", "duration"):
                     cmd.extend(["--duration", str(val)])
+                elif k in ("simulation.attack_engine", "attack_engine"):
+                    cmd.extend(["--attack-engine", str(val)])
                 elif k in ("security.aggregation_strategy", "aggregation_strategy"):
                     cmd.extend(["--aggregation-strategy", str(val)])
                 elif k in ("security.trimmed_mean_beta", "trimmed_mean_beta"):

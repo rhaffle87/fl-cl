@@ -2,14 +2,16 @@
 # FL-CL Master Exhaustive Hyperparameter Sweep Configuration
 # ─────────────────────────────────────────────────────────────
 # This schema defines the full multi-dimensional parameter search
-# space across all 6 core subsystems in the FL-CL platform:
+# space across all core subsystems in the FL-CL platform:
 #
-# 1. Model Backbones (MLP, 1D-CNN, Transformer + Pruning)
-# 2. Continual Learning Strategies (EWC, GEM, Naive)
-# 3. Robust Federated Aggregators (FedAvg, TrimmedMean, FedMedian, Krum)
-# 4. Differential Privacy (DP-SGD Noise Multipliers & Clipping)
-# 5. Adversarial Label Poisoning & Resilience
-# 6. Optimization & Inverse-Frequency Class Weights
+# 1. Model Architecture (1D-CNN, MLP, Transformer + Fisher Pruning)
+# 2. Continual Learning Strategies (EWC, GEM, AGEM, Naive + Replay)
+# 3. Robust Federated Aggregators (TrimmedMean, FedMedian, FedAvg, Krum)
+# 4. Differential Privacy (DP-SGD Noise Multipliers & Gradient Clipping)
+# 5. Byzantine Adversarial Poisoning (Source/Target Classes & Rates)
+# 6. Optimization, Learning Rates, Batch Sizes, & Inverse-Frequency Weights
+# 7. Traffic Simulation & Modular Attack Engines (auto, kali, python)
+# 8. MLOps Lineage, Complexity Budgets, & Federation Rounds
 # ─────────────────────────────────────────────────────────────
 
 experiment:
@@ -19,32 +21,42 @@ experiment:
 sweep:
   parameters:
     # ── 1. Model Architecture & Compression ─────────────────
-    model.type: ["mlp", "cnn", "transformer"]
+    model.type: ["cnn", "mlp", "transformer"]
     model.prune_fraction: [0.0, 0.2]
 
     # ── 2. Continual Learning Strategy & Regularization ─────
-    cl.strategy: ["EWC", "GEM", "Naive"]
+    cl.strategy: ["EWC", "GEM", "AGEM", "Naive"]
     cl.ewc_lambda: [0.0, 0.5, 0.8, 1.5]
     cl.gem_patterns_per_exp: [64, 256]
     cl.gem_memory_strength: [0.3, 0.5]
+    cl.complexity_score: [1.4]
+    cl.comm_overhead_budget: [200000000]
 
     # ── 3. Federated Aggregation & Robust Defense ───────────
-    security.aggregation_strategy: ["FedAvg", "TrimmedMean", "FedMedian", "Krum"]
+    security.aggregation_strategy: ["TrimmedMean", "FedMedian", "FedAvg", "Krum"]
     security.trimmed_mean_beta: [0.10, 0.20]
 
     # ── 4. Differential Privacy (DP-SGD) ────────────────────
     security.dp_enabled: [false, true]
     security.dp_noise_multiplier: [0.15, 0.30]
+    security.dp_max_grad_norm: [1.0]
 
     # ── 5. Byzantine Adversarial Poisoning ──────────────────
     security.poison_enabled: [false, true]
+    security.poison_client_ids: [["A"]]
     security.poison_rate: [0.20]
+    security.poison_from_class: [0]
+    security.poison_to_class: [4]
 
     # ── 6. Optimization, Class Balancing & FL Rounds ────────
     training.lr: [0.003, 0.005]
+    training.momentum: [0.9]
     training.batch_size: [16, 32]
     training.class_weights:
       - [1.0, 15.0, 2.0, 4.0, 15.0]
       - [1.0, 250.0, 2.0, 5.0, 50.0]
     fl.rounds: [5, 15]
+
+    # ── 7. Traffic Simulation & Modular Engines ─────────────
     simulation.duration: [30]
+    simulation.attack_engine: ["auto"]

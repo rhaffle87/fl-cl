@@ -37,14 +37,11 @@ plt.rcParams.update({
 
 
 def save_fig(fig, name):
-    pdf_path = FIG_DIR / f"{name}.pdf"
-    svg_path = FIG_DIR / f"{name}.svg"
     png_path = FIG_DIR / f"{name}.png"
-    fig.savefig(pdf_path, format="pdf", bbox_inches="tight", dpi=300)
-    fig.savefig(svg_path, format="svg", bbox_inches="tight")
     fig.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
     plt.close(fig)
-    print(f"  [OK] Saved vector figure: {name} (.pdf, .svg, .png)")
+    print(f"  [OK] Saved figure: {name}.png")
+
 
 
 def generate_fig1_convergence():

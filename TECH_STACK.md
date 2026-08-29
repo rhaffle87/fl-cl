@@ -36,7 +36,7 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2` - Dell Pow
 
 ---
 
-## Layer 3: Networking
+## Layer 3: Networking & Communication Protocols
 
 | Technology | Purpose | Where |
 | :--- | :--- | :--- |
@@ -51,23 +51,23 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2` - Dell Pow
 
 ---
 
-## Layer 4: Python ML/FL-CL Stack (Defender VMs)
+## Layer 4: Python ML / Continual Learning Stack (Defender VMs)
 
 These packages run inside VM 310 and VM 320.
 
 | Package | Version | Purpose | Install |
 | :--- | :--- | :--- | :--- |
-| **Python** | 3.11+ | Runtime | `apt install python3 python3-venv` |
-| **PyTorch** | 2.x | Deep learning framework (CyberDefenseNet MLP, 1D-CNN, Transformer) | `pip install torch --index-url .../cpu` |
-| **ONNX Runtime** | 1.19+ | High-throughput CPU inference engine (AVX2 SIMD acceleration) | `pip install onnxruntime` |
-| **Avalanche** | 0.5+ | Continual Learning library (EWC and GEM strategies) | `pip install avalanche-lib` |
-| **Flower (flwr)** | 1.x | Federated Learning client | `pip install flwr` |
-| **Opacus** | 1.x | Client-side Differential Privacy (DP-SGD) | `pip install opacus` |
-| **NFStream** | 6.x | Encrypted traffic feature extraction (JA3, flow stats) | `pip install nfstream` |
-| **scikit-learn** | 1.x | StandardScaler, metrics (F1, precision, recall) | `pip install scikit-learn` |
-| **pandas** | 2.x | DataFrame operations for flow records | `pip install pandas` |
-| **numpy** | 1.x | Numerical arrays | `pip install numpy` |
-| **TensorBoard** | 2.x | Training visualization | `pip install tensorboard` |
+| **Python** | 3.11+ | Runtime environment | `apt install python3 python3-venv` |
+| **PyTorch** | 2.x | Deep learning backbone (`CyberDefenseCNN`, `CyberDefenseNet`, `CyberDefenseTransformer`) | `pip install torch --index-url .../cpu` |
+| **TorchScript** | 2.x | JIT-compiled dynamic computation graph for low-latency inference | Built into PyTorch |
+| **ONNX Runtime** | 1.19+ | High-throughput CPU inference engine (AVX2/AVX-512 SIMD acceleration) | `pip install onnxruntime` |
+| **Avalanche** | 0.5+ | Continual Learning library (EWC with class-weighted loss and GEM projection) | `pip install avalanche-lib` |
+| **Flower (flwr)** | 1.x | Federated Learning client lifecycle | `pip install flwr` |
+| **Opacus** | 1.x | Client-side Differential Privacy (DP-SGD gradient clipping and noise injection) | `pip install opacus` |
+| **NFStream** | 6.x | Encrypted traffic feature extraction (SPLT, PIAT, JA3/JA4 flow statistics) | `pip install nfstream` |
+| **scikit-learn** | 1.x | StandardScaler, classification metrics (F1, precision, recall) | `pip install scikit-learn` |
+| **pandas** | 2.x | High-speed vectorized DataFrame operations for flow records | `pip install pandas` |
+| **numpy** | 1.x / 2.x | Multi-dimensional numerical array computation | `pip install numpy` |
 | **libpcap** | System lib | Packet capture backend for NFStream | `apt install libpcap-dev` |
 | **tcpdump** | System tool | Verify mirrored traffic on capture interface | `apt install tcpdump` |
 
@@ -77,27 +77,30 @@ These packages run inside VM 310 and VM 320.
 
 | Package | Version | Purpose | Install |
 | :--- | :--- | :--- | :--- |
-| **Python** | 3.11+ | Runtime | `apt install python3 python3-venv` |
-| **Flower (flwr)** | 1.x | Federated Learning server (FedAvg, TrimmedMean, FedMedian, Krum) | `pip install flwr` |
-| **MLflow** | 3.x | Experiment tracking, metric logging, LoggedModel entities | `pip install mlflow` |
-| **matplotlib** | 3.x | Render per-round evaluation confusion matrix heatmaps (headless) | `pip install matplotlib` |
+| **Python** | 3.11+ | Runtime environment | `apt install python3 python3-venv` |
+| **Flower (flwr)** | 1.x | Federated Learning server (`FedAvg`, `TrimmedMean`, `FedMedian`, `Krum`) | `pip install flwr` |
+| **MLflow** | 3.x | Centralized experiment tracking, metric logging, LoggedModel entities | `pip install mlflow` |
+| **matplotlib** | 3.x | Headless rendering of per-round evaluation confusion matrix heatmaps | `pip install matplotlib` |
 
 ---
 
 ## Layer 6: Traffic Generation Stack (VM 400 — Kali Linux)
 
-| Tool | Purpose | Install |
-| :--- | :--- | :--- |
-| **Metasploit Framework** | C2 beaconing, reverse HTTPS shells | Pre-installed on Kali |
-| **Hydra** | SSH/RDP brute-force attacks | `apt install hydra` |
-| **hping3** | TCP/UDP flood, DDoS simulation | `apt install hping3` |
-| **Slowloris** | HTTP slow-connection DoS | `pip install slowloris` |
-| **tcpreplay** | Replay benchmark PCAP datasets | `apt install tcpreplay` |
-| **tcprewrite** | Rewrite IPs/MACs in PCAPs for testbed addressing | Bundled with tcpreplay |
-| **Selenium** | Headless browser for benign HTTPS traffic | `pip install selenium` |
-| **Chromium Driver** | Browser backend for Selenium | `apt install chromium-driver` |
-| **Locust** | High-volume HTTP/HTTPS load generation | `pip install locust` |
-| **T-Rex (Cisco)** | Stateful L4–L7 packet generation at scale | Manual install from trex-tgn.cisco.com |
+| Tool | Purpose | Engine Mode | Install |
+| :--- | :--- | :--- | :--- |
+| **attack_flow.py** | Modular threat scenario simulator | `--engine auto\|kali\|python` | Native Python script |
+| **Hydra** | High-speed SSH authentication brute-forcing | Kali Engine | `apt install hydra` |
+| **Ncrack** | Network authentication cracking tool for SSH services | Kali Engine | `apt install ncrack` |
+| **Medusa** | Parallel modular login brute-forcer | Kali Engine | `apt install medusa` |
+| **SlowHTTPTest** | Application-layer Slowloris / Slow POST DoS tool | Kali Engine | `apt install slowhttptest` |
+| **hping3** | TCP/UDP volumetric flood and SYN flood simulator | Kali Engine | `apt install hping3` |
+| **Slowloris** | Python keep-alive socket DoS simulator | Python Engine | `pip install slowloris` |
+| **Scapy** | Custom packet crafting for high-entropy DNS exfiltration and C2 beaconing | Kali / Python | `pip install scapy` |
+| **Iodine** | IPv4 DNS tunneling and data exfiltration utility | Kali Engine | `apt install iodine` |
+| **Metasploit Framework** | C2 beaconing and reverse HTTPS shell simulation | Kali Engine | Pre-installed on Kali |
+| **tcpreplay** | Replay benchmark PCAP datasets over flat L2 bridge | Replay Mode | `apt install tcpreplay` |
+| **Selenium / Chromium** | Headless browser for realistic benign HTTPS web browsing | Benign Mode | `pip install selenium` |
+| **Locust** | High-volume concurrent HTTP/HTTPS load generation | Benign Mode | `pip install locust` |
 
 ---
 
@@ -116,29 +119,31 @@ These packages run inside VM 310 and VM 320.
 
 | Technology | Purpose | Where |
 | :--- | :--- | :--- |
-| **tmpfs RAM Disk** (4 GB) | Buffer NFStream flow writes to avoid RAID I/O contention | Inside VM 310, VM 320 at `/mnt/ramdisk` |
-| **LVM-Thin Snapshots** | Fast VM checkpoint/rollback for experiment reproducibility | PVE host storage pool (`local-lvm`) |
-| **CSV** | Tabular storage format for batched flow records | `/mnt/ramdisk/flows/` → per-batch CSV files |
+| **tmpfs RAM Disk** (4 GB) | Buffer NFStream flow writes to eliminate disk I/O contention | Inside VM 310, VM 320 at `/mnt/ramdisk` |
+| **LVM-Thin Snapshots** | Fast VM checkpoint and rollback for experiment reproducibility | PVE host storage pool (`local-lvm`) |
+| **CSV Storage** | Tabular format for batched flow records | `/mnt/ramdisk/flows/*.csv` |
 
 ---
 
-## Layer 9: MLOps & Observability
+## Layer 9: MLOps, CI/CD & Observability
 
 | Tool | Purpose | Where | Port |
 | :--- | :--- | :--- | :--- |
-| **MLflow** | Centralized experiment tracking (loss, accuracy, BWT per round) | LXC 300 | 5000 |
+| **MLflow** | Centralized experiment tracking (loss, accuracy, BWT, confusion matrices) | LXC 300 | 5000 |
 | **TensorBoard** | Weight distributions, gradient norms, activation statistics | VM 310, VM 320 | 6006 |
-| **Weights & Biases** | Cloud-hosted alternative for team collaboration | Any (cloud) | — |
 | **Ollama** | Local LLM inference engine for threat reports (`llama3.1:8b`) | LXC / Tailscale Node | 11435 |
 | **Nginx Reverse Proxy** | Dual-key authenticated endpoint proxying local Ollama APIs | Tailscale Node | 443 / 80 |
+| **Model Promotion Gate** | Automated CI/CD promotion evaluating recall, latency, and drift | `tools/validate_promotion.py` | Local / Remote |
 
 ---
 
-## Optional: GPU Acceleration
+## Layer 10: Standards & Statutory Compliance Stack
 
-| Technology | Purpose | Install |
+| Framework / Standard | Governance Layer | Verified Implementation |
 | :--- | :--- | :--- |
-| **NVIDIA Driver** | GPU compute on host | `apt install nvidia-driver` on PVE host |
-| **vfio / IOMMU** | PCIe GPU passthrough to VMs | Enable in BIOS + kernel params |
-| **NVIDIA CUDA Toolkit** | GPU compute inside VM | Install inside defender VM |
-| **PyTorch CUDA** | GPU-accelerated training | `pip install torch --index-url .../cu121` |
+| **UU PDP No. 27/2022** *(Art. 65–66)* | Statutory Privacy Law | Zero raw flow transfer; strictly local feature extraction on tmpfs RAMDisk. |
+| **GDPR (EU 2016/679)** *(Art. 5, 25, 32)* | Statutory Privacy Law | DP-SGD ($\sigma=0.30, C=1.0$) with Moments Accountant $(\epsilon=6.08, \delta=10^{-5})$. |
+| **NIST SP 800-94 / 800-145** | Cybersecurity Standard | 32-dimensional behavioral flow telemetry without payload inspection. |
+| **MITRE ATT&CK Enterprise** | Threat Classification | T1498 (DoS), T1110 (BruteForce), T1048 (DNS Exfiltration), T1071 (C2 Beaconing). |
+| **ISO/IEC 27001 / 27701** | ISMS / PIMS Management | SHA-256 dataset lineage graphs, Git commit tagging, and audit trail validation. |
+| **RFC 1035 / 793 / 7230** | Wire Protocol Standard | Compliant DNS datagram formatting, TCP state handling, and HTTP/1.1 transports. |

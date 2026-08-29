@@ -170,11 +170,63 @@ The sweep controller will:
 
 ---
 
+## Performance & Throughput Benchmarks
+
+Empirically validated using [`tools/benchmark_onnx.py`](tools/benchmark_onnx.py) and [`tools/benchmark_latency.py`](tools/benchmark_latency.py) across 200 evaluation repetitions on multi-core CPU architectures:
+
+| Architecture | Batch Size | PyTorch FP32 Latency | TorchScript JIT Latency | ONNX Runtime Latency | ONNX Peak Throughput |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **CyberDefenseCNN** *(Champion)* | **1 (Single Flow)** | 17.47 µs / flow | 16.32 µs / flow | **13.23 µs / flow** | **75,565 flows / sec** |
+| | **16 (Edge Burst)** | 1.96 µs / flow | 1.88 µs / flow | **1.09 µs / flow** | **915,221 flows / sec** |
+| | **64 (Mini-Batch)** | 1.01 µs / flow | 0.93 µs / flow | **0.44 µs / flow** | **2,291,019 flows / sec** |
+| | **256 (Volumetric)**| 0.91 µs / flow | 0.80 µs / flow | **0.32 µs / flow** | **3,115,286 flows / sec** |
+| **CyberDefenseNet (MLP)** | **1 (Single Flow)** | 18.49 µs / flow | 15.54 µs / flow | **10.96 µs / flow** | **91,241 flows / sec** |
+| | **256 (Volumetric)**| 0.26 µs / flow | 0.22 µs / flow | **0.18 µs / flow** | **5,502,306 flows / sec** |
+| **CyberDefenseTransformer** | **1 (Single Flow)** | 22.72 µs / flow | 19.98 µs / flow | **16.71 µs / flow** | **59,850 flows / sec** |
+| | **256 (Volumetric)**| 1.49 µs / flow | 1.27 µs / flow | **0.58 µs / flow** | **1,725,584 flows / sec** |
+
+---
+
+## Security, Privacy & Byzantine Resilience
+
+Empirically validated across Byzantine adversarial scenarios ([`tools/benchmark_byzantine.py`](tools/benchmark_byzantine.py)) and Differential Privacy sweeps ([`tools/benchmark_dp.py`](tools/benchmark_dp.py)):
+
+### Byzantine Attack Resilience Matrix
+| Attack Scenario | FedAvg Accuracy | FedMedian Accuracy | Krum Accuracy | TrimmedMean ($\beta=0.10$) Accuracy | Defense Impact |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Clean Baseline** | 99.40% | 99.40% | 99.40% | **99.40%** | Baseline parity |
+| **10% Label Poisoning** | 99.40% | 99.40% | 99.40% | **99.40%** | 0.00% degradation |
+| **20% Label Poisoning** | 99.40% | 99.40% | 99.40% | **99.40%** | 0.00% degradation |
+| **50% Label Poisoning** | 99.20% (-0.2%) | 99.40% | 99.40% | **99.40%** | Poisoning neutralized |
+| **Sign-Flipping Gradient Attack** | 79.40% (-20.0%) | 99.40% | 99.40% | **99.40%** | Attack completely eliminated |
+| **Gaussian Noise Attack ($\sigma=2.0$)** | 80.40% (-19.0%) | 99.40% | 99.40% | **99.40%** | Noise filtered cleanly |
+
+### Differential Privacy Guarantee (DP-SGD)
+- **Clipping Norm**: $C = 1.0$ (bounded maximum gradient sensitivity).
+- **Target Privacy Budget**: $(\epsilon = 6.08, \delta = 10^{-5})$ at noise multiplier $\sigma = 0.30$.
+- **Utility Retention**: **99.40% Test Accuracy** and **0.9937 Macro F1** preserved under privacy noise injection.
+
+---
+
+## Standards & Regulatory Compliance Matrix
+
+| Standard / Regulation | Compliance Mandate | FL-CL Architectural Implementation | Verification Tool / Artifact |
+| :--- | :--- | :--- | :--- |
+| **UU PDP No. 27/2022** *(Art. 65–66)* | Strict prohibition against transferring raw personal network data outside jurisdiction boundaries. | **Zero Raw Flow Transmission**: Raw packets and IP payloads remain isolated in local volatile tmpfs RAMDisks (`/mnt/ramdisk/flows/`). Only privacy-preserving gradient weights leave the node. | [`src/defender/client.py`](src/defender/client.py) & [ADR-004](docs/decisions/ADR-004_federated_aggregation.md) |
+| **GDPR (EU 2016/679)** *(Art. 5, 25, 32)* | Data minimization, purpose limitation, and Privacy by Design via cryptographic anonymization. | **DP-SGD & Batch Aggregation**: In-place gradient clipping and DP noise injection mathematically prevent gradient inversion or flow reconstruction. | [`tools/benchmark_dp.py`](tools/benchmark_dp.py) & [`privacy_utility_curve.csv`](data/reports/privacy_utility_curve.csv) |
+| **NIST SP 800-94 / 800-145** | Standards for Intrusion Detection and Prevention Systems (IDPS) and behavioral telemetry. | **32-Dimensional Statistical Representation**: Classifies threats using behavioral flow metadata (SPLT, PIAT, byte ratios) without inspecting encrypted payloads. | [`src/defender/extractor.py`](src/defender/extractor.py) & [`baseline_feature_stats.json`](configs/baseline_feature_stats.json) |
+| **MITRE ATT&CK** | Standardized adversary tactic and technique classification. | **Threat Coverage**: T1498 (Network DoS / Slowloris), T1110 (Brute Force / SSH), T1048 (Exfiltration over DNS), T1071 (Application Layer C2 Beaconing). | [`src/traffic_gen/attack_flow.py`](src/traffic_gen/attack_flow.py) & [ADR-007](docs/decisions/ADR-007_attack_engine_alternatives.md) |
+| **ISO/IEC 27001 / 27701** | Information Security & Privacy Information Management System governance. | **Cryptographic Lineage & Checksums**: SHA-256 dataset lineage graphs, Git commit tagging, and immutable MLflow artifact logging. | [`src/orchestrate.py`](src/orchestrate.py) & [`tools/audit_codebase.py`](tools/audit_codebase.py) |
+| **RFC 1035 / 793 / 7230** | DNS, TCP state machines, and HTTP/1.1 wire protocol specifications. | **Dual-Engine Protocol Conformance**: Modular `--engine auto|kali|python` generator creates compliant DNS query datagrams and TCP multi-round sessions. | [`src/traffic_gen/attack_flow.py`](src/traffic_gen/attack_flow.py) & [`tools/test_attack_gen.py`](tools/test_attack_gen.py) |
+
+---
+
 ## MLOps & Security Features
 
 | Feature | Implementation |
 | :-------- | :--------------- |
 | **Experiment Config** | `configs/experiment.yaml` — all params in one YAML, logged as MLflow artifact |
+| **Modular Attack Engines** | `src/traffic_gen/attack_flow.py` — supports `--engine auto|kali|python` with automated tool discovery |
 | **Byzantine Robustness** | Aggregator strategy supports `FedMedian`, `TrimmedMean`, and `Krum` coordinate-wise and distance-based filtering |
 | **Differential Privacy** | Client-side DP-SGD via **Opacus** wrapping optimizer, tracking privacy budget metrics ($\epsilon, \delta$) |
 | **Adversarial Poisoning** | Simulated label-flipping attacks on configured clients via `--poison-enabled` and `--poison-rate` |
@@ -218,6 +270,18 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/check_features.py"
 scp tools/train_local.py root@10.10.130.11:~/
 ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/train_local.py --epochs 40"
 
+# Run multi-runtime latency and throughput benchmark (PyTorch vs TorchScript vs ONNX)
+python tools/benchmark_onnx.py
+
+# Run Byzantine robustness evaluation
+python tools/benchmark_byzantine.py
+
+# Run Differential Privacy sensitivity sweep
+python tools/benchmark_dp.py
+
+# Run attack generation engine verification suite
+python tools/test_attack_gen.py
+
 # Validate a saved model checkpoint
 scp tools/validate_model.py root@10.10.130.11:~/
 ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/validate_model.py --checkpoint /path/to/model.pt"
@@ -250,7 +314,7 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/benchmark_cross_dataset.py --ch
 
 | Document | Purpose |
 | :--- | :--- |
-| [Architecture Decision Records (ADRs)](docs/decisions/README.md) | Formal records of major technical decisions (ADR-001 to ADR-006) |
+| [Architecture Decision Records (ADRs)](docs/decisions/README.md) | Formal records of major technical decisions (ADR-001 to ADR-007) |
 | [IEEE Research Manuscript (Markdown)](docs/paper/manuscript.md) | Publication-ready paper with mathematical proofs & embedded figures |
 | [IEEE Research Manuscript (LaTeX)](docs/paper/manuscript.tex) | 2-column IEEE Transactions LaTeX package & BibTeX citations |
 | [01 Prerequisites](docs/01_prerequisites.md) | Hardware, datasets, traffic generation tools |
@@ -263,5 +327,7 @@ ssh root@10.10.130.11 "~/fl-cl-env/bin/python3 ~/benchmark_cross_dataset.py --ch
 | [08 API Reference](docs/08_reference.md) | Detailed technical reference for all Python classes, methods, and modules |
 | [09 Domain Model & Glossary](docs/09_glossary.md) | Technical glossary of FL, CL, ETA, and MLOps domain terminology |
 | [Tech Stack](TECH_STACK.md) | Full technology inventory per layer |
+| [Security Policy & Compliance](SECURITY.md) | Comprehensive cryptographic, statutory (UU PDP, GDPR), and IDPS standards |
 | [Production Training Report](data/reports/training_results_report.md) | Consolidated multi-track empirical results & benchmarks |
 | [Thesis Defense Dossier](docs/10_arguments.md) | Comprehensive attack-and-rebuttal analysis across 21 challenge categories with empirical anchors and code evidence |
+

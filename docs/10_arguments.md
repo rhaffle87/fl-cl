@@ -937,7 +937,17 @@ This section addresses rigorous, implementation-level attacks questioning algori
 2. **Guaranteed Dual Feasibility**: Because $G$ is positive semi-definite and the constraint is non-negativity ($\alpha \ge 0$), the dual optimization problem is strictly convex with a guaranteed global optimum. Avalanche's GEM solver utilizes projected gradient descent on the dual space, which converges to tolerance within $<15$ iterations ($<1.2\text{ ms}$ per mini-batch).
 3. **Fast-Path Bypass**: When candidate gradient $g$ naturally aligns with all memory gradients ($\langle g, g_k \rangle \ge 0$), the constraint is non-binding, and the QP solver is bypassed entirely ($\tilde{g} = g$), incurring zero projection overhead.
 
-> **Code Reference**: [`src/defender/cl_strategy.py:108-135`](../src/defender/cl_strategy.py#L108-L135) | [Chapter 3.2 Formulation](paper/manuscript.md)
+### 14.9 Attack: "Synthetic Attack Generation in `attack_flow.py` Overfits the Classifier to Toy Socket Artifacts"
+
+**Attack Argument**: Your attack generator uses Python sockets and PyPI packages rather than real-world adversary tooling. Real attackers use complex multi-threaded penetration testing frameworks with realistic TCP windowing and cipher negotiation, so your model will fail against real network attacks.
+
+**Defense**:
+
+1. **Modular Dual-Engine Architecture (`--engine auto|kali|python`)**: `src/traffic_gen/attack_flow.py` provides modular backends supporting industry-standard Kali Linux security binaries (`ncrack`, `medusa`, `hydra` for SSH brute-force; `slowhttptest`, `hping3` for DoS; `scapy` for high-entropy DNS exfiltration and C2 beaconing) alongside pure Python implementations.
+2. **Feature-Space Generalization**: NFStream extracts 32 statistical flow features (packet inter-arrival time distributions, directional byte ratios, durations, and TCP payload characteristics) rather than signature-matching raw packet payloads. Both Kali binary tools and Python socket loops produce the high-level temporal and volumetric cadence characteristic of real attacks.
+3. **Automated Discovery & Fallback**: The `--engine auto` mode dynamically leverages available system binaries on VM 400 (Kali Linux) while guaranteeing that local test suites and offline verification environments remain fully reproducible via pure Python dependencies.
+
+> **Code Reference**: [`src/traffic_gen/attack_flow.py`](../src/traffic_gen/attack_flow.py) | [ADR-007](decisions/ADR-007_attack_engine_alternatives.md) | [`infra/04_guest_setup/setup_traffic_gen.sh`](../infra/04_guest_setup/setup_traffic_gen.sh)
 
 ---
 
@@ -984,6 +994,7 @@ This section addresses rigorous, implementation-level attacks questioning algori
 | Code-Level | Class weight normalization | Mean weight invariant = 1.0 prevents loss blowout | 250x relative penalty preserved with stable lr |
 | Code-Level | TorchScript dynamic batching | Leading batch dimension treated symbolically (-1) | Verified across N=1, 16, 64, 500 in test_models.py |
 | Code-Level | GEM QP dual solver convergence | 4x4 Gram matrix strictly convex; solves in <1.2 ms | Fast-path bypass when gradients align non-negatively |
+| Code-Level | Threat Generator Engine Diversity | Modular `--engine auto|kali|python` avoids single-tool bias | Native Kali binaries + pure Python with 100% label parity |
 
 ---
 

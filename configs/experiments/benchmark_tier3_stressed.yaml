@@ -1,8 +1,15 @@
-experiment_name: "FL-CL-Benchmark-Stressed"
+# ==============================================================================
+# FL-CL Experiment: benchmark_tier3_stressed.yaml
+# Track: 4-Tier Benchmark Suite: Tier 3 (Stressed / High-Volume Workload)
+# Description: High-intensity stress evaluation (15 rounds, 90s stages, batch size 64) testing memory consumption, tmpfs RAMDisk throughput, and SGD momentum stability under continuous flow injection.
+# Expected Run Duration: ~14 minutes (15 FL rounds)
+# Attack Engine Mode: auto (auto-discovers Kali tools with Python fallback)
+# ==============================================================================
 
+experiment_name: FL-CL-Benchmark-Stressed
 experiment:
-  name: "FL-CL-Benchmark-Stressed"
-  description: "Category 3: Heavy / Stressed Testbed Tier"
+  name: FL-CL-Benchmark-Stressed
+  description: 'Category 3: Heavy / Stressed Testbed Tier'
 fl:
   rounds: 15
   min_clients: 2
@@ -69,6 +76,7 @@ simulation:
   - mode: slowloris
   - mode: dns_exfil
   - mode: botnet
+  attack_engine: auto
 topology:
   aggregator: 10.10.130.10
   defender_a: 10.10.130.11
@@ -87,7 +95,7 @@ checkpointing:
   export_torchscript: true
 mlops:
   mode: experimental
-  production_strategy: "fresh"
+  production_strategy: fresh
   registered_model_name: CyberDefenseNet
 labeling:
   dos_duration_threshold_ms: 2000

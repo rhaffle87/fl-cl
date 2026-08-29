@@ -136,6 +136,7 @@ class CyberDefenseTransformer(nn.Module):
 
         # Project each token_dim token to d_model space
         self.input_projection = nn.Linear(self.token_dim, self.d_model)
+        self.input_norm = nn.LayerNorm(self.d_model)
         self.pos_encoder = nn.Parameter(torch.randn(1, self.token_len, self.d_model))
 
         encoder_layer = nn.TransformerEncoderLayer(
@@ -144,6 +145,7 @@ class CyberDefenseTransformer(nn.Module):
             dim_feedforward=dim_feedforward,
             dropout=dropout,
             batch_first=True,
+            norm_first=True,
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.fc = nn.Sequential(
@@ -158,8 +160,8 @@ class CyberDefenseTransformer(nn.Module):
         batch_size = x.size(0)
         # Reshape to (batch, token_len, token_dim)
         x = x.view(batch_size, self.token_len, self.token_dim)
-        # Project to d_model
-        x = self.input_projection(x)  # (batch, token_len, d_model)
+        # Project to d_model and normalize
+        x = self.input_norm(self.input_projection(x))  # (batch, token_len, d_model)
         # Add positional encoding
         x = x + self.pos_encoder
         # Run transformer

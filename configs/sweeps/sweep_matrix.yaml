@@ -1,11 +1,11 @@
 # ─────────────────────────────────────────────────────────────
-# FL-CL Balanced Multi-Parameter Matrix Sweep (48 Combinations)
+# FL-CL Balanced Multi-Parameter Matrix Sweep (Architectural Subsystems)
 # ─────────────────────────────────────────────────────────────
 # Tests all 6 core subsystems with representative values per domain:
 # - Backbones: MLP vs 1D-CNN vs Transformer
-# - Continual Learning: EWC vs GEM vs Naive
+# - Continual Learning: EWC vs GEM vs AGEM
 # - Aggregation: FedAvg vs TrimmedMean vs FedMedian vs Krum
-# - Differential Privacy & Poisoning Defense
+# - Differential Privacy & Attack Engine Modularity
 # ─────────────────────────────────────────────────────────────
 
 experiment:
@@ -14,15 +14,17 @@ experiment:
 
 sweep:
   parameters:
-    model.type: ["mlp", "cnn", "transformer"]
-    cl.strategy: ["EWC", "GEM"]
+    simulation.duration: [10]
+    simulation.attack_engine: ["auto"]
+    fl.rounds: [2]
+    model.type: ["cnn", "mlp", "transformer"]
+    cl.strategy: ["EWC", "GEM", "AGEM"]
     cl.ewc_lambda: [0.8]
     cl.gem_patterns_per_exp: [128]
     cl.gem_memory_strength: [0.3]
-    security.aggregation_strategy: ["FedAvg", "TrimmedMean", "FedMedian", "Krum"]
+    security.aggregation_strategy: ["TrimmedMean", "FedMedian", "FedAvg", "Krum"]
     security.dp_enabled: [false, true]
+    security.dp_noise_multiplier: [0.30]
     security.poison_enabled: [false]
     training.lr: [0.003]
     training.batch_size: [32]
-    fl.rounds: [2]
-    simulation.duration: [10]

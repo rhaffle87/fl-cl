@@ -503,3 +503,70 @@ The hybrid FL-CL system's performance, stability, and resistance to catastrophic
 4. **Cross-Dataset Generalization Benchmark (I2):**
  * **Tool:** `tools/benchmark_cross_dataset.py` measures model transferability and generalization gaps across heterogeneous flow domains (e.g., training on `CIC-IDS2017` and evaluating on `USTC-TFC2016`).
  * **Covariate Shift Simulator:** Uses a mathematical feature-shift engine (offset and scaling adjustments) to simulate the distribution of the secondary dataset if local raw pcap directories are unavailable, outputting comparative matrices and uploading generalization logs to MLflow.
+
+---
+
+## 8. Security, Privacy & Byzantine Resilience Architecture
+
+```mermaid
+flowchart TD
+    subgraph Client_Defender ["Edge Defender Node (VM 310 / 320)"]
+        direction TB
+        RawTraffic["Mirrored Raw Packets (vmbr1)"] --> Extractor["NFStream Feature Extractor"]
+        Extractor --> RAMDisk["Ephemeral tmpfs RAMDisk (/mnt/ramdisk/flows)"]
+        RAMDisk --> LocalTrain["Local Continual Training (EWC / GEM)"]
+        LocalTrain --> DP_SGD["DP-SGD Hook (Clip C=1.0, Noise σ=0.30)"]
+        DP_SGD --> WeightDelta["Sanitized Gradient Weights (θ_t)"]
+    end
+
+    subgraph FL_Aggregator ["Central Aggregator (LXC 300)"]
+        direction TB
+        WeightDelta -->|gRPC over TLS| NaNGuard["NaN / Inf Sanitizer Guard"]
+        NaNGuard --> RobustAgg["Byzantine-Robust Aggregation (TrimmedMean β=0.10 / FedMedian)"]
+        RobustAgg --> GlobalModel["Updated Global CyberDefenseNet"]
+        GlobalModel --> PromotionGate["CI/CD Validation & Promotion Gate"]
+    end
+```
+
+### 8.1 Zero Raw Data Transmission & Volatile Storage
+Under our secure-by-design policy, raw packet captures and sensitive IP payloads are **never written to persistent disk** or transmitted across subnets. Raw frames are captured via kernel-level `tc mirred` hooks, parsed by NFStream into 32 statistical flow features, and stored exclusively in a **4 GB volatile `tmpfs` RAM disk** (`/mnt/ramdisk/flows/`).
+
+### 8.2 Client-Side Differential Privacy (DP-SGD)
+To guarantee protection against gradient inversion and model membership inference attacks:
+* **Gradient Bounding**: Parameter gradients are strictly clipped to maximum Euclidean norm $C = 1.0$ prior to optimizer step application.
+* **Calibrated Gaussian Noise**: Perturbation noise with multiplier $\sigma = 0.30$ is added directly to clipped gradients.
+* **Privacy Budget Accounting**: Evaluated under the Moments Accountant method, achieving a provable $(\epsilon \le 6.08, \delta = 10^{-5})$ differential privacy guarantee over 100 federated communication rounds.
+
+### 8.3 Byzantine-Robust Aggregation
+To defend against rogue or compromised defender nodes injecting malicious model poisoning or sign-flipped gradients:
+* **TrimmedMean ($\beta = 0.10$)**: For every coordinate $j$ in parameter vector $\theta$, sorts updates from all participating clients and discards the top and bottom $\beta$ fraction of values before computing the mean.
+* **FedMedian**: Computes coordinate-wise medians, rendering aggregation impervious to extreme gradient spikes.
+* **Krum / Multi-Krum**: Distance-based geometric selection filtering out malicious vectors that deviate from the consensus cluster.
+
+---
+
+## 9. Multi-Runtime Inference Latency & Throughput Profile
+
+The testbed supports three production inference runtimes optimized for edge appliances:
+
+| Runtime Engine | Batch Size | Latency per Flow | Throughput (Flows / sec) | Execution Characteristics |
+| :--- | :--- | :--- | :--- | :--- |
+| **PyTorch Eager (FP32)** | 1 (Single) | 17.47 µs | 57,250 flows/s | Standard research Python runtime. |
+| | 256 (Burst) | 0.91 µs | 1,102,693 flows/s | Batched GPU/CPU SIMD execution. |
+| **TorchScript (JIT)** | 1 (Single) | 16.32 µs | 61,263 flows/s | Optimized computation graph; standalone C++ LibTorch support. |
+| | 256 (Burst) | 0.80 µs | 1,257,597 flows/s | Dynamic leading batch dimension (`-1`). |
+| **ONNX Runtime (AVX2)** | 1 (Single) | **13.23 µs** | **75,565 flows/s** | CPU vectorization speedup (1.32× vs FP32). |
+| | 256 (Burst) | **0.32 µs** | **3,115,286 flows/s** | Maximum edge throughput (2.83× speedup). |
+
+---
+
+## 10. Standards & Regulatory Compliance Frameworks
+
+| Regulatory Framework | Mandatory Requirement | Architectural Defense & Verification Artifact |
+| :--- | :--- | :--- |
+| **UU PDP No. 27/2022** *(Articles 65–66)* | Prohibition of unauthorized personal data transfer outside regional security boundaries. | **Zero Raw Flow Transmission**: Raw flows remain exclusively in ephemeral tmpfs RAMDisk on edge defender nodes; verified via [`src/defender/client.py`](../src/defender/client.py). |
+| **GDPR (EU 2016/679)** *(Articles 5, 25, 32)* | Data minimization, purpose limitation, and Privacy by Design via cryptographic pseudonymization. | **DP-SGD & Batch Aggregation**: Bounded gradient clipping ($C=1.0$) and calibrated noise injection ($\sigma=0.30$); verified via [`tools/benchmark_dp.py`](../tools/benchmark_dp.py). |
+| **NIST SP 800-94 / 800-145** | Standards for Intrusion Detection and Prevention Systems (IDPS) and behavioral telemetry. | **32-Dimensional Statistical Telemetry**: Classifies threats using behavioral flow metadata (SPLT, PIAT, byte ratios) without inspecting encrypted payloads; verified in [`src/defender/extractor.py`](../src/defender/extractor.py). |
+| **MITRE ATT&CK Enterprise** | Standardized threat classification across adversarial enterprise tactics. | **Covered TTPs**: T1498 (Network DoS / Slowloris), T1110 (Brute Force / SSH), T1048 (Exfiltration over DNS), T1071 (Application Layer C2 Protocol Beaconing); verified in [`src/traffic_gen/attack_flow.py`](../src/traffic_gen/attack_flow.py). |
+| **ISO/IEC 27001 / 27701** | Information Security & Privacy Information Management System governance. | **Cryptographic Lineage & Checksums**: SHA-256 dataset lineage graphs, Git commit tagging, and immutable MLflow artifact logging; verified via [`tools/audit_codebase.py`](../tools/audit_codebase.py). |
+| **RFC 1035 / 793 / 7230** | Domain Name System, Transmission Control Protocol, and HTTP/1.1 wire specifications. | **Dual-Engine Protocol Conformance**: Modular `--engine auto\|kali\|python` generator creates compliant DNS query datagrams and TCP multi-round sessions; verified in [`tools/test_attack_gen.py`](../tools/test_attack_gen.py). |

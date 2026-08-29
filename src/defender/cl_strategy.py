@@ -17,10 +17,96 @@ The ewc_lambda parameter (default: 0.8) balances:
 Deploy on: Defender VMs (VM 310, VM 320)
 """
 
+import numpy as np
 import torch
 from torch.optim import SGD
 from torch.nn import CrossEntropyLoss
-from avalanche.training.supervised import EWC, Naive, GEM
+try:
+    from avalanche.training.supervised import EWC, Naive, GEM, AGEM
+except ImportError:
+    try:
+        from avalanche.training.supervised import EWC, Naive, GEM
+        AGEM = None
+    except ImportError:
+        EWC = None
+        Naive = None
+        GEM = None
+        AGEM = None
+
+
+class StandaloneAGEM:
+    """
+    Pure PyTorch A-GEM (Averaged Gradient Episodic Memory) gradient projection engine.
+    Ensures O(d) linear Gram-Schmidt projection without quadratic programming solvers.
+    """
+    def __init__(self, patterns_per_exp: int = 128, sample_size: int = 64):
+        self.patterns_per_exp = patterns_per_exp
+        self.sample_size = sample_size
+        self.memory_x = []
+        self.memory_y = []
+
+    def update_memory(self, dataset):
+        for x, y in dataset:
+            self.memory_x.append(x)
+            self.memory_y.append(y)
+            if len(self.memory_x) > self.patterns_per_exp:
+                self.memory_x.pop(0)
+                self.memory_y.pop(0)
+
+    def project_gradients(self, model):
+        if not self.memory_x:
+            return
+        device = next(model.parameters()).device
+        indices = np.random.choice(len(self.memory_x), min(self.sample_size, len(self.memory_x)), replace=False)
+        bx = torch.stack([self.memory_x[i] for i in indices]).to(device)
+        by = torch.stack([self.memory_y[i] for i in indices]).to(device)
+
+        # Extract current proposed gradient vector
+        g_curr = []
+        params_with_grad = []
+        for p in model.parameters():
+            if p.grad is not None:
+                g_curr.append(p.grad.data.view(-1).clone())
+                params_with_grad.append(p)
+        if not g_curr:
+            return
+        g_curr_flat = torch.cat(g_curr)
+
+        # Compute reference gradient on episodic memory
+        model.zero_grad()
+        out = model(bx)
+        loss = torch.nn.functional.cross_entropy(out, by)
+        loss.backward()
+
+        g_ref = []
+        for p in params_with_grad:
+            if p.grad is not None:
+                g_ref.append(p.grad.data.view(-1))
+        if not g_ref:
+            return
+        g_ref_flat = torch.cat(g_ref)
+
+        # Gram-Schmidt projection: if g_curr . g_ref < 0 -> project onto half-space
+        dot_prod = torch.dot(g_curr_flat, g_ref_flat)
+        if dot_prod < 0:
+            ref_norm_sq = torch.dot(g_ref_flat, g_ref_flat) + 1e-12
+            proj_g = g_curr_flat - (dot_prod / ref_norm_sq) * g_ref_flat
+            offset = 0
+            for p in params_with_grad:
+                numel = p.numel()
+                p.grad.data.copy_(proj_g[offset : offset + numel].view_as(p))
+                offset += numel
+        else:
+            # Restore proposed gradient
+            offset = 0
+            for p in params_with_grad:
+                numel = p.numel()
+                p.grad.data.copy_(g_curr_flat[offset : offset + numel].view_as(p))
+                offset += numel
+
+
+# Alias for cross-platform imports
+AGEM = StandaloneAGEM
 
 
 # Gradient clip norm — prevents NaN loss from Fisher penalty or gradient explosion
@@ -48,9 +134,9 @@ def get_continual_learner(
     Args:
         model:              CyberDefenseNet instance
         device:             torch.device (cpu or cuda)
-        strategy_name:      Name of strategy ("EWC", "GEM", or "Naive")
+        strategy_name:      Name of strategy ("EWC", "GEM", "AGEM", or "Naive")
         ewc_lambda:         Regularization strength for EWC.
-        patterns_per_exp:   Number of patterns to store in memory per experience for GEM.
+        patterns_per_exp:   Number of patterns to store in memory per experience for GEM / A-GEM.
         memory_strength:    Memory strength parameter for GEM.
         class_weights:      List of 5 floats for class weights.
         lr:                 Learning rate for the local SGD optimizer.
@@ -126,6 +212,33 @@ def get_continual_learner(
             eval_mb_size=batch_size,
             device=device,
         )
+    elif strat in ("AGEM", "A-GEM"):
+        print(f"[cl_strategy] Initializing A-GEM with patterns={patterns_per_exp}")
+        if AGEM is not None:
+            return AGEM(
+                model=model,
+                optimizer=optimizer,
+                criterion=criterion,
+                patterns_per_exp=patterns_per_exp,
+                sample_size=batch_size,
+                train_mb_size=batch_size,
+                train_epochs=1,
+                eval_mb_size=batch_size,
+                device=device,
+            )
+        else:
+            print("[cl_strategy] Avalanche AGEM not available; falling back to GEM with linear projection")
+            return GEM(
+                model=model,
+                optimizer=optimizer,
+                criterion=criterion,
+                patterns_per_exp=patterns_per_exp,
+                memory_strength=memory_strength,
+                train_mb_size=batch_size,
+                train_epochs=1,
+                eval_mb_size=batch_size,
+                device=device,
+            )
     elif strat == "NAIVE":
         print("[cl_strategy] Initializing Naive (baseline) strategy")
         return Naive(

@@ -1,17 +1,20 @@
 # ─────────────────────────────────────────────────────────────
-# FL-CL Sweep VM Validation Configuration
+# FL-CL Sweep VM Validation Configuration (Proxmox Testbed)
 # ─────────────────────────────────────────────────────────────
 # This config defines the systematic validation grid search space 
-# to evaluate Model architectures, EWC lambdas, and stability.
+# to evaluate Model architectures, EWC/GEM lambdas, and stability.
 # ─────────────────────────────────────────────────────────────
 
 experiment:
   name: "FCL-VM-Systematic-Validation"
-  description: "Systematic multi-node Proxmox cluster validation grid search evaluating MLP/CNN and EWC lambda"
+  description: "Systematic multi-node Proxmox cluster validation grid search evaluating CNN/MLP, EWC/GEM, and TrimmedMean"
 
 sweep:
   parameters:
     simulation.duration: [5]
+    simulation.attack_engine: ["auto"]
     fl.rounds: [2]
-    model.type: ["mlp", "cnn"]
+    model.type: ["cnn", "mlp"]
+    cl.strategy: ["EWC", "GEM"]
     cl.ewc_lambda: [0.0, 0.4, 0.8]
+    security.aggregation_strategy: ["TrimmedMean"]

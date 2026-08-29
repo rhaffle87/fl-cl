@@ -1,76 +1,75 @@
-# ── FL-CL Experiment: benchmark_dropout.yaml ─────────────────────────────
-# 50% Random Defender Node Disconnection / Client Dropout Stress Scenario
-# Tests system resilience against node dropouts and network partitions.
-# ──────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# FL-CL Experiment: benchmark_dropout.yaml
+# Track: Theme D: Operational Robustness (Client Node Dropout & Network Partition)
+# Description: Simulates 50% stochastic client dropout per round (sample_fraction_fit: 0.5) to evaluate the system resilience under intermittent connectivity, packet loss, and node failure scenarios.
+# Expected Run Duration: ~10 minutes (10 FL rounds)
+# Attack Engine Mode: auto (auto-discovers Kali tools with Python fallback)
+# ==============================================================================
 
-experiment_name: "FL-CL-Benchmark-NodeDropout"
-
+experiment_name: FL-CL-Benchmark-NodeDropout
 experiment:
-  name: "FL-CL-Benchmark-NodeDropout"
-  description: "50% Random Defender Node Disconnection / Client Dropout Stress Scenario"
-
-# ── Environment & Infrastructure ────────────────────────────
+  name: FL-CL-Benchmark-NodeDropout
+  description: 50% Random Defender Node Disconnection / Client Dropout Stress Scenario
 topology:
-  aggregator: "10.10.130.10"
+  aggregator: 10.10.130.10
   defender_nodes:
-    - "10.10.130.11"
-    - "10.10.130.12"
+  - 10.10.130.11
+  - 10.10.130.12
   target_nodes:
-    - "10.10.110.15"
-    - "10.10.120.15"
-  traffic_gen: "10.10.140.10"
-
-# ── Simulation & Workload ───────────────────────────────────
+  - 10.10.110.15
+  - 10.10.120.15
+  traffic_gen: 10.10.140.10
 simulation:
   duration_seconds: 60
   threat_stage_duration: 60
-  attack_modes: ["benign", "ssh", "slowloris", "dns_exfil", "botnet"]
-
-# ── Federated & Continual Learning ──────────────────────────
+  attack_modes:
+  - benign
+  - ssh
+  - slowloris
+  - dns_exfil
+  - botnet
+  attack_engine: auto
 fl_cl:
   rounds: 10
-  min_fit_clients: 1        # Allow FL rounds to proceed even if 50% of clients drop out
+  min_fit_clients: 1
   min_evaluate_clients: 1
   min_available_clients: 1
-  sample_fraction_fit: 0.5   # 50% client selection per round
-  cl_strategy: "EWC"
+  sample_fraction_fit: 0.5
+  cl_strategy: EWC
   ewc_lambda: 2.0
   gem_patterns: 256
   gem_memory_strength: 0.5
-
-# ── Model Architecture ──────────────────────────────────────
 model:
-  type: "cnn"
+  type: cnn
   prune_fraction: 0.2
   input_dim: 32
   num_classes: 5
-  hidden_layers: [64, 32]
+  hidden_layers:
+  - 64
+  - 32
   dropout: 0.2
-
-# ── Training Hyperparameters ────────────────────────────────
 training:
-  optimizer: "SGD"
+  optimizer: SGD
   lr: 0.005
   momentum: 0.9
   batch_size: 32
   epochs_per_round: 1
-  class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
-
-# ── Security, Privacy & Defense ─────────────────────────────
+  class_weights:
+  - 1.0
+  - 15.0
+  - 2.0
+  - 4.0
+  - 15.0
 security:
-  aggregation_strategy: "TrimmedMean"
+  aggregation_strategy: TrimmedMean
   trimmed_mean_beta: 0.1
   dp_enabled: false
-
-# ── MLOps & Tracking ────────────────────────────────────────
 mlops:
-  mode: "experimental"
-  production_strategy: "fresh"
+  mode: experimental
+  production_strategy: fresh
   mlflow_port: 5000
-
 notifications:
   telegram:
     enabled: true
-
 checkpointing:
-  save_dir: "/opt/mlflow-artifacts/checkpoints"
+  save_dir: /opt/mlflow-artifacts/checkpoints

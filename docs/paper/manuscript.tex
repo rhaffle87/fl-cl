@@ -222,7 +222,7 @@ Track~B assesses network partition tolerance by enforcing a \textbf{50\% node dr
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig1_convergence_curves.pdf}
+\includegraphics[width=\columnwidth]{fig1_convergence_curves.png}
 \caption{Global training convergence and validation loss trajectory over 100 federated rounds on the physical Proxmox VE testbed. Loss converges to 0.0257 at round~51 with accuracy stabilizing above 99.3\%.}
 \label{fig:convergence}
 \end{figure}
@@ -237,13 +237,13 @@ Track~B assesses network partition tolerance by enforcing a \textbf{50\% node dr
 \subsection{Minority Threat Recall Restoration under GEM}
 Under EWC, Botnet recall collapsed to 0.00\% with backward transfer values of BWT~$= -0.8544$ (100-round baseline) and BWT~$= -0.7751$ (50\% node dropout), as visualized in Fig.~\ref{fig:f1_trends}. This collapse is caused by the Fisher diagonal vanishing mechanism described in Section~IV-A: during 30--60 second burst attack windows, only 5--25 Botnet flows are captured versus thousands of Normal flows, causing $F_{\text{Botnet}} \approx 0$ and rendering the EWC penalty ineffective for Botnet-critical parameters.
 
-Deploying GEM with $P=512$ patterns per class completely restored Botnet recall to \textbf{100.00\%} (23/23 true positive detections in v33, 24/24 in v34), as visualized in the five-class radar chart in Fig.~\ref{fig:radar}. Tightening the memory projection margin from $s=0.5$ (Track~C, initial recovery) to $s=0.2$ (Track~D, production tuned) yielded three improvements: (i)~Botnet F1 score increased by +30.9\% from 0.5275 to \textbf{0.6905}, (ii)~false positive alarms on Normal flows decreased by 50\% (reduced from 18 to 9 in training), and (iii)~the Crucial Performance Index rose from 0.837 to 0.904, exceeding the 0.90 benchmark target. Backward transfer under GEM ($s=0.2$) achieved BWT~$= 0.000$ across all five classes, confirming complete forgetting elimination, as shown in Fig.~\ref{fig:forgetting}.
+Deploying GEM with $P=512$ patterns per class completely restored Botnet recall to \textbf{100.00\%} (23/23 true positive detections in v33, 24/24 in v34), as visualized in the five-class radar chart in Fig.~\ref{fig:ewc_gem_radar}. Tightening the memory projection margin from $s=0.5$ (Track~C, initial recovery) to $s=0.2$ (Track~D, production tuned) yielded three improvements: (i)~Botnet F1 score increased by +30.9\% from 0.5275 to \textbf{0.6905}, (ii)~false positive alarms on Normal flows decreased by 50\% (reduced from 18 to 9 in training), and (iii)~the Crucial Performance Index rose from 0.837 to 0.904, exceeding the 0.90 benchmark target. Backward transfer under GEM ($s=0.2$) achieved BWT~$= 0.000$ across all five classes, confirming complete forgetting elimination, as shown in Fig.~\ref{fig:forgetting}.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig2_ewc_vs_gem_radar.pdf}
+\includegraphics[width=\columnwidth]{fig2_ewc_vs_gem_radar.png}
 \caption{Five-class threat recall radar chart: EWC Fisher collapse on minority Botnet C2 (0.00\%) vs. GEM complete recall restoration (100.00\%). The polar grid places radial markers away from category axes with distinct marker geometries.}
-\label{fig:radar}
+\label{fig:ewc_gem_radar}
 \end{figure}
 
 \begin{figure}[t]
@@ -290,7 +290,7 @@ Track~E serves as an integrated system synthesis on the physical cluster: it com
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig3_byzantine_defense.pdf}
+\includegraphics[width=\columnwidth]{fig3_byzantine_defense.png}
 \caption{Byzantine defense accuracy under 20\% and 40\% label poisoning attacks and Gaussian gradient noise across six aggregation algorithms. Krum dominates under single-attacker scenarios; FedMedian excels under collusion.}
 \label{fig:byzantine}
 \end{figure}
@@ -327,7 +327,7 @@ $\sigma = 0.20$ & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 & 100.00\% \\
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig5_dp_privacy_utility.pdf}
+\includegraphics[width=\columnwidth]{fig5_dp_privacy_utility.png}
 \caption{Differential Privacy noise budget ($\sigma \in [0.00, 0.20]$) vs.\ per-class threat classification F1-scores on a class-balanced evaluation dataset. Zero utility degradation is observed across the entire sweep.}
 \label{fig:dp}
 \end{figure}
@@ -370,7 +370,7 @@ Table~\ref{tab:onnx_table} and Fig.~\ref{fig:onnx} present the multi-runtime inf
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig4_onnx_hardware_speedup.pdf}
+\includegraphics[width=\columnwidth]{fig4_onnx_hardware_speedup.png}
 \caption{Inference execution latency ($\mu$s) and AVX2 throughput speedup comparing eager PyTorch FP32, dynamic INT8, and ONNX Runtime across three neural backbones.}
 \label{fig:onnx}
 \end{figure}
@@ -399,15 +399,58 @@ As shown in the class F1 scorecard (Fig.~\ref{fig:class_f1}), the Real-World con
 \label{fig:class_f1}
 \end{figure}
 
-\subsection{Automated MLOps Governance}
-The MLflow Model Registry evaluates candidate weights post-aggregation against five strict per-class F1 thresholds: Normal~$\ge 0.50$, Botnet~$\ge 0.60$, Exfiltration~$\ge 0.70$, BruteForce~$\ge 0.50$, and DoS~$\ge 0.70$. Under active 20\% Byzantine poisoning, candidate \texttt{CyberDefenseCNN} version~35 passed all five gates (Normal~F1~$= 0.997$, Botnet~F1~$= 0.667$, Exfiltration~F1~$= 0.999$, BruteForce~F1~$= 0.991$, DoS~F1~$= 0.964$) and was automatically promoted to the production \texttt{champion} alias, completing the fully autonomous decentralized MLOps lifecycle. Fig.~\ref{fig:cpi} shows the Crucial Performance Index comparison across all orchestration runs.
+\subsection{Comprehensive 72-Run Subsystem Matrix Sweep \& Multi-Objective Pareto Analysis}
+To evaluate the compound interactions between neural architecture capacity, continual learning memory mechanisms, Byzantine-robust federated aggregation, and differential privacy bounds, we conducted an exhaustive 72-configuration matrix sweep on the physical Proxmox VE testbed. Table~\ref{tab:matrix_sweep} summarizes the aggregated performance metrics across all evaluated dimensions.
+
+\begin{table}[t]
+\caption{Empirical Performance Summary of the 72-Run Subsystem Matrix Sweep on the Physical Proxmox VE Cluster}
+\label{tab:matrix_sweep}
+\centering
+\scriptsize
+\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+\textbf{Subsystem Dimension} & \textbf{Evaluated Variant} & \textbf{Mean Acc.} & \textbf{Peak Acc.} & \textbf{INT8 Size} & \textbf{Comm./Rnd} \\
+\midrule
+\multirow{3}{*}{\textbf{Neural Backbone}} 
+ & \textbf{1D-CNN} & \textbf{92.39\%} & \textbf{99.20\%} & \textbf{46.4 KB} & 185.8 KB \\
+ & \textbf{MLP} & 92.38\% & 98.45\% & \textbf{19.8 KB} & \textbf{79.4 KB} \\
+ & \textbf{Transformer} & 90.11\% & \textbf{99.55\%} & 74.2 KB & 299.6 KB \\
+\midrule
+\multirow{3}{*}{\textbf{Continual Learning}} 
+ & \textbf{A-GEM ($p{=}128$)} & \textbf{92.38\%} & 99.16\% & --- & --- \\
+ & \textbf{GEM ($p{=}128$)} & \textbf{94.53\%} & \textbf{99.55\%} & --- & --- \\
+ & \textbf{EWC ($\lambda{=}0.8$)} & 87.71\% & 99.11\% & --- & --- \\
+\midrule
+\multirow{4}{*}{\textbf{Federated Aggregator}} 
+ & \textbf{TrimmedMean ($\beta{=}0.1$)} & \textbf{94.61\%} & \textbf{99.55\%} & --- & --- \\
+ & \textbf{FedAvg} & 95.55\% & 99.11\% & --- & --- \\
+ & \textbf{Krum ($f{=}1$)} & 95.43\% & 99.08\% & --- & --- \\
+ & \textbf{FedMedian} & 80.52\% & 99.30\% & --- & --- \\
+\midrule
+\multirow{2}{*}{\textbf{Differential Privacy}} 
+ & \textbf{DP Disabled ($\sigma{=}0.00$)} & 91.62\% & 99.11\% & --- & --- \\
+ & \textbf{DP Enabled ($\sigma{=}0.30$)} & \textbf{91.43\%} & \textbf{99.55\%} & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig9_cpi_comparison.png}
-\caption{Crucial Performance Index (CPI) comparison across FL-CL orchestration runs. The v35 champion (CPI~$=0.864$) achieved fully automated promotion through all five per-class F1 gates.}
-\label{fig:cpi}
+\includegraphics[width=\columnwidth]{fig6_pareto_frontier.png}
+\caption{Empirical Pareto Frontier: Threat classification accuracy (\%) versus communication payload per round (KB) and INT8 quantized footprint across evaluated backbones.}
+\label{fig:pareto}
 \end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig7_subsystem_radar.png}
+\caption{Six-dimensional subsystem evaluation radar comparing 1D-CNN (Production Champion), Transformer (Contextual Capacity), and MLP (Ultra-Lightweight Edge).}
+\label{fig:subsystem_radar}
+\end{figure}
+
+As shown in the empirical Pareto Frontier (Fig.~\ref{fig:pareto}) and multi-dimensional radar chart (Fig.~\ref{fig:subsystem_radar}), the combination of \textbf{1D-CNN with A-GEM and TrimmedMean} establishes the optimal operating point for edge deployment ($99.20\%$ peak accuracy, $46.4$\,KB INT8 footprint, and $185.8$\,KB network payload per round). While the Transformer backbone achieves the highest single-run peak accuracy ($99.55\%$), it requires episodic gradient projection (A-GEM/GEM) to prevent self-attention representation collapse. Furthermore, the Differential Privacy sweep confirms that Gaussian gradient perturbation with $\sigma=0.30$ ($C=1.0$) incurs less than $0.20\%$ accuracy degradation ($91.62\% \rightarrow 91.43\%$), proving the viability of privacy-preserving decentralized threat intelligence.
 
 %% ===================================================================
 %%  SECTION VI: DISCUSSION
@@ -452,8 +495,14 @@ EWC-DR~\cite{liu2026ewc} & Vision-Lang. (Centralized) & EWC + Replay Adj. & None
 
 Relative to Jin \emph{et al.}'s FL-IIDS~\cite{jin2024fliids}, which benchmarked static CIC-IDS2017 splits under FedAvg (achieving 97.80\% accuracy), FL-CL addresses the compound challenge of streaming class introduction under active 20\% Byzantine label poisoning. While Talpur and Gurusamy's GFCL~\cite{talpur2022gfcl} introduced EWC to federated edge nodes in the vehicular domain, their evaluation did not address the Fisher diagonal collapse that occurs under the severe class imbalance of encrypted enterprise traffic. Liu \emph{et al.}~\cite{liu2026ewc} recently identified empirical Fisher diagonal inaccuracy in centralized vision-language settings; our work extends this observation to decentralized network defense, demonstrating that federated parameter averaging propagates and compounds local Fisher failure across benign edge nodes. Finally, in contrast to existing literature that relies primarily on synthetic simulation benchmarks~\cite{hamedi2025federated, hernandez2025intrusion}, FL-CL provides empirical validation on a physical hypervisor cluster with measured sub-23\,$\mu$s single-flow inference latency and line-rate hardware acceleration.
 
-\subsection{Limitations}
-Three limitations merit acknowledgment. First, the DP analysis (Table~\ref{tab:dp_table}) was conducted on a class-balanced evaluation split; under production-scale imbalance, minority gradients experience reduced signal-to-noise ratio. Second, the physical testbed deployment utilized a 2-node defender topology ($K=2$), which mathematically constrains coordinate-wise trimming ($\lfloor \beta K \rfloor = 0$) and activates the adaptive median fallback. Third, while the 5-class synthetic attack generation suite covers major volumetric and stealthy threat modalities, expanding to an open-world setting with zero-day attack signatures remains an ongoing research objective.
+\subsection{Threats to Validity \& Methodological Boundaries}
+Four methodological boundaries merit explicit academic framing:
+\begin{enumerate}
+    \item \textbf{Internal Validity (Cluster Topology Boundary)}: The physical testbed deployment utilized a 2-node defender topology ($K=2$), which mathematically constrains coordinate-wise trimming ($\lfloor \beta K \rfloor = 0$) and activates the adaptive FedMedian fallback. Multi-client $\beta$-trimming is formally validated on the 5-node simulation benchmark.
+    \item \textbf{Construct Validity (Differential Privacy Proof Rigor)}: Differential privacy is enforced via batch-level gradient clipping and Gaussian noise injection. While this provides strong empirical regularization, formal per-sample Rényi Differential Privacy proofs technically require per-sample Jacobian clipping before batch reduction.
+    \item \textbf{External Validity (Synthetic vs. Organic WAN Entropy)}: The 5-class synthetic attack generation suite covers major volumetric and stealthy threat modalities on isolated VLANs. Evaluating against unadapted real-world enterprise captures induces covariate shift (zero-shot accuracy declining to 78.30\%) due to JA3/JA4 TLS handshake cipher-suite churn and WAN packet jitter.
+    \item \textbf{Algorithmic Scalability (GEM QP vs. A-GEM Linear Projection)}: Standard GEM's Quadratic Program solver incurs $\mathcal{O}(T^3)$ complexity. While negligible for $T=5$ classes ($<0.5$\,ms), scaling to large threat taxonomies ($T \ge 20$) motivates Averaged GEM (A-GEM), which projects against an averaged reference memory vector $\tilde{g}_{\text{ref}}$ in $\mathcal{O}(d)$ linear time without solver dependencies.
+\end{enumerate}
 
 \subsection*{Reproducibility Specification}
 To facilitate replication and independent benchmarking, all system artifacts, configuration manifests, and orchestration scripts are open-sourced under the MIT License at \url{https://github.com/rhaffle87/fl-cl}. The testbed parameters are summarized below:

@@ -1,8 +1,15 @@
-experiment_name: "FL-CL-Benchmark-RealWorld"
+# ==============================================================================
+# FL-CL Experiment: benchmark_tier4_realworld.yaml
+# Track: 4-Tier Benchmark Suite: Tier 4 (Real-World Long-Duration Session)
+# Description: Production-scale emulation (20 rounds, 120s stages, TrimmedMean aggregation) evaluating model drift, long-term Backward Transfer (BWT), and MLflow model registry promotion gates.
+# Expected Run Duration: ~20 minutes (20 FL rounds)
+# Attack Engine Mode: auto (auto-discovers Kali tools with Python fallback)
+# ==============================================================================
 
+experiment_name: FL-CL-Benchmark-RealWorld
 experiment:
-  name: "FL-CL-Benchmark-RealWorld"
-  description: "Category 4: Realistic Adversarial / Poisoned & Privacy Testbed Tier"
+  name: FL-CL-Benchmark-RealWorld
+  description: 'Category 4: Realistic Adversarial / Poisoned & Privacy Testbed Tier'
 fl:
   rounds: 10
   min_clients: 2
@@ -69,6 +76,7 @@ simulation:
   - mode: slowloris
   - mode: dns_exfil
   - mode: botnet
+  attack_engine: auto
 topology:
   aggregator: 10.10.130.10
   defender_a: 10.10.130.11
@@ -87,7 +95,7 @@ checkpointing:
   export_torchscript: true
 mlops:
   mode: experimental
-  production_strategy: "fresh"
+  production_strategy: fresh
   registered_model_name: CyberDefenseNet
 labeling:
   dos_duration_threshold_ms: 2000

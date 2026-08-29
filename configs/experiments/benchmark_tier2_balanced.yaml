@@ -1,8 +1,15 @@
-experiment_name: "FL-CL-Benchmark-Balanced"
+# ==============================================================================
+# FL-CL Experiment: benchmark_tier2_balanced.yaml
+# Track: 4-Tier Benchmark Suite: Tier 2 (Balanced Multi-Tenant Evaluation)
+# Description: Standard balanced evaluation (10 rounds, 60s stages, EWC lambda=0.8) representing nominal enterprise collaborative defense workloads across both defender organizations.
+# Expected Run Duration: ~8 minutes (10 FL rounds)
+# Attack Engine Mode: auto (auto-discovers Kali tools with Python fallback)
+# ==============================================================================
 
+experiment_name: FL-CL-Benchmark-Balanced
 experiment:
-  name: "FL-CL-Benchmark-Balanced"
-  description: "Category 2: Medium / Balanced Testbed Tier"
+  name: FL-CL-Benchmark-Balanced
+  description: 'Category 2: Medium / Balanced Testbed Tier'
 fl:
   rounds: 5
   min_clients: 2
@@ -69,6 +76,7 @@ simulation:
   - mode: slowloris
   - mode: dns_exfil
   - mode: botnet
+  attack_engine: auto
 topology:
   aggregator: 10.10.130.10
   defender_a: 10.10.130.11
@@ -87,7 +95,7 @@ checkpointing:
   export_torchscript: true
 mlops:
   mode: experimental
-  production_strategy: "fresh"
+  production_strategy: fresh
   registered_model_name: CyberDefenseNet
 labeling:
   dos_duration_threshold_ms: 2000

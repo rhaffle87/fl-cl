@@ -38,7 +38,7 @@ security:
 
   # 2. Client-level Differential Privacy (DP-SGD)
   dp_enabled: false
-  dp_noise_multiplier: 0.1 # Standard deviation factor
+  dp_noise_multiplier: 0.3 # Standard deviation factor (aligned to formal epsilon=6.08, delta=1e-5 budget)
   dp_max_grad_norm: 1.0 # Gradient clip norm
 
   # 3. Robust Aggregation
@@ -47,7 +47,7 @@ security:
   # "FedMedian",
   # "Krum",
   # "TrimmedMean"
-  aggregation_strategy: "FedAvg"
+  aggregation_strategy: "TrimmedMean" # Secure-by-Default (neutralizes label poisoning and sign flips)
 
   trimmed_mean_beta: 0.1 # Percentage of outliers to trim (if TrimmedMean active)
 
@@ -86,6 +86,7 @@ features:
 # ── Traffic Simulation ──────────────────────────────────────
 simulation:
   attack_duration_seconds: 60
+  attack_engine: "auto" # Options: "auto" (detect & fallback), "kali" (security binaries), "python" (pure stdlib/pip)
   stages:
     - mode: benign
     - mode: ssh

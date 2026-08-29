@@ -1,129 +1,107 @@
-# ── FL-CL Experiment: production_baseline_100r.yaml ──────────────────────
-# Full 100-Round Cold-Start Baseline
-#
-# Executes a complete 100-round fresh-start federated training run to produce
-# a full confusion matrix set (100 matrices) for academic documentation.
-# Explicitly disables warm-start — training begins from random initialization.
-#
-# Expected duration: ~25–40 minutes on the 3-node Proxmox testbed.
-# ──────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# FL-CL Experiment: production_baseline_100r.yaml
+# Track: Theme A: Production 100-Round EWC Baseline Benchmark
+# Description: 100-round cold-start production baseline training run establishing definitive loss convergence, per-round confusion matrix trajectories, and EWC catastrophic forgetting dynamics.
+# Expected Run Duration: ~45-60 minutes (100 FL rounds)
+# Attack Engine Mode: auto (auto-discovers Kali tools with Python fallback)
+# ==============================================================================
 
-experiment_name: "FL-CL-Baseline-ColdStart-100R"
-
+experiment_name: FL-CL-Baseline-ColdStart-100R
 experiment:
-  name: "FL-CL-Baseline-ColdStart-100R"
-  description: "Complete 100-round cold-start baseline for full academic confusion matrix documentation"
-
-# ── Federated Learning ──────────────────────────────────────
+  name: FL-CL-Baseline-ColdStart-100R
+  description: Complete 100-round cold-start baseline for full academic confusion
+    matrix documentation
 fl:
   rounds: 100
   min_clients: 2
   fraction_fit: 1.0
   fraction_evaluate: 1.0
-
-# ── Continual Learning (EWC) ────────────────────────────────
 cl:
-  strategy: "EWC"
+  strategy: EWC
   ewc_lambda: 0.8
   gem_patterns_per_exp: 256
   gem_memory_strength: 0.5
-  task_sequence: "benign,ssh,slowloris,dns_exfil,botnet"
+  task_sequence: benign,ssh,slowloris,dns_exfil,botnet
   complexity_score: 1.4
-  comm_overhead_budget: 200000000  # 200MB in bytes
-
-# ── Security, Privacy & Byzantine Robustness ─────────────────
+  comm_overhead_budget: 200000000
 security:
   poison_enabled: false
-  poison_client_ids: ["A"]
+  poison_client_ids:
+  - A
   poison_rate: 0.2
   poison_from_class: 0
   poison_to_class: 4
-
   dp_enabled: false
   dp_noise_multiplier: 0.1
   dp_max_grad_norm: 1.0
-
-  aggregation_strategy: "FedAvg"
+  aggregation_strategy: FedAvg
   trimmed_mean_beta: 0.1
-
-# ── Model Architecture ──────────────────────────────────────
 model:
-  type: "cnn"
+  type: cnn
   prune_fraction: 0.2
   input_dim: 32
   num_classes: 5
-  hidden_layers: [64, 32]
+  hidden_layers:
+  - 64
+  - 32
   dropout: 0.2
-
-# ── Training Hyperparameters ────────────────────────────────
 training:
-  optimizer: "SGD"
+  optimizer: SGD
   lr: 0.005
   momentum: 0.9
   batch_size: 32
   epochs_per_round: 1
-  class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
-
-# ── Feature Engineering ─────────────────────────────────────
+  class_weights:
+  - 1.0
+  - 15.0
+  - 2.0
+  - 4.0
+  - 15.0
 features:
   columns:
-    - bidirectional_packets
-    - bidirectional_bytes
-    - duration_ms
-    - src2dst_packets
-    - src2dst_bytes
-    - dst2src_packets
-    - dst2src_bytes
-    - src2dst_mean_piat_ms
-    - dst2src_mean_piat_ms
-    - dst_port
-
-# ── Traffic Simulation ──────────────────────────────────────
+  - bidirectional_packets
+  - bidirectional_bytes
+  - duration_ms
+  - src2dst_packets
+  - src2dst_bytes
+  - dst2src_packets
+  - dst2src_bytes
+  - src2dst_mean_piat_ms
+  - dst2src_mean_piat_ms
+  - dst_port
 simulation:
   attack_duration_seconds: 60
+  attack_engine: auto
   stages:
-    - mode: benign
-    - mode: ssh
-    - mode: slowloris
-    - mode: dns_exfil
-    - mode: botnet
-
-# ── Network Topology (Proxmox Testbed) ──────────────────────
+  - mode: benign
+  - mode: ssh
+  - mode: slowloris
+  - mode: dns_exfil
+  - mode: botnet
 topology:
-  aggregator: "10.10.130.10"
-  defender_a: "10.10.130.11"
-  defender_b: "10.10.130.12"
-  target_a: "10.10.110.15"
-  target_b: "10.10.120.15"
-  traffic_gen: "10.10.140.10"
+  aggregator: 10.10.130.10
+  defender_a: 10.10.130.11
+  defender_b: 10.10.130.12
+  target_a: 10.10.110.15
+  target_b: 10.10.120.15
+  traffic_gen: 10.10.140.10
   flower_port: 8080
   mlflow_port: 5000
-
-# ── Notifications ───────────────────────────────────────────
 notifications:
   telegram:
     enabled: true
-
-# ── Checkpointing ──────────────────────────────────────────
 checkpointing:
-  save_dir: "/opt/mlflow-artifacts/checkpoints"
+  save_dir: /opt/mlflow-artifacts/checkpoints
   save_best: true
   export_torchscript: true
-
-# ── MLOps Mode Configuration ────────────────────────────────
 mlops:
-  # "experimental" forces a cold start — no warm-start from existing champion
-  mode: "experimental"
-  production_strategy: "fresh"
-  registered_model_name: "CyberDefenseNet"
-
-# ── Labeling Configuration ──────────────────────────────────
+  mode: experimental
+  production_strategy: fresh
+  registered_model_name: CyberDefenseNet
 labeling:
   dos_duration_threshold_ms: 2000
-
-# ── Data Quality & Validation Gates ─────────────────────────
 data_quality:
   jsd_threshold: 0.6
-  gate_action: "abort"
-  baseline_stats_path: "configs/baseline_feature_stats.json"
-  baseline_class_distribution: "2000,10,200,50,100"
+  gate_action: abort
+  baseline_stats_path: configs/baseline_feature_stats.json
+  baseline_class_distribution: 2000,10,200,50,100

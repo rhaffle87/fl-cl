@@ -1,117 +1,107 @@
-# ── FL-CL Experiment: benchmark_gem_precision.yaml ───────────────────────
-# GEM Precision Tuning Experiment (Track A)
-#
-# Addresses the false positive rate on Normal traffic observed under initial GEM (v33).
-# Lowering gem_memory_strength from 0.5 to 0.2 reduces projection over-sensitivity,
-# while balanced class weights [1.0, 8.0, 2.0, 4.0, 10.0] prevent excessive false
-# positive predictions, aiming to achieve Botnet F1 >= 0.65 to PASS the CI/CD gate.
-# ──────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# FL-CL Experiment: benchmark_gem_precision.yaml
+# Track: Track 1: High-Precision GEM Continual Learning Optimization
+# Description: Fine-tunes GEM memory projection margin (s=0.2) and learning rates for high-precision cyber threat detection across all 5 classes simultaneously without backward transfer degradation.
+# Expected Run Duration: ~15 minutes (15 FL rounds)
+# Attack Engine Mode: auto (auto-discovers Kali tools with Python fallback)
+# ==============================================================================
 
-experiment_name: "FL-CL-GEM-Precision-Tuning"
-
+experiment_name: FL-CL-GEM-Precision-Tuning
 experiment:
-  name: "FL-CL-GEM-Precision-Tuning"
-  description: "Tuned GEM strategy (strength=0.2, balanced weights) for CI/CD gate validation PASS"
-
-# ── Federated Learning (parsed by orchestrate.py) ──────────────
+  name: FL-CL-GEM-Precision-Tuning
+  description: Tuned GEM strategy (strength=0.2, balanced weights) for CI/CD gate
+    validation PASS
 fl:
   rounds: 10
   min_clients: 2
   fraction_fit: 1.0
   fraction_evaluate: 1.0
-
-# ── Continual Learning (parsed by orchestrate.py) ──────────────
 cl:
-  strategy: "GEM"              # orchestrate.py reads config["cl"]["strategy"]
+  strategy: GEM
   ewc_lambda: 0.8
-  gem_patterns_per_exp: 512    # orchestrate.py reads config["cl"]["gem_patterns_per_exp"]
-  gem_memory_strength: 0.2    # Lowered from 0.5 to reduce Normal false positive drift
-  task_sequence: "benign,ssh,slowloris,dns_exfil,botnet"
+  gem_patterns_per_exp: 512
+  gem_memory_strength: 0.2
+  task_sequence: benign,ssh,slowloris,dns_exfil,botnet
   complexity_score: 1.4
   comm_overhead_budget: 200000000
-
-# ── fl_cl schema (forward-compat) ───────────────────────────
 fl_cl:
   rounds: 10
   min_fit_clients: 2
   min_evaluate_clients: 2
   min_available_clients: 2
   sample_fraction_fit: 1.0
-  cl_strategy: "GEM"
+  cl_strategy: GEM
   ewc_lambda: 0.8
   gem_patterns: 512
   gem_memory_strength: 0.2
-
-# ── Environment & Infrastructure ────────────────────────────
 topology:
-  aggregator: "10.10.130.10"
-  defender_a: "10.10.130.11"
-  defender_b: "10.10.130.12"
-  target_a: "10.10.110.15"
-  target_b: "10.10.120.15"
-  traffic_gen: "10.10.140.10"
+  aggregator: 10.10.130.10
+  defender_a: 10.10.130.11
+  defender_b: 10.10.130.12
+  target_a: 10.10.110.15
+  target_b: 10.10.120.15
+  traffic_gen: 10.10.140.10
   flower_port: 8080
   mlflow_port: 5000
-
-# ── Simulation & Workload ───────────────────────────────────
 simulation:
   duration_seconds: 60
   attack_duration_seconds: 60
   threat_stage_duration: 60
-  attack_modes: ["benign", "ssh", "slowloris", "dns_exfil", "botnet"]
+  attack_modes:
+  - benign
+  - ssh
+  - slowloris
+  - dns_exfil
+  - botnet
   stages:
-    - mode: benign
-    - mode: ssh
-    - mode: slowloris
-    - mode: dns_exfil
-    - mode: botnet
-
-# ── Model Architecture ──────────────────────────────────────
+  - mode: benign
+  - mode: ssh
+  - mode: slowloris
+  - mode: dns_exfil
+  - mode: botnet
+  attack_engine: auto
 model:
-  type: "cnn"
+  type: cnn
   prune_fraction: 0.2
   input_dim: 32
   num_classes: 5
-  hidden_layers: [64, 32]
+  hidden_layers:
+  - 64
+  - 32
   dropout: 0.2
-
-# ── Training Hyperparameters ────────────────────────────────
 training:
-  optimizer: "SGD"
+  optimizer: SGD
   lr: 0.005
   momentum: 0.9
   batch_size: 32
   epochs_per_round: 1
-  class_weights: [1.0, 8.0, 2.0, 4.0, 10.0]
-
-# ── Security, Privacy & Defense ─────────────────────────────
+  class_weights:
+  - 1.0
+  - 8.0
+  - 2.0
+  - 4.0
+  - 10.0
 security:
   poison_enabled: false
   dp_enabled: false
-  aggregation_strategy: "FedAvg"
+  aggregation_strategy: FedAvg
   trimmed_mean_beta: 0.1
-
-# ── MLOps & Tracking ────────────────────────────────────────
 mlops:
-  mode: "experimental"
-  production_strategy: "fresh"
+  mode: experimental
+  production_strategy: fresh
   mlflow_port: 5000
-  registered_model_name: "CyberDefenseNet"
-
+  registered_model_name: CyberDefenseNet
 notifications:
   telegram:
     enabled: true
-
 checkpointing:
-  save_dir: "/opt/mlflow-artifacts/checkpoints"
+  save_dir: /opt/mlflow-artifacts/checkpoints
   save_best: true
   export_torchscript: true
-
 labeling:
   dos_duration_threshold_ms: 2000
-
 data_quality:
   jsd_threshold: 0.6
-  gate_action: "abort"
-  baseline_stats_path: "configs/baseline_feature_stats.json"
-  baseline_class_distribution: "2000,10,200,50,100"
+  gate_action: abort
+  baseline_stats_path: configs/baseline_feature_stats.json
+  baseline_class_distribution: 2000,10,200,50,100

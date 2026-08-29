@@ -1,0 +1,27 @@
+{
+  "Normal": {
+    "class_id": 0,
+    "optimal_threshold": 0.1,
+    "max_f1": 0.9172
+  },
+  "SSH": {
+    "class_id": 1,
+    "optimal_threshold": 0.19,
+    "max_f1": 0.1051
+  },
+  "Slowloris": {
+    "class_id": 2,
+    "optimal_threshold": 0.1,
+    "max_f1": 0.1025
+  },
+  "DNS_Exfil": {
+    "class_id": 3,
+    "optimal_threshold": 0.19,
+    "max_f1": 0.0596
+  },
+  "Botnet": {
+    "class_id": 4,
+    "optimal_threshold": 0.19,
+    "max_f1": 0.0364
+  }
+}

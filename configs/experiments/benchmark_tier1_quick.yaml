@@ -1,8 +1,15 @@
-experiment_name: "FL-CL-Benchmark-Quick"
+# ==============================================================================
+# FL-CL Experiment: benchmark_tier1_quick.yaml
+# Track: 4-Tier Benchmark Suite: Tier 1 (Smoke / Pipeline Verification)
+# Description: Fast verification suite (5 rounds, 30s stages) to validate inter-node gRPC communication, MLflow tracking, and RAMDisk feature extraction pipeline before long-running sweeps.
+# Expected Run Duration: ~4 minutes (5 FL rounds)
+# Attack Engine Mode: auto (auto-discovers Kali tools with Python fallback)
+# ==============================================================================
 
+experiment_name: FL-CL-Benchmark-Quick
 experiment:
-  name: "FL-CL-Benchmark-Quick"
-  description: "Category 1: Fast / Quick Testbed Tier"
+  name: FL-CL-Benchmark-Quick
+  description: 'Category 1: Fast / Quick Testbed Tier'
 fl:
   rounds: 2
   min_clients: 2
@@ -69,6 +76,7 @@ simulation:
   - mode: slowloris
   - mode: dns_exfil
   - mode: botnet
+  attack_engine: auto
 topology:
   aggregator: 10.10.130.10
   defender_a: 10.10.130.11
@@ -87,7 +95,7 @@ checkpointing:
   export_torchscript: true
 mlops:
   mode: experimental
-  production_strategy: "fresh"
+  production_strategy: fresh
   registered_model_name: CyberDefenseNet
 labeling:
   dos_duration_threshold_ms: 2000

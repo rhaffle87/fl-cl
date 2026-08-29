@@ -1,45 +1,47 @@
-# ── FL-CL Experiment: benchmark_backbone_transformer.yaml ─────────────────
-# Evaluates CyberDefenseTransformer (Self-Attention) Backbone Performance
-# ──────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+# FL-CL Experiment: benchmark_backbone_transformer.yaml
+# Track: Track 2: Multi-Backbone Model Evaluation (Transformer Architecture)
+# Description: Evaluates the CyberDefenseTransformer (Self-Attention & Positional Token Embedding) backbone under EWC continual learning. Tests multi-head attention representation learning and INT8 dynamic quantization speedup (1.54x).
+# Expected Run Duration: ~6-10 minutes (5 FL rounds)
+# Attack Engine Mode: auto (auto-discovers Kali tools with Python fallback)
+# ==============================================================================
 
-experiment_name: "FL-CL-Benchmark-Backbone-Transformer"
-
+experiment_name: FL-CL-Benchmark-Backbone-Transformer
 experiment:
-  name: "FL-CL-Benchmark-Backbone-Transformer"
-  description: "Backbone model evaluation of CyberDefenseTransformer architecture under EWC regularization"
-
-# ── Environment & Infrastructure ────────────────────────────
+  name: FL-CL-Benchmark-Backbone-Transformer
+  description: Backbone model evaluation of CyberDefenseTransformer architecture under
+    EWC regularization
 topology:
-  aggregator: "10.10.130.10"
+  aggregator: 10.10.130.10
   defender_nodes:
-    - "10.10.130.11"
-    - "10.10.130.12"
+  - 10.10.130.11
+  - 10.10.130.12
   target_nodes:
-    - "10.10.110.15"
-    - "10.10.120.15"
-  traffic_gen: "10.10.140.10"
-
-# ── Simulation & Workload ───────────────────────────────────
+  - 10.10.110.15
+  - 10.10.120.15
+  traffic_gen: 10.10.140.10
 simulation:
   duration_seconds: 60
   threat_stage_duration: 60
-  attack_modes: ["benign", "ssh", "slowloris", "dns_exfil", "botnet"]
-
-# ── Federated & Continual Learning ──────────────────────────
+  attack_modes:
+  - benign
+  - ssh
+  - slowloris
+  - dns_exfil
+  - botnet
+  attack_engine: auto
 fl_cl:
   rounds: 5
   min_fit_clients: 2
   min_evaluate_clients: 2
   min_available_clients: 2
   sample_fraction_fit: 1.0
-  cl_strategy: "EWC"
+  cl_strategy: EWC
   ewc_lambda: 0.8
   gem_patterns: 256
   gem_memory_strength: 0.5
-
-# ── Model Architecture ──────────────────────────────────────
 model:
-  type: "transformer"
+  type: transformer
   prune_fraction: 0.2
   input_dim: 32
   num_classes: 5
@@ -47,30 +49,27 @@ model:
   nhead: 4
   num_layers: 2
   dropout: 0.2
-
-# ── Training Hyperparameters ────────────────────────────────
 training:
-  optimizer: "SGD"
+  optimizer: SGD
   lr: 0.005
   momentum: 0.9
   batch_size: 32
   epochs_per_round: 1
-  class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
-
-# ── Security, Privacy & Defense ─────────────────────────────
+  class_weights:
+  - 1.0
+  - 15.0
+  - 2.0
+  - 4.0
+  - 15.0
 security:
-  aggregation_strategy: "FedAvg"
+  aggregation_strategy: FedAvg
   dp_enabled: false
-
-# ── MLOps & Tracking ────────────────────────────────────────
 mlops:
-  mode: "experimental"
-  production_strategy: "fresh"
+  mode: experimental
+  production_strategy: fresh
   mlflow_port: 5000
-
 notifications:
   telegram:
     enabled: true
-
 checkpointing:
-  save_dir: "/opt/mlflow-artifacts/checkpoints"
+  save_dir: /opt/mlflow-artifacts/checkpoints

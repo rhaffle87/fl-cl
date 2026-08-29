@@ -1,0 +1,22 @@
+[Unit]
+Description=FL-CL Edge CyberDefense ONNX Inference Daemon
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/fl-cl
+Environment="PYTHONPATH=/opt/fl-cl"
+ExecStart=/usr/bin/python3 /opt/fl-cl/deploy/onnx/onnx_edge_daemon.py --flow-dir /mnt/ramdisk/flows
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+# Resource Constraints & Prioritization
+CPUQuota=400%
+MemoryMax=2G
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

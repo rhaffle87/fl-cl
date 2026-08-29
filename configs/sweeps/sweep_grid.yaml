@@ -1,18 +1,19 @@
 # ─────────────────────────────────────────────────────────────
-# FL-CL Hyperparameter Sweep Configuration
+# FL-CL Hyperparameter Grid Search Sweep Configuration
 # ─────────────────────────────────────────────────────────────
-# This file defines the search space for the sweep controller.
-# ─────────────────────────────────────────────────────────────
-
 experiment:
   name: "FCL-Hyperparameter-Sweep"
-  description: "Grid search sweep over ewc_lambda, lr, batch_size, and rounds"
+  description: "Grid search sweep evaluating EWC vs GEM continual learning, backbones, learning rates, and robust aggregation"
 
 sweep:
   parameters:
-    cl.ewc_lambda: [0.0, 0.2, 0.5, 0.8, 1.5]
-    training.lr: [0.005]
+    simulation.duration: [30]
+    simulation.attack_engine: ["auto"]
+    fl.rounds: [5, 15]
+    model.type: ["cnn", "mlp", "transformer"]
+    model.prune_fraction: [0.0, 0.2]
+    cl.strategy: ["EWC", "GEM"]
+    cl.ewc_lambda: [0.0, 0.5, 0.8]
+    training.lr: [0.003, 0.005]
     training.batch_size: [32]
-    fl.rounds: [5, 15, 30]
-    model.type: ["mlp", "cnn"]
-    model.prune_fraction: [0.2]
+    security.aggregation_strategy: ["TrimmedMean", "FedMedian"]

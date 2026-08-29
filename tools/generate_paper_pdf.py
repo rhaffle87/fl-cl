@@ -14,6 +14,7 @@ import subprocess
 import base64
 import io
 import tarfile
+import tempfile
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -22,7 +23,7 @@ PAPER_DIR = PROJECT_ROOT / "docs" / "paper"
 
 def get_ssh_opts():
     key_path = Path.home() / ".ssh" / "id_ed25519"
-    opts = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no"]
+    opts = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10"]
     if key_path.exists():
         opts += ["-i", str(key_path)]
     return opts
@@ -48,25 +49,18 @@ def main():
     print(f"[*] Setting up build workspace on aggregator ({args.aggregator})...")
     run_ssh("rm -rf /tmp/paper_build && mkdir -p /tmp/paper_build/figures", args.aggregator)
 
-    # 2. Package and upload LaTeX sources and vector figures
+    # 2. Package and upload LaTeX sources and vector figures via scp
     print("[*] Uploading LaTeX sources and vector figures...")
-    tar_buf = io.BytesIO()
-    with tarfile.open(fileobj=tar_buf, mode="w:gz") as tar:
+    temp_tar = Path(tempfile.gettempdir()) / "flcl_paper_build.tar.gz"
+    with tarfile.open(temp_tar, mode="w:gz") as tar:
         tar.add(PAPER_DIR / "manuscript.tex", arcname="manuscript.tex")
         tar.add(PAPER_DIR / "references.bib", arcname="references.bib")
         for fig in (PAPER_DIR / "figures").glob("*.*"):
             tar.add(fig, arcname=f"figures/{fig.name}")
 
-    b64_payload = base64.b64encode(tar_buf.getvalue()).decode("ascii")
-    # Send archive to remote and unpack
-    p = subprocess.Popen(
-        ["ssh"] + get_ssh_opts() + [f"root@{args.aggregator}", "base64 -d | tar -xzf - -C /tmp/paper_build"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=False,
-    )
-    p.communicate(input=tar_buf.getvalue())
+    scp_opts = get_ssh_opts()
+    subprocess.run(["scp"] + scp_opts + [str(temp_tar), f"root@{args.aggregator}:/tmp/paper_build.tar.gz"], check=True)
+    run_ssh("tar -xzf /tmp/paper_build.tar.gz -C /tmp/paper_build", args.aggregator)
 
     # 3. Check and install IEEEtran.cls if missing
     print("[*] Checking IEEEtran document class...")
@@ -77,33 +71,32 @@ def main():
 
     # 4. Compile with pdflatex + bibtex + pdflatex (Pass 2) + pdflatex (Pass 3)
     print("[*] Compiling LaTeX manuscript (Pass 1)...")
-    rc, out, err = run_ssh("cd /tmp/paper_build && pdflatex -interaction=nonstopmode manuscript.tex", args.aggregator)
+    run_ssh("cd /tmp/paper_build && pdflatex -interaction=nonstopmode manuscript.tex", args.aggregator)
 
     print("[*] Running BibTeX...")
     run_ssh("cd /tmp/paper_build && bibtex manuscript || true", args.aggregator)
 
     print("[*] Compiling LaTeX manuscript (Pass 2 - Read Citations)...")
-    rc, out, err = run_ssh("cd /tmp/paper_build && pdflatex -interaction=nonstopmode manuscript.tex", args.aggregator)
+    run_ssh("cd /tmp/paper_build && pdflatex -interaction=nonstopmode manuscript.tex", args.aggregator)
 
     print("[*] Compiling LaTeX manuscript (Pass 3 - Final Cross References)...")
-    rc, out, err = run_ssh("cd /tmp/paper_build && pdflatex -interaction=nonstopmode manuscript.tex", args.aggregator)
+    run_ssh("cd /tmp/paper_build && pdflatex -interaction=nonstopmode manuscript.tex", args.aggregator)
 
-    # 5. Fetch PDF back to local workspace
+    # 5. Fetch PDF back to local workspace via scp
     out_pdf = Path(args.output)
     print(f"[*] Fetching compiled PDF to {out_pdf}...")
-    rc, b64_pdf, err = run_ssh("base64 /tmp/paper_build/manuscript.pdf", args.aggregator)
+    res = subprocess.run(["scp"] + scp_opts + [f"root@{args.aggregator}:/tmp/paper_build/manuscript.pdf", str(out_pdf)])
 
-    if rc == 0 and b64_pdf.strip():
-        out_pdf.write_bytes(base64.b64decode(b64_pdf.strip()))
-
-    if out_pdf.exists() and out_pdf.stat().st_size > 0:
+    if res.returncode == 0 and out_pdf.exists() and out_pdf.stat().st_size > 10000:
         print(f"\n[SUCCESS] Compiled PDF generated: {out_pdf} ({out_pdf.stat().st_size:,} bytes)")
         print("========================================================================\n")
         sys.exit(0)
-    else:
-        print(f"\n[FAIL] PDF generation failed or empty. Log:\n{err}")
-        print("========================================================================\n")
-        sys.exit(1)
+
+    # If scp failed or file too small, print error log
+    _, log_content, _ = run_ssh("cat /tmp/paper_build/manuscript.log 2>/dev/null | tail -n 50 || true", args.aggregator)
+    print(f"\n[FAIL] PDF compilation failed on aggregator. LaTeX error log:\n{log_content}")
+    print("========================================================================\n")
+    sys.exit(1)
 
 
 if __name__ == "__main__":

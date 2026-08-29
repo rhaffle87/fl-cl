@@ -145,3 +145,46 @@ Runs standalone local defender training outside Flower FL loops to diagnose conv
 ### `tools/deploy_testbed.py`
 Orchestrates multi-tier benchmark execution across Proxmox nodes (`10.10.130.10–12`) via passwordless SSH and synchronizes run exports.
 
+### `tools/benchmark_onnx.py`
+Evaluates multi-runtime inference latency and throughput across PyTorch FP32, TorchScript JIT, and ONNX Runtime (AVX2 acceleration) across batch sizes 1 to 256.
+
+### `tools/benchmark_byzantine.py`
+Evaluates Byzantine resilience across `FedAvg`, `FedMedian`, `Krum`, and `TrimmedMean` under 10%–50% label poisoning, sign-flipping, and Gaussian noise attacks.
+
+### `tools/benchmark_dp.py`
+Computes the Differential Privacy (DP-SGD) privacy-utility trade-off curve across noise multipliers $\sigma \in [0.0, 1.0]$ with formal $(\epsilon, \delta)$ accounting.
+
+### `tools/test_attack_gen.py`
+Validates modular dual-engine attack generator functionality, tool fallback order, and RFC/MITRE compliance across all 5 threat categories.
+
+---
+
+## 7. Modular Attack Generator Reference (`src/traffic_gen/attack_flow.py`)
+
+### `run_attack_scenario(args)`
+Main orchestration entry point for traffic generation. Dispatches attack vectors based on `--engine`:
+* **`--engine auto`** (Default): Discovers installed Kali binaries (`slowhttptest`, `ncrack`, `medusa`, `hping3`, `scapy`); falls back gracefully to pure Python implementations if absent.
+* **`--engine kali`**: Enforces strictly native Kali offensive security utilities with subprocess timeout guards and resource cleanup.
+* **`--engine python`**: Enforces lightweight pure Python socket routines for cross-platform and CI environments.
+
+### Supported Threat Vectors:
+1. **Benign Browsing**: High-frequency HTTP GET requests simulating legitimate user browsing.
+2. **SSH Brute-Force**: Multi-threaded password spraying targeting port 22 (`hydra` / `ncrack` / `medusa` vs. socket auth loop).
+3. **Slowloris DoS**: Low-bandwidth persistent partial HTTP header holding targeting port 80/443 (`slowhttptest` / `hping3` vs. socket pool).
+4. **DNS Exfiltration**: High-entropy TXT/CNAME query tunneling targeting port 53 (`scapy` / `iodine` vs. RFC 1035 UDP packer).
+5. **Botnet C2 Beaconing**: Multi-round HTTP POST beacons with randomized jitter on ports 8080/8888/9000.
+
+---
+
+## 8. Regulatory & Statutory Compliance Standards Mapping
+
+| Standard | Target Requirement | Verification Mechanism & Command |
+| :--- | :--- | :--- |
+| **UU PDP No. 27/2022** *(Art. 65–66)* | Raw personal data localization within local secure enclave. | Verified via `src/defender/client.py` and tmpfs RAMDisk isolation (`/mnt/ramdisk/flows/`). |
+| **GDPR (EU 2016/679)** *(Art. 5, 25, 32)* | Privacy by Design via cryptographic DP-SGD bounds. | Verified via `python tools/benchmark_dp.py` ($C=1.0, \sigma=0.30 \implies \epsilon=6.08, \delta=10^{-5}$). |
+| **NIST SP 800-94 / 800-145** | Network IDPS behavioral flow anomaly detection. | Verified via 32-feature extraction in `src/defender/extractor.py`. |
+| **MITRE ATT&CK Enterprise** | Standardized threat taxonomy mapping. | Covered TTPs: T1498 (DoS), T1110 (BruteForce), T1048 (DNS Exfil), T1071 (C2 Beaconing). |
+| **ISO/IEC 27001 / 27701** | ISMS / PIMS Lineage & Auditability. | Verified via `python tools/audit_codebase.py` and SHA-256 dataset lineage graphs. |
+| **RFC 1035 / 793 / 7230** | Wire protocol formatting and state machine conformance. | Verified via `python tools/test_attack_gen.py`. |
+
+

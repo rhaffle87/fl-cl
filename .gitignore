@@ -19,6 +19,8 @@ env/
 
 # Local databases and logs
 *.db
+*.db-shm
+*.db-wal
 *.log
 mlruns/
 mlflow.db

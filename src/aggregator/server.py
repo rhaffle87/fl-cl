@@ -39,6 +39,16 @@ import numpy as np
 from model import get_model
 from notifications import TelegramNotifier
 
+try:
+    from alerts import send_byzantine_alert, send_drift_alert
+except ImportError:
+    try:
+        from src.aggregator.alerts import send_byzantine_alert, send_drift_alert
+    except ImportError:
+        send_byzantine_alert = lambda *args, **kwargs: False
+        send_drift_alert = lambda *args, **kwargs: False
+
+
 
 @mlflow.trace(name="weighted_avg")
 def weighted_avg(metrics):
@@ -426,6 +436,10 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                 if dataset_rejected > 0.0:
                     total_rejections += 1
                     print(f"[server] WARNING: Client {client_id} dataset rejected due to data quality gate violation! (JSD: {dataset_jsd:.4f})")
+                    try:
+                        send_drift_alert(client_id, server_round, dataset_jsd)
+                    except Exception:
+                        pass
 
                 # Log Fisher metrics (H2)
                 f_mean = fit_res.metrics.get("fisher_mean")
@@ -472,6 +486,10 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                     warning_tag_key = f"warning_round_{server_round}_client_{client_id}_anomaly"
                     mlflow.set_tag(warning_tag_key, warning_reason)
                     print(f"[server] ANOMALY WARNING: {warning_reason}")
+                    try:
+                        send_byzantine_alert(client_id, warning_reason, drift, self.aggregation_strategy)
+                    except Exception:
+                        pass
 
             mlflow.log_metric("dataset_rejections_count", float(total_rejections), step=server_round)
 
@@ -895,6 +913,7 @@ def main():
     parser.add_argument("--trimmed-mean-beta", type=float, default=0.1, help="Beta parameter for TrimmedMean strategy")
     parser.add_argument("--model-type", default="cnn", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
     parser.add_argument("--prune-fraction", type=float, default=0.2, help="Export-time prune fraction parameter")
+    parser.add_argument("--experiment-name", default=None, help="MLflow experiment name (overrides default/config)")
     args = parser.parse_args()
 
     # Instantiate notifier with optional YAML config fallback, prioritizing environment variables
@@ -902,22 +921,29 @@ def main():
     tg_chat_id = args.telegram_chat_id or os.environ.get("TELEGRAM_CHAT_ID", "")
     tg_enabled = args.telegram_enabled or (os.environ.get("TELEGRAM_ENABLED", "").lower() in ("true", "1"))
 
+    exp_name = args.experiment_name
     if args.config_file and os.path.exists(args.config_file):
         try:
             import yaml
             with open(args.config_file, "r") as f:
                 config = yaml.safe_load(f)
-            if isinstance(config, dict) and "notifications" in config:
-                tg_conf = config["notifications"].get("telegram", {})
-                if isinstance(tg_conf, dict):
-                    if not tg_token:
-                        tg_token = tg_conf.get("bot_token", "")
-                    if not tg_chat_id:
-                        tg_chat_id = tg_conf.get("chat_id", "")
-                    if not tg_enabled:
-                        tg_enabled = tg_conf.get("enabled", False)
+            if isinstance(config, dict):
+                if not exp_name and "experiment" in config:
+                    exp_name = config["experiment"].get("name")
+                if "notifications" in config:
+                    tg_conf = config["notifications"].get("telegram", {})
+                    if isinstance(tg_conf, dict):
+                        if not tg_token:
+                            tg_token = tg_conf.get("bot_token", "")
+                        if not tg_chat_id:
+                            tg_chat_id = tg_conf.get("chat_id", "")
+                        if not tg_enabled:
+                            tg_enabled = tg_conf.get("enabled", False)
         except Exception as e:
-            print(f"[server] Warning: Could not load telegram config from file: {e}")
+            print(f"[server] Warning: Could not load config from file: {e}")
+
+    if not exp_name:
+        exp_name = "FL-CL-CyberDefense"
 
     if tg_token and tg_chat_id:
         tg_enabled = True
@@ -929,7 +955,8 @@ def main():
 
     # Set up MLflow
     mlflow.set_tracking_uri(args.mlflow_uri)
-    mlflow.set_experiment("FL-CL-CyberDefense")
+    mlflow.set_experiment(exp_name)
+    print(f"[server] MLflow Active Experiment: {exp_name}")
     mlflow.enable_system_metrics_logging()
 
     # Security audit: restrict directory permissions
@@ -1142,29 +1169,47 @@ def main():
             new_version = model_info.registered_model_version
             print(f"[server] Logged model to artifact path. ID: {model_info.model_id} | Registry Version: {new_version}")
 
-            # Inspect and retrieve LoggedModel
-            logged_model = mlflow.get_logged_model(model_info.model_id)
+            # Inspect and retrieve LoggedModel safely
+            try:
+                if hasattr(mlflow, "get_logged_model"):
+                    logged_model = mlflow.get_logged_model(model_info.model_id)
+                else:
+                    logged_model = None
+            except Exception:
+                logged_model = None
 
-            # Define dataset representation using MLflow 3.x Dataset entity
-            dataset_summary = pd.DataFrame([
-                {"class": "Normal", "defender_a": 22, "defender_b": 10},
-                {"class": "Botnet", "defender_a": 10, "defender_b": 12},
-                {"class": "Exfiltration", "defender_a": 581, "defender_b": 636},
-                {"class": "BruteForce", "defender_a": 4, "defender_b": 30},
-                {"class": "DoS", "defender_a": 2464, "defender_b": 1409}
-            ])
-            train_dataset = mlflow.data.from_pandas(dataset_summary, name="aggregated_training_flows")
+            # Define dataset representation using MLflow Dataset entity
+            try:
+                dataset_summary = pd.DataFrame([
+                    {"class": "Normal", "defender_a": 22, "defender_b": 10},
+                    {"class": "Botnet", "defender_a": 10, "defender_b": 12},
+                    {"class": "Exfiltration", "defender_a": 581, "defender_b": 636},
+                    {"class": "BruteForce", "defender_a": 4, "defender_b": 30},
+                    {"class": "DoS", "defender_a": 2464, "defender_b": 1409}
+                ])
+                train_dataset = mlflow.data.from_pandas(dataset_summary, name="aggregated_training_flows")
+                extra_kwargs = {}
+                if logged_model and hasattr(logged_model, "model_id"):
+                    extra_kwargs["model_id"] = logged_model.model_id
+                if train_dataset:
+                    extra_kwargs["dataset"] = train_dataset
 
-            # Log final metrics linked to LoggedModel and training dataset
-            mlflow.log_metrics(
-                metrics={
-                    "final_best_loss": strategy.best_loss,
-                    "final_best_round": float(strategy.best_round),
-                },
-                model_id=logged_model.model_id,
-                dataset=train_dataset
-            )
-            print(f"[server] Successfully linked model metrics to model_id: {logged_model.model_id}")
+                mlflow.log_metrics(
+                    metrics={
+                        "final_best_loss": strategy.best_loss,
+                        "final_best_round": float(strategy.best_round),
+                    },
+                    **extra_kwargs
+                )
+                print("[server] Successfully linked model metrics to dataset entity.")
+            except Exception as ds_err:
+                print(f"[server] Warning: Could not log dataset linkage: {ds_err}")
+                mlflow.log_metrics(
+                    metrics={
+                        "final_best_loss": strategy.best_loss,
+                        "final_best_round": float(strategy.best_round),
+                    }
+                )
 
             # Update run description notes with final performance details
             try:

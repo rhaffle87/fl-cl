@@ -44,6 +44,20 @@ def benchmark_model_runtimes(model_type: str, batch_sizes=[1, 16, 64, 256], num_
 
     # 3. ONNX Runtime Session
     onnx_path = MODELS_DIR / f"cyberdefense_{model_type}.onnx"
+    if not onnx_path.exists():
+        print(f"  [i] ONNX model missing at {onnx_path}. Auto-exporting...")
+        MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        dummy_in = torch.randn(1, input_dim, dtype=torch.float32)
+        torch.onnx.export(
+            py_model,
+            dummy_in,
+            str(onnx_path),
+            input_names=["flow_features"],
+            output_names=["logits"],
+            dynamic_axes={"flow_features": {0: "batch_size"}, "logits": {0: "batch_size"}},
+            opset_version=14,
+        )
+
     opts = ort.SessionOptions()
     opts.intra_op_num_threads = 2
     opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL

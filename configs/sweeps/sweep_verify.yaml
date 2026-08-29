@@ -3,11 +3,16 @@
 # ─────────────────────────────────────────────────────────────
 experiment:
   name: "FCL-Sweep-Verification"
-  description: "Fast integration test of hyperparameter sweep controller, parent-child linking, and dataset lineage"
+  description: "Fast single-combination integration test of hyperparameter sweep controller, parent-child linking, and dataset lineage"
 
 sweep:
   parameters:
-    cl.ewc_lambda: [0.4]
-    training.lr: [0.01]
-    training.batch_size: [32]
+    simulation.duration: [5]
+    simulation.attack_engine: ["auto"]
     fl.rounds: [1]
+    model.type: ["cnn"]
+    cl.strategy: ["EWC"]
+    cl.ewc_lambda: [0.8]
+    training.lr: [0.003]
+    training.batch_size: [32]
+    security.aggregation_strategy: ["TrimmedMean"]

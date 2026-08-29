@@ -85,7 +85,7 @@ def validate_sanitized_inputs(
     mlops_mode, production_strategy, jsd_threshold, gate_action, baseline_class_dist,
     poison_client_ids, poison_rate, poison_from_class, poison_to_class,
     dp_noise_multiplier, dp_max_grad_norm, aggregation_strategy, trimmed_mean_beta,
-    model_type, prune_fraction,
+    model_type, prune_fraction, attack_engine,
     aggregator_ip, def_a_ip, def_b_ip, target_a_ip, target_b_ip, traffic_gen_ip
 ):
     """
@@ -98,11 +98,14 @@ def validate_sanitized_inputs(
     assert isinstance(rounds, int) and 0 < rounds <= 1000, f"Invalid rounds: {rounds}"
     
     cl_strategy = str(cl_strategy).upper()
-    assert cl_strategy in ("EWC", "GEM", "NAIVE"), f"Invalid CL strategy: {cl_strategy}"
+    assert cl_strategy in ("EWC", "GEM", "AGEM", "A-GEM", "NAIVE"), f"Invalid CL strategy: {cl_strategy}"
     
     model_type = str(model_type).lower()
     assert model_type in ("mlp", "cnn", "transformer"), f"Invalid model type: {model_type}"
     assert isinstance(prune_fraction, (int, float)) and 0.0 <= prune_fraction <= 1.0, f"Invalid prune_fraction: {prune_fraction}"
+    
+    attack_engine = str(attack_engine).lower()
+    assert attack_engine in ("auto", "kali", "python"), f"Invalid attack_engine: {attack_engine}"
     
     assert isinstance(lambda_ewc, (int, float)) and 0.0 <= lambda_ewc <= 100.0, f"Invalid lambda_ewc: {lambda_ewc}"
     assert isinstance(gem_patterns, int) and 0 < gem_patterns <= 10000, f"Invalid gem_patterns: {gem_patterns}"
@@ -231,7 +234,7 @@ class RemoteNode:
 
     def cleanup(self, kill_mlflow=False):
         opts = self._get_ssh_opts()
-        pattern = "server.py|client.py|extractor.py|attack_flow.py|busybox httpd|normal_traffic_loop|curl|simple_httpd.sh"
+        pattern = "server.py|client.py|extractor.py|attack_flow.py|busybox httpd|normal_traffic_loop|curl|simple_httpd.sh|ncrack|medusa|hydra|slowhttptest|hping3"
         if kill_mlflow:
             pattern += "|mlflow"
         kill_cmd = f"pkill -f '{pattern}' || pkill -x nc || true"
@@ -412,6 +415,7 @@ def main():
     parser.add_argument("--trimmed-mean-beta", type=float, default=None, help="Trimmed mean beta")
     parser.add_argument("--model-type", default=None, choices=["mlp", "cnn", "transformer"], help="Model architecture type (overrides config)")
     parser.add_argument("--prune-fraction", type=float, default=None, help="Export-time prune fraction parameter (overrides config)")
+    parser.add_argument("--attack-engine", default=None, choices=["auto", "kali", "python"], help="Attack generation engine: auto, kali, or python")
     args = parser.parse_args()
 
     # Load config — CLI args override YAML values
@@ -443,6 +447,7 @@ def main():
     gem_patterns = args.gem_patterns or get_config_value(config, "cl", "gem_patterns_per_exp", default=256)
     gem_memory_strength = args.gem_memory_strength if args.gem_memory_strength is not None else get_config_value(config, "cl", "gem_memory_strength", default=0.5)
     duration = args.duration or get_config_value(config, "simulation", "attack_duration_seconds", default=30)
+    attack_engine = args.attack_engine or get_config_value(config, "simulation", "attack_engine", default="auto")
     
     if args.class_weights:
         weights_str = args.class_weights
@@ -528,7 +533,7 @@ def main():
         mlops_mode, production_strategy, jsd_threshold, gate_action, baseline_class_dist,
         poison_client_ids, poison_rate, poison_from_class, poison_to_class,
         dp_noise_multiplier, dp_max_grad_norm, aggregation_strategy, trimmed_mean_beta,
-        model_type, prune_fraction,
+        model_type, prune_fraction, attack_engine,
         aggregator_ip, def_a_ip, def_b_ip, target_a_ip, target_b_ip, traffic_gen_ip
     )
 
@@ -678,7 +683,7 @@ def main():
         server_sec_args = f" --aggregation-strategy '{aggregation_strategy}' --trimmed-mean-beta {trimmed_mean_beta}"
 
         server_proc = aggregator.run_cmd(
-            f"/opt/flower-env/bin/python3 server.py --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit} --ewc-lambda {lambda_ewc} --lr {lr} --batch-size {batch_size} --class-weights {weights_str} {parent_run_arg}{cl_args}{server_sec_args} --model-type {model_type} --prune-fraction {prune_fraction}",
+            f"/opt/flower-env/bin/python3 server.py --experiment-name '{experiment_name}' --rounds {rounds} --min-clients 2 --mlflow-uri http://localhost:5000 {config_arg} --mlops-mode {mlops_mode} --production-strategy {production_strategy} --git-commit {git_commit} --ewc-lambda {lambda_ewc} --lr {lr} --batch-size {batch_size} --class-weights {weights_str} {parent_run_arg}{cl_args}{server_sec_args} --model-type {model_type} --prune-fraction {prune_fraction}",
             background=True
         )
 
@@ -687,28 +692,28 @@ def main():
 
         # 1. Benign background traffic from traffic-gen (labeled DoS/port-80 by assign_label)
         #    Real Normal flows come from defender nodes in Phase 3b above.
-        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target {target_a_ip} --duration {duration}", background=True)
-        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target {target_b_ip} --duration {duration}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target {target_a_ip} --duration {duration} --engine {attack_engine}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode benign --target {target_b_ip} --duration {duration} --engine {attack_engine}", background=True)
         time.sleep(duration // 3)  # Shorter wait — we rely on defender curl for Normal class
 
         # 2. SSH Brute Force — extended wait to generate more SSH-BF (class 3) samples
-        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target {target_a_ip} --duration {duration}", background=True)
-        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target {target_b_ip} --duration {duration}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target {target_a_ip} --duration {duration} --engine {attack_engine}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode ssh --target {target_b_ip} --duration {duration} --engine {attack_engine}", background=True)
         time.sleep(duration)  # Full duration wait for SSH to generate more flows
 
         # 3. Slowloris DoS — extended wait to generate more DoS (class 4) samples
-        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_a_ip} --duration {duration} --port 80", background=True)
-        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_b_ip} --duration {duration} --port 80", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_a_ip} --duration {duration} --port 80 --engine {attack_engine}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode slowloris --target {target_b_ip} --duration {duration} --port 80 --engine {attack_engine}", background=True)
         time.sleep(duration * 2)  # Extended wait (2x) — DoS flows need longer accumulation due to duration_ms > 2000 threshold filter
 
         # 4. DNS Exfiltration — shortened wait to avoid over-dominating dataset
-        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target {target_a_ip} --duration {duration}", background=True)
-        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target {target_b_ip} --duration {duration}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target {target_a_ip} --duration {duration} --engine {attack_engine}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode dns_exfil --target {target_b_ip} --duration {duration} --engine {attack_engine}", background=True)
         time.sleep(duration // 3)  # Shorter wait — Exfil over-represented in data
 
         # 5. C2 Botnet Beaconing
-        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode botnet --target {target_a_ip} --duration {duration}", background=True)
-        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode botnet --target {target_b_ip} --duration {duration}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode botnet --target {target_a_ip} --duration {duration} --engine {attack_engine}", background=True)
+        traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode botnet --target {target_b_ip} --duration {duration} --engine {attack_engine}", background=True)
         time.sleep(duration * 2)  # Extended wait (2x) — Botnet beaconing generates extremely sparse flows (1-3 per window)
 
         print("\n=== Phase 6b: Waiting for flow data to accumulate on ramdisk ===")

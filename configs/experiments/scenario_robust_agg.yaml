@@ -1,150 +1,107 @@
-# ─────────────────────────────────────────────────────────────
-# FL-CL Experiment Configuration
-# ─────────────────────────────────────────────────────────────
-# This file defines all tunable parameters for a single FL-CL
-# experiment run.  The orchestrator loads this YAML and logs it
-# as an MLflow artifact so every run is fully reproducible.
-# ─────────────────────────────────────────────────────────────
+# ==============================================================================
+# FL-CL Experiment: scenario_robust_agg.yaml
+# Track: Core Scenario 4: Byzantine-Robust Aggregation Defense
+# Description: Evaluates coordinate-wise TrimmedMean (beta=0.10) aggregation defense against 20% adversarial label-flipping attacks, neutralizing corrupted gradient updates from compromised nodes.
+# Expected Run Duration: ~10 minutes (10 FL rounds)
+# Attack Engine Mode: auto (auto-discovers Kali tools with Python fallback)
+# ==============================================================================
 
-experiment_name: "FL-CL-RobustAgg"
-
+experiment_name: FL-CL-RobustAgg
 experiment:
-  name: "FL-CL-RobustAgg"
-  description: "Byzantine-robust Federated Continual Learning under TrimmedMean (beta=0.1) aggregation against 20% label poisoning attack"
-
-# ── Federated Learning ──────────────────────────────────────
+  name: FL-CL-RobustAgg
+  description: Byzantine-robust Federated Continual Learning under TrimmedMean (beta=0.1)
+    aggregation against 20% label poisoning attack
 fl:
   rounds: 5
   min_clients: 2
   fraction_fit: 1.0
   fraction_evaluate: 1.0
-
-# ── Continual Learning (EWC) ────────────────────────────────
 cl:
-  strategy: "EWC"
+  strategy: EWC
   ewc_lambda: 0.8
   gem_patterns_per_exp: 256
   gem_memory_strength: 0.5
-  task_sequence: "benign,ssh,slowloris,dns_exfil,botnet"
+  task_sequence: benign,ssh,slowloris,dns_exfil,botnet
   complexity_score: 1.4
-  comm_overhead_budget: 200000000 # 200MB in bytes
-
-# ── Security, Privacy & Byzantine Robustness ─────────────────
+  comm_overhead_budget: 200000000
 security:
-  # 1. Data Poisoning Simulation
   poison_enabled: true
-  poison_client_ids: ["A"] # List of clients to poison
-  poison_rate: 0.2 # Fraction of training samples poisoned
-  poison_from_class: 0 # Class to poison (0: Normal)
-  poison_to_class: 4 # Class to target (4: DoS)
-
-  # 2. Client-level Differential Privacy (DP-SGD)
+  poison_client_ids:
+  - A
+  poison_rate: 0.2
+  poison_from_class: 0
+  poison_to_class: 4
   dp_enabled: false
-  dp_noise_multiplier: 0.1 # Standard deviation factor
-  dp_max_grad_norm: 1.0 # Gradient clip norm
-
-  # 3. Robust Aggregation
-  # Options:
-  # "FedAvg",
-  # "FedMedian",
-  # "Krum",
-  # "TrimmedMean"
-  aggregation_strategy: "TrimmedMean"
-
-  trimmed_mean_beta: 0.1 # Percentage of outliers to trim (if TrimmedMean active)
-
-# ── Model Architecture ──────────────────────────────────────
+  dp_noise_multiplier: 0.1
+  dp_max_grad_norm: 1.0
+  aggregation_strategy: TrimmedMean
+  trimmed_mean_beta: 0.1
 model:
-  type: "cnn"
+  type: cnn
   prune_fraction: 0.2
   input_dim: 32
   num_classes: 5
-  hidden_layers: [64, 32]
+  hidden_layers:
+  - 64
+  - 32
   dropout: 0.2
-
-# ── Training Hyperparameters ────────────────────────────────
 training:
-  optimizer: "SGD"
+  optimizer: SGD
   lr: 0.005
   momentum: 0.9
   batch_size: 32
   epochs_per_round: 1
-  class_weights: [1.0, 15.0, 2.0, 4.0, 15.0]
-
-# ── Feature Engineering ─────────────────────────────────────
+  class_weights:
+  - 1.0
+  - 15.0
+  - 2.0
+  - 4.0
+  - 15.0
 features:
   columns:
-    - bidirectional_packets
-    - bidirectional_bytes
-    - duration_ms
-    - src2dst_packets
-    - src2dst_bytes
-    - dst2src_packets
-    - dst2src_bytes
-    - src2dst_mean_piat_ms
-    - dst2src_mean_piat_ms
-    - dst_port
-
-# ── Traffic Simulation ──────────────────────────────────────
+  - bidirectional_packets
+  - bidirectional_bytes
+  - duration_ms
+  - src2dst_packets
+  - src2dst_bytes
+  - dst2src_packets
+  - dst2src_bytes
+  - src2dst_mean_piat_ms
+  - dst2src_mean_piat_ms
+  - dst_port
 simulation:
   attack_duration_seconds: 60
   stages:
-    - mode: benign
-    - mode: ssh
-    - mode: slowloris
-    - mode: dns_exfil
-    - mode: botnet
-
-# ── Network Topology (Proxmox Testbed) ──────────────────────
+  - mode: benign
+  - mode: ssh
+  - mode: slowloris
+  - mode: dns_exfil
+  - mode: botnet
+  attack_engine: auto
 topology:
-  aggregator: "10.10.130.10"
-  defender_a: "10.10.130.11"
-  defender_b: "10.10.130.12"
-  target_a: "10.10.110.15"
-  target_b: "10.10.120.15"
-  traffic_gen: "10.10.140.10"
+  aggregator: 10.10.130.10
+  defender_a: 10.10.130.11
+  defender_b: 10.10.130.12
+  target_a: 10.10.110.15
+  target_b: 10.10.120.15
+  traffic_gen: 10.10.140.10
   flower_port: 8080
   mlflow_port: 5000
-
-# ── Notifications ───────────────────────────────────────────
 notifications:
   telegram:
     enabled: true
-    # bot_token and chat_id are loaded from environment variables (e.g. .env).
-
-# ── Checkpointing ──────────────────────────────────────────
 checkpointing:
-  save_dir: "/opt/mlflow-artifacts/checkpoints"
+  save_dir: /opt/mlflow-artifacts/checkpoints
   save_best: true
   export_torchscript: true
-
-# ── MLOps Mode Configuration ────────────────────────────────
 mlops:
-  # Mode options:
-  # "experimental" (cold start)
-  # "production" (warm start)
-  mode: "experimental"
-
-  # Production Strategy:
-  # "resume" (continue from latest checkpoint)
-  # "fresh" (new start)
-  production_strategy: "fresh"
-
-  # Model registry reference name in MLflow
-  registered_model_name: "CyberDefenseNet"
-
-# ── Labeling Configuration ──────────────────────────────────
+  mode: experimental
+  production_strategy: fresh
+  registered_model_name: CyberDefenseNet
 labeling:
   dos_duration_threshold_ms: 2000
-
-# ── Data Quality & Validation Gates ─────────────────────────
 data_quality:
   jsd_threshold: 0.6
-
-  # Options:
-  # "abort",
-  # "warn"
-  gate_action: "abort"
-
-  baseline_stats_path: "configs/baseline_feature_stats.json"
-  baseline_class_distribution: "2000,10,200,50,100"
+  gate_action: abort
+  baseline_stats_path: configs/baseline_feature_stats.json
+  baseline_class_distribution: 2000,10,200,50,100
