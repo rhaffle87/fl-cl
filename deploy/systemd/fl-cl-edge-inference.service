@@ -8,6 +8,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/fl-cl
 Environment="PYTHONPATH=/opt/fl-cl"
+Environment="PYTHONUNBUFFERED=1"
 ExecStart=/usr/bin/python3 /opt/fl-cl/deploy/onnx/onnx_edge_daemon.py --flow-dir /mnt/ramdisk/flows
 Restart=always
 RestartSec=5

@@ -24,8 +24,8 @@ def main():
 
     # 3. Test Single Flow
     single_flow = np.random.randn(1, 32).astype(np.float32)
-    c_ids, confs, lat = classifier.classify_batch(single_flow)
-    print(f"[OK] Single-flow classification: Class {c_ids[0]} (Confidence: {confs[0]*100:.2f}%) in {lat*1000:.2f} us")
+    c_ids, confs, energies, lat = classifier.classify_batch(single_flow)
+    print(f"[OK] Single-flow classification: Class {c_ids[0]} (Confidence: {confs[0]*100:.2f}%, Energy: {energies[0]:.2f}) in {lat*1000:.2f} us")
 
     # 4. Benchmark Throughput
     run_edge_benchmark(num_flows=5000, batch_size=32)
