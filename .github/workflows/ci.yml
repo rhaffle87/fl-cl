@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.13"]
 
     steps:
       - name: Checkout Repository
@@ -24,16 +24,23 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
+          cache-dependency-path: |
+            requirements-aggregator.txt
+            requirements-defender.txt
 
       - name: Install Core Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install flwr avalanche-lib pyyaml pandas numpy scikit-learn onnx onnxruntime requests
+          pip install flwr avalanche-lib pyyaml pandas numpy scikit-learn onnx onnxruntime requests mlflow matplotlib
 
       - name: Run Master Codebase & Invariant Auditor (ADR-006)
         run: |
           python tools/audit_all.py
+          python tools/audit_facts_and_metrics.py
+          python tools/audit_tech_debt.py
+          python tools/check_infra_scripts.py
+          python .agents/skills/fl-cl-mlops-governance/scripts/audit_tool_compliance.py
 
       - name: Run Model Architecture Factory Verification
         run: |
@@ -51,6 +58,10 @@ jobs:
         run: |
           python tools/test_attack_gen.py
 
+      - name: Run Differential Privacy Budget Validator
+        run: |
+          python tools/validate_dp_budget.py --strict
+
       - name: Run Byzantine Robustness Benchmark Gate
         run: |
           python tools/benchmark_byzantine.py
@@ -62,3 +73,7 @@ jobs:
       - name: Run Free Energy Out-of-Distribution Gating Benchmark
         run: |
           python tools/benchmark_ood.py
+
+      - name: Run Dataset Intelligence Reports Summary
+        run: |
+          python .agents/skills/fl-cl-dataset-intelligence/scripts/profile_datasets.py --reports-only
