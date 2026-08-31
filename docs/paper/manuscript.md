@@ -4,7 +4,7 @@
 **Topic**: Undergraduate Thesis in Telecommunications Engineering  
 **Department**: Department of Electrical Engineering, Faculty of Intelligent Electrical and Informatics Technology (F-ELECTICS)  
 **Institution**: Institut Teknologi Sepuluh Nopember (ITS), Surabaya, East Java, Indonesia  
-**Repository**: [github.com/rhaffle87/fl-cl](file:///e:/Projects/fl-cl/README.md)  
+**Repository**: [github.com/rhaffle87/fl-cl](https://github.com/rhaffle87/fl-cl)  
 **Date**: August 17, 2026 
 
 ---
@@ -196,7 +196,7 @@ This paper established that standard EWC undergoes systematic Fisher diagonal co
 - **RAMDisk**: Volatile Linux tmpfs RAMDisk at `/mnt/ramdisk/flows/` for zero-I/O flow serialization.
 - **Software Stack**: Python 3.10+, PyTorch 2.x, Avalanche-Lib 0.5.x, Flower 1.x, MLflow 3.x, NFStream 6.5.x, ONNX Runtime 1.19+.
 - **Seeds**: Deterministic seed $S=42$ configured across backends.
-- **Repository**: [https://github.com/rhaffle87/fl-cl](file:///e:/Projects/fl-cl/README.md) under MIT License.
+- **Repository**: [https://github.com/rhaffle87/fl-cl](https://github.com/rhaffle87/fl-cl) under MIT License.
 
 ---
 

@@ -19,7 +19,7 @@ Factory function to dynamically instantiate neural network backbones.
 ---
 
 ### `CyberDefenseNet`
-* **File**: [model.py](file:///e:/Projects/fl-cl/src/defender/model.py#L22-L50)
+* **File**: [model.py](../src/defender/model.py#L22-L50)
 * **Description**: 3-layer Multi-Layer Perceptron (MLP) with dropout regularization.
 * **Constructor**:
  ```python
@@ -30,7 +30,7 @@ Factory function to dynamically instantiate neural network backbones.
 ---
 
 ### `CyberDefenseCNN`
-* **File**: [model.py](file:///e:/Projects/fl-cl/src/defender/model.py#L52-L108)
+* **File**: [model.py](../src/defender/model.py#L52-L108)
 * **Description**: 1D Convolutional Neural Network for temporal/spatial flow feature extraction.
 * **Constructor**:
  ```python
@@ -41,7 +41,7 @@ Factory function to dynamically instantiate neural network backbones.
 ---
 
 ### `CyberDefenseTransformer`
-* **File**: [model.py](file:///e:/Projects/fl-cl/src/defender/model.py#L110-L195)
+* **File**: [model.py](../src/defender/model.py#L110-L195)
 * **Description**: Transformer-based classifier treating flow features as token sequences.
 * **Constructor**:
  ```python
@@ -54,7 +54,7 @@ Factory function to dynamically instantiate neural network backbones.
 ## 2. Continual Learning Engine (`src/defender/cl_strategy.py`)
 
 ### `get_continual_learner(...)`
-* **File**: [cl_strategy.py](file:///e:/Projects/fl-cl/src/defender/cl_strategy.py#L30-L143)
+* **File**: [cl_strategy.py](../src/defender/cl_strategy.py#L30-L143)
 * **Description**: Instantiates an Avalanche CL strategy wrapper with custom gradient clipping and class-weighted loss.
 * **Signature**:
  ```python
@@ -78,7 +78,7 @@ Factory function to dynamically instantiate neural network backbones.
 ## 3. Flow Extraction Engine (`src/defender/extractor.py`)
 
 ### `extract_features(interface: str, out_dir: str, batch_size: int = 500)`
-* **File**: [extractor.py](file:///e:/Projects/fl-cl/src/defender/extractor.py#L25-L108)
+* **File**: [extractor.py](../src/defender/extractor.py#L25-L108)
 * **Description**: Captures mirrored packet streams via NFStream, extracts 18 flow metadata features, and writes batched CSVs directly to tmpfs RAMDisk.
 * **Extracted Schema**:
  * TLS Fingerprints: `ja3_hash`, `ja3s_hash`, `sni`, `application`
@@ -92,7 +92,7 @@ Factory function to dynamically instantiate neural network backbones.
 ## 4. Federated Aggregator Server (`src/aggregator/server.py`)
 
 ### `MLflowFedAvg`
-* **File**: [server.py](file:///e:/Projects/fl-cl/src/aggregator/server.py#L104-L350)
+* **File**: [server.py](../src/aggregator/server.py#L104-L350)
 * **Description**: Custom Flower `fl.server.strategy.FedAvg` extension with MLflow tracking, robust aggregation algorithms, and real-time Google Sheets webhook telemetry.
 * **Constructor**:
   ```python

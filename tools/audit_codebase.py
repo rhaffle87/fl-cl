@@ -133,18 +133,21 @@ info.append(f"Verified LABEL_NAMES mapping across {label_checks} files containin
 print("\n[5] Auditing CSV Reports in data/reports/...")
 report_csvs = list(repo_root.glob("data/reports/*.csv"))
 
-for rcsv in report_csvs:
-    try:
-        lines = rcsv.read_text(encoding="utf-8").strip().splitlines()
-        if not lines:
-            warnings.append(f"Empty report CSV: {rcsv.name}")
-        else:
-            header = lines[0].split(",")
-            num_cols = len(header)
-            row_count = len(lines) - 1
-            info.append(f"{rcsv.name}: {row_count} rows, {num_cols} columns ({', '.join(header[:3])}...)")
-    except Exception as e:
-        errors.append(f"Error reading report {rcsv.name}: {e}")
+if not report_csvs:
+    info.append("data/reports/ is empty or gitignored — skipping CSV report check in clean environment.")
+else:
+    for rcsv in report_csvs:
+        try:
+            lines = rcsv.read_text(encoding="utf-8").strip().splitlines()
+            if not lines:
+                warnings.append(f"Empty report CSV: {rcsv.name}")
+            else:
+                header = lines[0].split(",")
+                num_cols = len(header)
+                row_count = len(lines) - 1
+                info.append(f"{rcsv.name}: {row_count} rows, {num_cols} columns ({', '.join(header[:3])}...)")
+        except Exception as e:
+            errors.append(f"Error reading report {rcsv.name}: {e}")
 
 # -------------------------------------------------------------
 # 6. Check Tools Directory Standardization & Governance (ADR-006)
