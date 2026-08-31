@@ -110,6 +110,7 @@ notifications:
   telegram:
     enabled: true
     # bot_token and chat_id are loaded from environment variables (e.g. .env).
+  google_sheets_webhook: "" # Loaded from GSHEETS_WEBHOOK_URL in .env
 
 # ── Checkpointing ──────────────────────────────────────────
 checkpointing:

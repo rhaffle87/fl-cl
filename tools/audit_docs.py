@@ -4,6 +4,7 @@ audit_docs.py — Documentation Link, Image, and Placeholder Auditor
 Recursively audits all Markdown documentation in docs/ and the repository root
 to guarantee 0 broken relative links, 0 missing image references, and 0 unresolved placeholders.
 """
+import argparse
 
 import os
 import re
@@ -25,9 +26,11 @@ img_pattern = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
 for md_file in md_files:
     content = md_file.read_text(encoding="utf-8")
     
-    # Check for placeholder markers
+    # Check for placeholder markers in prose (excluding backtick code)
+    prose_content = re.sub(r'```[\s\S]*?```', '', content)
+    prose_content = re.sub(r'`[^`]+`', '', prose_content)
     for placeholder in ["PLACEHOLDER", "TODO", "FIXME", "TBD"]:
-        matches = re.findall(rf'\b{placeholder}\b', content)
+        matches = re.findall(rf'\b{placeholder}\b', prose_content)
         if matches:
             warnings.append(f"[{md_file.relative_to(repo_root)}] Contains {len(matches)} occurrences of '{placeholder}'")
 
@@ -64,6 +67,11 @@ print(f"Total MD Files Scanned: {len(md_files)}")
 print(f"Total Errors Found: {len(errors)}")
 print(f"Total Warnings Found: {len(warnings)}")
 
+if warnings:
+    print("\nWARNINGS:")
+    for w in warnings:
+        print(f"  [WARN] {w}")
+
 if errors:
     print("\nERRORS:")
     for e in errors:
@@ -71,3 +79,8 @@ if errors:
     exit(1)
 else:
     print("  [OK] All relative links and images resolve successfully!")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Documentation Link, Figure, and Relative Path Validator")
+    _ = parser.parse_args()

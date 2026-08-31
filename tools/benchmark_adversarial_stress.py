@@ -4,6 +4,7 @@ tools/benchmark_adversarial_stress.py — Live Adversarial Stress-Testing Suite:
 2. Deep Leakage from Gradients (DLG) Feature Inversion Attack vs DP-SGD
 3. Automated Telegram Status Notification
 """
+import argparse
 
 import os
 import sys
@@ -211,4 +212,6 @@ def main():
         print("[SUCCESS] Telegram adversarial defense alert broadcasted!")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Adversarial Flow Perturbation and Stress Benchmark")
+    _ = parser.parse_args()
     main()

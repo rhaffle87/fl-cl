@@ -14,7 +14,7 @@ This directory contains the formal architectural decision records for the `fl-cl
 | [ADR-004](file:///e:/Projects/fl-cl/docs/decisions/ADR-004_federated_aggregation.md) | Flower Federated Learning Architecture & Robust TrimmedMean Aggregation | **Accepted** | 2026-08-15 | `src/aggregator/server.py` |
 | [ADR-005](file:///e:/Projects/fl-cl/docs/decisions/ADR-005_model_promotion.md) | Automated CI/CD Model Promotion Gate, Backward Transfer Tracking, and INT8 Quantization | **Accepted** | 2026-08-15 | `tools/validate_promotion.py` |
 | [ADR-006](file:///e:/Projects/fl-cl/docs/decisions/ADR-006_tools_governance.md) | Tools Directory Standardization, Naming Taxonomy, and Governance | **Accepted** | 2026-08-25 | `tools/` |
-| [ADR-007](file:///e:/Projects/fl-cl/docs/decisions/ADR-007_attack_engine_alternatives.md) | Modular Dual-Engine Attack Generator Architecture (`--engine auto\|kali\|python`) | **Accepted** | 2026-08-27 | `src/traffic_gen/attack_flow.py` |
+| [ADR-007](file:///e:/Projects/fl-cl/docs/decisions/ADR-007_attack_engines.md) | Modular Dual-Engine Attack Generator Architecture (`--engine auto\|kali\|python`) | **Accepted** | 2026-08-27 | `src/traffic_gen/attack_flow.py` |
 
 ---
 

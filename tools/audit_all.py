@@ -9,6 +9,7 @@ and documentation link integrity verification suites in a single command:
 
 Returns exit code 0 if all tests pass, 1 if any error is detected.
 """
+import argparse
 
 import sys
 import subprocess
@@ -57,4 +58,6 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Unified Pre-Commit Quality & Fact-Checking Runner")
+    _ = parser.parse_args()
     main()

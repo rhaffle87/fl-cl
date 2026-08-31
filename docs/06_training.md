@@ -21,6 +21,9 @@ The training system is designed with **Secure-by-Design** principles. No static 
   TELEGRAM_BOT_TOKEN="your_bot_token"
   TELEGRAM_CHAT_ID="your_chat_id"
 
+  # Google Sheets Webhook Integration (Google Apps Script WebApp)
+  GSHEETS_WEBHOOK_URL="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
+
   # SSH private key path for orchestrator → remote node access
   SSH_KEY_PATH="C:\Users\YourUser\.ssh\id_ed25519"
 
@@ -123,6 +126,15 @@ On validation rounds, the CI/CD promotion engine evaluates candidate models agai
 - **On Promotion Success**: Promotes the challenger to `champion`, updates metadata notes, exports the model to TorchScript, and uploads to MLflow.
 - **LLM Threat Analysis**: Generates structural narrative summaries comparing the current run's metrics to historical averages via the local Ollama instance (`llama3.1:8b`).
 
+### 4. Real-Time Google Spreadsheet Webhook Telemetry
+
+The Flower server ([`src/aggregator/server.py`](../src/aggregator/server.py)) integrates directly with Google Sheets via a Google Apps Script WebApp endpoint ([`src/aggregator/google_sheets_webhook.js`](../src/aggregator/google_sheets_webhook.js)):
+
+- **Live Evaluation Rounds (`Live_Rounds` tab)**: Asynchronously logs round-by-round training loss, validation accuracy, macro F1, per-class F1 (Normal, Botnet, Exfil, BruteForce, DoS), active strategy, and dataset quality gate rejections without stalling training loops.
+- **Model Promotion Events (`Model_Promotions` tab)**: Automatically logs all MLOps governance gate decisions, recording version numbers, gate results (`PASSED` / `FAILED`), per-class scores, and promotion rationale.
+- **Configuring the Webhook**:
+  Pass `--sheets-webhook-url "https://script.google.com/macros/s/.../exec"` to `server.py` or set `GSHEETS_WEBHOOK_URL` in `.env`.
+
 ---
 
 ## 4. Troubleshooting & Cleanups
@@ -132,7 +144,7 @@ On validation rounds, the CI/CD promotion engine evaluates candidate models agai
 If a run was interrupted or crashed, stale python client processes or locked directories might remain on remote VMs. Run the testbed cleaner:
 
 ```bash
-python runs/clean_testbed.py --config configs/experiment.yaml
+python tools/deploy_clean_testbed.py --config configs/experiment.yaml
 ```
 
 This resets MLflow metrics databases, stops active Flower processes, and clears RAM disk directories on all remote hosts.
@@ -182,6 +194,21 @@ python tools/benchmark_cross_dataset.py \
 
 - **Covariate Shift Simulator:** If Dataset B is not provided or files are missing, the tool simulates the USTC-TFC2016 domain distribution by dynamically applying deterministic statistical shifts to Dataset A.
 - **Metadata Attribution:** Tags the run with dataset source identities (`train_dataset_id: "CIC-IDS2017"`, `eval_dataset_id: "USTC-TFC2016"`) and uploads comparison matrices to MLflow.
+
+### C. Google Sheets Bulk Benchmark Synchronizer
+
+Use `tools/sync_sheets_webhook.py` to synchronize all empirical benchmark CSV reports into individual, auto-formatted tabs in a Google Spreadsheet:
+
+```bash
+# Push all 13 CSV benchmark reports in data/reports/
+python tools/sync_sheets_webhook.py --sync-all
+
+# Test connectivity and push dummy round & promotion records
+python tools/sync_sheets_webhook.py --test
+
+# Sync a single CSV to a custom tab
+python tools/sync_sheets_webhook.py --file data/reports/byzantine_robustness_benchmark.csv --sheet "Byzantine Robustness"
+```
 
 ---
 

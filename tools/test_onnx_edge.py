@@ -1,6 +1,8 @@
 """
 tools/test_onnx_edge.py — Comprehensive validation of production ONNX export and edge daemon execution.
 """
+import argparse
+from pathlib import Path
 
 import os
 import sys
@@ -33,4 +35,6 @@ def main():
     print("\n[SUCCESS] Production ONNX Edge Gateway suite verified successfully!")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="ONNX Edge Model Forward Pass and Quantization Test Suite")
+    _ = parser.parse_args()
     main()

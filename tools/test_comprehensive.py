@@ -11,6 +11,8 @@ Performs offline integration tests validating:
 Usage:
     python3 tools/test_comprehensive.py
 """
+import argparse
+from pathlib import Path
 
 import os
 import sys
@@ -619,6 +621,8 @@ def test_alerts_module():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Comprehensive Test Suite for FL-CL Core Components")
+    _ = parser.parse_args()
     print("======================================================================")
     print("FCL TEST SUITE: COMPLETE PARAMETER & FEATURE COMPREHENSIVE VERIFICATION")
     print("======================================================================")

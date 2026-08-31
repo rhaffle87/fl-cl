@@ -55,9 +55,9 @@ fl-cl/
  configs/
  experiment.yaml # Central configuration file for hyperparameters & topology
 
- runs/
- clean_testbed.py # Wipes state and stops processes across testbed nodes
- setup_ssh_targets.py # Dynamically creates admin users with non-trivial passwords on targets
+ tools/
+ deploy_clean_testbed.py # Wipes state and stops processes across testbed nodes
+ deploy_setup_targets.py # Dynamically creates admin users with non-trivial passwords on targets
 
  src/
  aggregator/ # → FL Aggregator (LXC 300) 10.10.130.10

@@ -1,6 +1,8 @@
 """
 tools/generate_matrix_report_csv.py — Extract all 72 matrix combinations into a standardized benchmark CSV via SSH/MLflow.
 """
+import argparse
+from pathlib import Path
 
 import os
 import subprocess
@@ -78,4 +80,6 @@ print(df[avail_cols].to_csv(index=False))
     print(f"[SUCCESS] Exported {len(df_check)} matrix run records to {out_csv}")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="72-Combination Benchmark Matrix CSV Extractor")
+    _ = parser.parse_args()
     main()

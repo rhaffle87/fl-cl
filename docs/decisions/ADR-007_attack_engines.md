@@ -1,7 +1,7 @@
 # ADR-007: Dual-Engine Threat Generation Architecture (Kali Binaries vs. Native Python)
 
 ## Status
-**Accepted**
+Accepted
 
 ## Date
 2026-08-28

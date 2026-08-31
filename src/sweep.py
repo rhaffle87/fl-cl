@@ -1,3 +1,7 @@
+"""
+src/sweep.py — Multi-Run Hyperparameter Sweep & Grid Search Controller.
+"""
+
 import os
 import sys
 import yaml
@@ -6,6 +10,18 @@ import itertools
 import subprocess
 from datetime import datetime
 import mlflow
+
+try:
+    from logger import get_logger
+    _log = get_logger("sweep")
+except ImportError:
+    try:
+        from src.logger import get_logger
+        _log = get_logger("sweep")
+    except ImportError:
+        import logging
+        _log = logging.getLogger("sweep")
+
 
 def load_env(env_name: str = ".env"):
     """Load environment variables from a .env file searching upward from the script directory."""
@@ -65,7 +81,7 @@ def main():
             if os.path.exists(alt_path):
                 config_path = alt_path
             else:
-                print(f"[!] Error: Sweep config file not found at {args.config} or {config_path}")
+                _log.error(f"[!] Error: Sweep config file not found at {args.config} or {config_path}")
                 sys.exit(1)
 
     config = load_yaml(config_path)
@@ -80,15 +96,15 @@ def main():
     values_list = [parameters_dict[k] for k in keys]
     combinations = list(itertools.product(*values_list))
     
-    print(f"[*] Loaded sweep config from {config_path}")
-    print(f"[*] Sweep parameters: {list(keys)}")
-    print(f"[*] Total combinations to run: {len(combinations)}")
+    _log.info(f"[*] Loaded sweep config from {config_path}")
+    _log.info(f"[*] Sweep parameters: {list(keys)}")
+    _log.info(f"[*] Total combinations to run: {len(combinations)}")
     
     if args.dry_run:
-        print("\n=== Dry Run: Parameter Combinations ===")
+        _log.info("\n=== Dry Run: Parameter Combinations ===")
         for idx, combo in enumerate(combinations):
             param_map = dict(zip(keys, combo))
-            print(f"Run {idx + 1}/{len(combinations)}: {param_map}")
+            _log.info(f"Run {idx + 1}/{len(combinations)}: {param_map}")
         return
 
     # Set up MLflow
@@ -98,8 +114,8 @@ def main():
     try:
         mlflow.set_experiment(exp_name)
     except Exception as e:
-        print(f"[!] Warning: Could not set MLflow experiment to '{exp_name}': {e}")
-        print("[*] Proceeding without remote MLflow parent tracking.")
+        _log.error(f"[!] Warning: Could not set MLflow experiment to '{exp_name}': {e}")
+        _log.info("[*] Proceeding without remote MLflow parent tracking.")
 
     # Start parent run
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -109,27 +125,27 @@ def main():
     parent_run_id = args.parent_run_id or ""
     
     if parent_run_id:
-        print(f"[*] Resuming sweep under existing MLflow Parent Run ID: {parent_run_id}")
+        _log.info(f"[*] Resuming sweep under existing MLflow Parent Run ID: {parent_run_id}")
     else:
         try:
             parent_run = mlflow.start_run(run_name=parent_run_name, tags={"sweep_parent": "true"})
             parent_run_id = parent_run.info.run_id
-            print(f"[*] Started MLflow Parent Run: {parent_run_name} (ID: {parent_run_id})")
+            _log.info(f"[*] Started MLflow Parent Run: {parent_run_name} (ID: {parent_run_id})")
             # Log sweep metadata
             mlflow.log_params({f"sweep_space_{k.replace('.', '_')}": str(v) for k, v in parameters_dict.items()})
         except Exception as e:
-            print(f"[!] Warning: Failed to start parent MLflow run: {e}")
-            print("[*] Proceeding with child runs only.")
+            _log.error(f"[!] Warning: Failed to start parent MLflow run: {e}")
+            _log.info("[*] Proceeding with child runs only.")
 
     try:
         for idx, combo in enumerate(combinations):
             if (idx + 1) < args.start_index:
                 continue
             param_map = dict(zip(keys, combo))
-            print(f"\n==================================================")
-            print(f"[*] Executing Run {idx + 1}/{len(combinations)}")
-            print(f"[*] Parameters: {param_map}")
-            print(f"==================================================")
+            _log.info(f"\n==================================================")
+            _log.info(f"[*] Executing Run {idx + 1}/{len(combinations)}")
+            _log.info(f"[*] Parameters: {param_map}")
+            _log.info(f"==================================================")
             
             cmd = [sys.executable, "src/orchestrate.py", "--mlops-mode", "experimental", "--config", args.config]
             if args.key:
@@ -199,19 +215,19 @@ def main():
                 elif k in ("mlops.production_strategy", "production_strategy"):
                     cmd.extend(["--production-strategy", str(val)])
             
-            print(f"[*] Command: {' '.join(cmd)}")
+            _log.info(f"[*] Command: {' '.join(cmd)}")
             try:
                 # Run the orchestrator
                 subprocess.run(cmd, check=True)
-                print(f"[+] Run {idx + 1} completed successfully.")
+                _log.info(f"[+] Run {idx + 1} completed successfully.")
             except subprocess.CalledProcessError as e:
-                print(f"[!] Error: Run {idx + 1} failed with exit code {e.returncode}")
+                _log.error(f"[!] Error: Run {idx + 1} failed with exit code {e.returncode}")
                 # Continue with the next combination in grid search
                 continue
     finally:
         if parent_run:
             mlflow.end_run()
-            print(f"[*] Ended MLflow Parent Run: {parent_run_name}")
+            _log.info(f"[*] Ended MLflow Parent Run: {parent_run_name}")
 
 if __name__ == "__main__":
     main()

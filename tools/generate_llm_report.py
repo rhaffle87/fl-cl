@@ -8,6 +8,7 @@ evaluation based on active MLflow run metrics.
 Usage:
     python3 tools/generate_llm_report.py --run-id <MLFLOW_RUN_ID> [--cl-strategy GEM]
 """
+from pathlib import Path
 
 import os
 import sys

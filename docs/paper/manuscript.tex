@@ -98,7 +98,7 @@ The complete system topology and data flow pipeline are illustrated in Fig.~\ref
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig12_system_architecture.jpg}
+\includegraphics[width=\columnwidth]{fig12_system_architecture.png}
 \caption{FL-CL system architecture deployed on a 3-node Proxmox VE cluster. Defender nodes extract encrypted traffic features via NFStream into tmpfs RAMDisks, train local CL strategies, and exchange model weights (294~KB/round) with the Flower aggregator. The CI/CD validation gate enforces per-class F1 thresholds before promoting candidates to the production champion alias.}
 \label{fig:system_arch}
 \end{figure}
@@ -156,7 +156,7 @@ At each step, evaluating $T$ gradient inner products requires $\mathcal{O}(T \cd
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig13_cl_strategy_flow.jpg}
+\includegraphics[width=\columnwidth]{fig13_cl_strategy_flow.png}
 \caption{Continual learning strategy decision flow. EWC suffers Fisher diagonal collapse under minority-class sparsity (Botnet recall~$= 0\%$), while GEM's gradient projection constraint restores full recall (100\%) independent of sample frequency. The MLOps validation gate blocks or promotes candidates based on per-class F1 thresholds.}
 \label{fig:cl_flow}
 \end{figure}
@@ -402,14 +402,15 @@ As shown in the class F1 scorecard (Fig.~\ref{fig:class_f1}), the Real-World con
 \subsection{Comprehensive 72-Run Subsystem Matrix Sweep \& Multi-Objective Pareto Analysis}
 To evaluate the compound interactions between neural architecture capacity, continual learning memory mechanisms, Byzantine-robust federated aggregation, and differential privacy bounds, we conducted an exhaustive 72-configuration matrix sweep on the physical Proxmox VE testbed. Table~\ref{tab:matrix_sweep} summarizes the aggregated performance metrics across all evaluated dimensions.
 
-\begin{table}[t]
+
+\begin{table*}[t]
 \caption{Empirical Performance Summary of the 72-Run Subsystem Matrix Sweep on the Physical Proxmox VE Cluster}
 \label{tab:matrix_sweep}
 \centering
-\scriptsize
+\small
 \renewcommand{\arraystretch}{1.15}
-\setlength{\tabcolsep}{2.5pt}
-\begin{tabular}{@{}llcccc@{}}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}llcccc@{}}
 \toprule
 \textbf{Subsystem Dimension} & \textbf{Evaluated Variant} & \textbf{Mean Acc.} & \textbf{Peak Acc.} & \textbf{INT8 Size} & \textbf{Comm./Rnd} \\
 \midrule
@@ -433,8 +434,9 @@ To evaluate the compound interactions between neural architecture capacity, cont
  & \textbf{DP Disabled ($\sigma{=}0.00$)} & 91.62\% & 99.11\% & --- & --- \\
  & \textbf{DP Enabled ($\sigma{=}0.30$)} & \textbf{91.43\%} & \textbf{99.55\%} & --- & --- \\
 \bottomrule
-\end{tabular}
-\end{table}
+\end{tabular*}
+\end{table*}
+
 
 \begin{figure}[t]
 \centering
@@ -473,10 +475,10 @@ Table~\ref{tab:comparison_table} positions FL-CL relative to prior contributions
 \caption{Architectural and Methodological Comparison with Closely Related Federated and Continual Learning Intrusion Detection Frameworks}
 \label{tab:comparison_table}
 \centering
-\footnotesize
+\scriptsize
 \renewcommand{\arraystretch}{1.2}
 \setlength{\tabcolsep}{3pt}
-\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lccccccr@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lllllll@{}}
 \toprule
 \textbf{Framework} & \textbf{Target Domain} & \textbf{CL Strategy} & \textbf{Byzantine Defense} & \textbf{Testbed Type} & \textbf{Primary Metric / Focus} & \textbf{Inference Latency} \\
 \midrule

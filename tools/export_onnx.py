@@ -4,6 +4,7 @@ export_onnx.py — Export PyTorch Backbones to ONNX with Dynamic Batch Dimension
 Exports CyberDefenseCNN, CyberDefenseTransformer, and CyberDefenseNet to ONNX format
 and validates graph integrity and numerical parity.
 """
+import argparse
 
 import sys
 import os
@@ -83,4 +84,6 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="CyberDefenseNet / CNN ONNX Model Exporter and Numerical Parity Verifier")
+    _ = parser.parse_args()
     main()

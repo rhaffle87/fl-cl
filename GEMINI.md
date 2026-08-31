@@ -102,3 +102,23 @@ Verifies end-to-end training convergence on a synthetic/dummy 5-class traffic fl
 ```bash
 python tools/test_local_train.py
 ```
+
+---
+
+## 6. Agent Skills & Operational Automation
+
+The project includes specialized agent skills under `.agents/skills/` tailored for Proxmox cluster operations, MLOps governance, and Continual Learning diagnostics:
+
+1. **`fl-cl-experiment-runner`**: Experiment YAML config validation, hyperparameter sweep execution, and MLflow run tracing.
+   - Script: `python .agents/skills/fl-cl-experiment-runner/scripts/validate_config.py --config <config.yaml>`
+2. **`fl-cl-proxmox-ops`**: PVE bare-metal health checks, VM/LXC state auditing, Corosync quorum, and port-mirroring diagnostics.
+   - Script: `python .agents/skills/fl-cl-proxmox-ops/scripts/check_cluster_health.py`
+3. **`fl-cl-mlops-governance`**: ADR-006 compliance auditing (CLI standards, docstrings, logger migration, model card freshness).
+   - Script: `python .agents/skills/fl-cl-mlops-governance/scripts/audit_tool_compliance.py`
+4. **`fl-cl-continual-learning`**: EWC/GEM backward transfer ($BWT$), catastrophic forgetting verification, and stability checks.
+   - Script: `python .agents/skills/fl-cl-continual-learning/scripts/diagnose_forgetting.py`
+5. **`fl-cl-edge-inference-opt`**: Eager FP32 vs TorchScript JIT vs INT8 dynamic quantization latency profiling on CPU edge constraints.
+   - Script: `python .agents/skills/fl-cl-edge-inference-opt/scripts/profile_inference.py --model cnn`
+6. **`fl-cl-dataset-intelligence`**: Statistical profiling, schema mapping, cross-dataset generalization, and benchmark scorecard generation.
+   - Script: `python .agents/skills/fl-cl-dataset-intelligence/scripts/profile_datasets.py --all`
+

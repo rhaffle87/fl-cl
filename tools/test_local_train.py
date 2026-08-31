@@ -8,6 +8,8 @@ convergence and batch dimension safety without requiring live hardware.
 Usage:
     python3 tools/test_local_train.py
 """
+import argparse
+from pathlib import Path
 
 import os
 import sys
@@ -192,4 +194,6 @@ def run_test_training():
         print("\n[*] Cleaned up mock flow directory.")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Offline Synthetic Training Convergence Test Suite")
+    _ = parser.parse_args()
     run_test_training()

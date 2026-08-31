@@ -1,6 +1,8 @@
 """
 tools/deploy_test_live_inference.py — Verifies live real-time flow detection on physical Proxmox edge daemon.
 """
+import argparse
+from pathlib import Path
 
 import subprocess
 import time
@@ -34,4 +36,6 @@ def main():
     return 0
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Live Testbed Dual-Node Inference Dispatcher and Verifier")
+    _ = parser.parse_args()
     sys.exit(main())

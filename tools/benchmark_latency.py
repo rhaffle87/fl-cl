@@ -4,6 +4,8 @@ benchmark_latency.py — Automated Inference Latency & Quantization Benchmark To
 Measures FP32 TorchScript vs. INT8 dynamic quantization throughput (flows/sec and latency per 1,000 flows)
 across 1D-CNN, Transformer, and MLP backbones.
 """
+import argparse
+from pathlib import Path
 
 import os
 import sys
@@ -97,4 +99,6 @@ def run_quantization_benchmark():
     print("\n[+] Benchmark complete. Latency & Quantization report saved to:", OUTPUT_CSV)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="FP32 vs INT8 CPU Inference Latency and Throughput Profiler")
+    _ = parser.parse_args()
     run_quantization_benchmark()

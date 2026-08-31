@@ -3,6 +3,8 @@ tools/generate_matrix_publication_figures.py — Generate high-resolution 300-DP
 - Figure 6: Pareto Frontier (Accuracy vs Communication Overhead vs Quantized Size)
 - Figure 7: 6-Dimensional Subsystem Radar Comparison (1D-CNN vs MLP vs Transformer)
 """
+import argparse
+from pathlib import Path
 
 import os
 import numpy as np
@@ -138,4 +140,6 @@ def main():
     plot_subsystem_radar()
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Master Publication Figure Generator for 72-Run Matrix")
+    _ = parser.parse_args()
     main()

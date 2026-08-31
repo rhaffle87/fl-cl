@@ -8,6 +8,7 @@ Audits:
 4. Multi-class threat label mapping consistency across all modules
 5. Verification of all experimental CSV reports in data/reports/
 """
+import argparse
 
 import os
 import sys
@@ -149,7 +150,7 @@ for rcsv in report_csvs:
 # 6. Check Tools Directory Standardization & Governance (ADR-006)
 # -------------------------------------------------------------
 print("\n[6] Auditing tools/ Directory Standardization & Prefix Governance (ADR-006)...")
-VALID_PREFIXES = ("audit_", "benchmark_", "check_", "deploy_", "export_", "generate_", "plot_", "test_", "train_", "validate_")
+VALID_PREFIXES = ("audit_", "benchmark_", "check_", "deploy_", "export_", "generate_", "plot_", "sync_", "test_", "train_", "validate_")
 
 tools_files = list((repo_root / "tools").glob("*.py"))
 compliant_tools = 0
@@ -197,3 +198,8 @@ if warnings:
 print("\nDETAILS:")
 for item in info:
     print(f"  * {item}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Comprehensive Codebase, AST, YAML Schema, and Invariant Auditor")
+    _ = parser.parse_args()

@@ -8,6 +8,7 @@ Generates publication-quality PDF and SVG vector figures for the IEEE Transactio
 4. fig4_onnx_hardware_speedup (Throughput & Latency scaling across backbones)
 5. fig5_dp_privacy_utility (Differential Privacy trade-off curve)
 """
+import argparse
 
 import os
 from pathlib import Path
@@ -214,4 +215,6 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Master IEEE Figure Generator for FL-CL Paper")
+    _ = parser.parse_args()
     main()

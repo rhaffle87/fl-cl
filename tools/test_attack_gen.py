@@ -8,6 +8,8 @@ Verifies:
   3. Short-duration execution of all pure-Python attack dispatchers
   4. Labeling Oracle Vectorization Consistency (assign_labels_vectorized)
 """
+import argparse
+from pathlib import Path
 
 import os
 import sys
@@ -129,4 +131,6 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Unit Test Suite for Synthetic Attack Flow Generation")
+    _ = parser.parse_args()
     main()

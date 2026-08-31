@@ -20,6 +20,17 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 try:
+    from logger import get_logger
+    _log = get_logger("extractor")
+except ImportError:
+    try:
+        from src.logger import get_logger
+        _log = get_logger("extractor")
+    except ImportError:
+        import logging
+        _log = logging.getLogger("extractor")
+
+try:
     from nfstream import NFStreamer
 except ImportError:
     NFStreamer = None
@@ -100,6 +111,10 @@ def extract_features(interface: str, out_dir: str, batch_size: int = 500, stream
         out_dir:    Output directory for flow CSVs (should be on tmpfs)
         batch_size: Number of flows per output file
     """
+    if out_dir.startswith("/mnt/ramdisk") and sys.platform.startswith("linux"):
+        if os.path.exists("/mnt/ramdisk") and not os.path.ismount("/mnt/ramdisk"):
+            _log.warning("[extractor] WARNING: /mnt/ramdisk is not mounted as tmpfs! Potential disk I/O contention.")
+
     Path(out_dir).mkdir(parents=True, exist_ok=True)
 
     streamer = NFStreamer(
@@ -116,20 +131,20 @@ def extract_features(interface: str, out_dir: str, batch_size: int = 500, stream
     last_write_time = time.time()
 
     def handle_signal(signum, frame):
-        print(f"\n[extractor] Received signal {signum}. Flushing remaining {len(batch)} flows...")
+        _log.info(f"\n[extractor] Received signal {signum}. Flushing remaining {len(batch)} flows...")
         if batch:
             nonlocal batch_num
             batch_num += 1
             filename = os.path.join(out_dir, f"flows_{batch_num:06d}.csv")
             pd.DataFrame(batch).to_csv(filename, index=False)
-            print(f"[extractor] Wrote remaining flows → {filename}")
+            _log.info(f"[extractor] Wrote remaining flows → {filename}")
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
 
-    print(f"[extractor] Capturing on {interface} → {out_dir}")
-    print(f"[extractor] Batch size: {batch_size} flows per file (or max 5 seconds wait)")
+    _log.info(f"[extractor] Capturing on {interface} → {out_dir}")
+    _log.info(f"[extractor] Batch size: {batch_size} flows per file (or max 5 seconds wait)")
 
     for flow in streamer:
         features = {
@@ -164,7 +179,7 @@ def extract_features(interface: str, out_dir: str, batch_size: int = 500, stream
             batch_num += 1
             filename = os.path.join(out_dir, f"flows_{batch_num:06d}.csv")
             pd.DataFrame(batch).to_csv(filename, index=False)
-            print(f"[extractor] Wrote {len(batch)} flows → {filename}")
+            _log.info(f"[extractor] Wrote {len(batch)} flows → {filename}")
             batch = []
             last_write_time = current_time
 
@@ -173,7 +188,7 @@ def extract_features(interface: str, out_dir: str, batch_size: int = 500, stream
         batch_num += 1
         filename = os.path.join(out_dir, f"flows_{batch_num:06d}.csv")
         pd.DataFrame(batch).to_csv(filename, index=False)
-        print(f"[extractor] Wrote {len(batch)} flows → {filename}")
+        _log.info(f"[extractor] Wrote {len(batch)} flows → {filename}")
 
 
 def main():

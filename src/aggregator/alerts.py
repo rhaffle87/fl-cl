@@ -13,6 +13,18 @@ import urllib.request
 import urllib.parse
 from pathlib import Path
 
+try:
+    from logger import get_logger
+    _log = get_logger("alerts")
+except ImportError:
+    try:
+        from src.logger import get_logger
+        _log = get_logger("alerts")
+    except ImportError:
+        import logging
+        _log = logging.getLogger("alerts")
+
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
@@ -33,7 +45,7 @@ def load_env_file():
                 if k not in os.environ:
                     os.environ[k] = v
     except Exception as e:
-        print(f"[alerts] Warning: Failed to parse .env file: {e}")
+        _log.error(f"[alerts] Warning: Failed to parse .env file: {e}")
 
 
 # Load environment variables on import
@@ -76,7 +88,7 @@ def send_telegram_message(token: str, chat_id: str, text: str) -> bool:
         with urllib.request.urlopen(req, timeout=5) as response:
             return response.status == 200
     except Exception as e:
-        print(f"[alerts] Telegram dispatch error: {e}")
+        _log.error(f"[alerts] Telegram dispatch error: {e}")
         return False
 
 

@@ -131,9 +131,12 @@ These packages run inside VM 310 and VM 320.
 | :--- | :--- | :--- | :--- |
 | **MLflow** | Centralized experiment tracking (loss, accuracy, BWT, confusion matrices) | LXC 300 | 5000 |
 | **TensorBoard** | Weight distributions, gradient norms, activation statistics | VM 310, VM 320 | 6006 |
+| **Google Apps Script Webhook** | Zero-auth real-time round metrics streaming & benchmark table exporter | Google Cloud / Sheets | HTTPS (443) |
+| **Telegram Bot API** | Real-time incident dispatching and model promotion notifications | Telegram Cloud | HTTPS (443) |
 | **Ollama** | Local LLM inference engine for threat reports (`llama3.1:8b`) | LXC / Tailscale Node | 11435 |
 | **Nginx Reverse Proxy** | Dual-key authenticated endpoint proxying local Ollama APIs | Tailscale Node | 443 / 80 |
 | **Model Promotion Gate** | Automated CI/CD promotion evaluating recall, latency, and drift | `tools/validate_promotion.py` | Local / Remote |
+
 
 ---
 

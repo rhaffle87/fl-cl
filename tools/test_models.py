@@ -8,6 +8,8 @@ Transformer backbones.
 Usage:
     python3 tools/test_models.py
 """
+import argparse
+from pathlib import Path
 
 import sys
 import os
@@ -106,4 +108,6 @@ def test_architectures():
     print("\n[SUCCESS] All model architectures passed forward, scripting, quantization, and pruning tests!")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Neural Network Architecture Verification and JIT Compilation Suite")
+    _ = parser.parse_args()
     test_architectures()

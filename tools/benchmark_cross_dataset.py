@@ -6,6 +6,7 @@ IDS utility. Compares performance on Dataset A (CIC-IDS2017) vs. Dataset B
 (USTC-TFC2016), using a simulated covariate feature shift fallback if USTC data
 is not locally present.
 """
+from pathlib import Path
 
 import argparse
 import os

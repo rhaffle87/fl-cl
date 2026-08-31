@@ -947,7 +947,7 @@ This section addresses rigorous, implementation-level attacks questioning algori
 2. **Feature-Space Generalization**: NFStream extracts 32 statistical flow features (packet inter-arrival time distributions, directional byte ratios, durations, and TCP payload characteristics) rather than signature-matching raw packet payloads. Both Kali binary tools and Python socket loops produce the high-level temporal and volumetric cadence characteristic of real attacks.
 3. **Automated Discovery & Fallback**: The `--engine auto` mode dynamically leverages available system binaries on VM 400 (Kali Linux) while guaranteeing that local test suites and offline verification environments remain fully reproducible via pure Python dependencies.
 
-> **Code Reference**: [`src/traffic_gen/attack_flow.py`](../src/traffic_gen/attack_flow.py) | [ADR-007](decisions/ADR-007_attack_engine_alternatives.md) | [`infra/04_guest_setup/setup_traffic_gen.sh`](../infra/04_guest_setup/setup_traffic_gen.sh)
+> **Code Reference**: [`src/traffic_gen/attack_flow.py`](../src/traffic_gen/attack_flow.py) | [ADR-007](decisions/ADR-007_attack_engines.md) | [`infra/04_guest_setup/setup_traffic_gen.sh`](../infra/04_guest_setup/setup_traffic_gen.sh)
 
 ---
 

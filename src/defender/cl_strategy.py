@@ -17,6 +17,7 @@ The ewc_lambda parameter (default: 0.8) balances:
 Deploy on: Defender VMs (VM 310, VM 320)
 """
 
+import logging
 import numpy as np
 import torch
 from torch.optim import SGD
@@ -32,6 +33,16 @@ except ImportError:
         Naive = None
         GEM = None
         AGEM = None
+
+try:
+    from logger import get_logger
+    _log = get_logger("cl_strategy")
+except ImportError:
+    # Fallback when deployed standalone to a defender node without logger.py
+    _log = logging.getLogger("cl_strategy")
+    if not _log.handlers:
+        _log.addHandler(logging.StreamHandler())
+    _log.setLevel(logging.INFO)
 
 
 class StandaloneAGEM:
@@ -188,7 +199,7 @@ def get_continual_learner(
     strat = strategy_name.upper()
 
     if strat == "EWC":
-        print(f"[cl_strategy] Initializing EWC with lambda={ewc_lambda}")
+        _log.info("Initializing EWC with lambda=%s", ewc_lambda)
         return EWC(
             model=model,
             optimizer=optimizer,
@@ -200,7 +211,7 @@ def get_continual_learner(
             device=device,
         )
     elif strat == "GEM":
-        print(f"[cl_strategy] Initializing GEM with patterns={patterns_per_exp}, memory_strength={memory_strength}")
+        _log.info("Initializing GEM with patterns=%s, memory_strength=%s", patterns_per_exp, memory_strength)
         return GEM(
             model=model,
             optimizer=optimizer,
@@ -213,7 +224,7 @@ def get_continual_learner(
             device=device,
         )
     elif strat in ("AGEM", "A-GEM"):
-        print(f"[cl_strategy] Initializing A-GEM with patterns={patterns_per_exp}")
+        _log.info("Initializing A-GEM with patterns=%s", patterns_per_exp)
         if AGEM is not None:
             return AGEM(
                 model=model,
@@ -227,7 +238,7 @@ def get_continual_learner(
                 device=device,
             )
         else:
-            print("[cl_strategy] Avalanche AGEM not available; falling back to GEM with linear projection")
+            _log.warning("Avalanche AGEM not available; falling back to GEM with linear projection")
             return GEM(
                 model=model,
                 optimizer=optimizer,
@@ -240,7 +251,7 @@ def get_continual_learner(
                 device=device,
             )
     elif strat == "NAIVE":
-        print("[cl_strategy] Initializing Naive (baseline) strategy")
+        _log.info("Initializing Naive (baseline) strategy")
         return Naive(
             model=model,
             optimizer=optimizer,

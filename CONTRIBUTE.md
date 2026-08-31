@@ -9,7 +9,7 @@ Thank you for your interest in contributing to the Federated Continual Learning 
 - **Python Syntax Check**: Verify that all modified scripts compile without syntax errors:
 
   ```bash
-  python -m py_compile src/**/*.py runs/*.py tools/*.py
+  python -m py_compile src/**/*.py tools/*.py
   ```
 
 ## Development Workflow

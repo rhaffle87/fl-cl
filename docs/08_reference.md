@@ -93,21 +93,35 @@ Factory function to dynamically instantiate neural network backbones.
 
 ### `MLflowFedAvg`
 * **File**: [server.py](file:///e:/Projects/fl-cl/src/aggregator/server.py#L104-L350)
-* **Description**: Custom Flower `fl.server.strategy.FedAvg` extension with MLflow tracking and robust aggregation algorithms.
+* **Description**: Custom Flower `fl.server.strategy.FedAvg` extension with MLflow tracking, robust aggregation algorithms, and real-time Google Sheets webhook telemetry.
 * **Constructor**:
- ```python
- MLflowFedAvg(checkpoint_dir="/opt/mlflow-artifacts/checkpoints",
- export_torchscript=True, aggregation_strategy="FedAvg",
- trimmed_mean_beta=0.1, model_type="mlp", prune_fraction=0.2, **kwargs)
- ```
+  ```python
+  MLflowFedAvg(checkpoint_dir="/opt/mlflow-artifacts/checkpoints",
+               export_torchscript=True, aggregation_strategy="FedAvg",
+               trimmed_mean_beta=0.1, model_type="mlp", prune_fraction=0.2,
+               sheets_webhook_url="", **kwargs)
+  ```
 * **Supported Aggregation Strategies**:
- * `"FedAvg"`: Sample-weighted linear parameter averaging.
- * `"TrimmedMean"`: Coordinate-wise $\beta$-trimmed mean discarding upper/lower 10% outlier client parameters.
- * `"FedMedian"`: Coordinate-wise median aggregation.
- * `"Krum"`: Geometric distance-based single client selection.
+  * `"FedAvg"`: Sample-weighted linear parameter averaging.
+  * `"TrimmedMean"`: Coordinate-wise $\beta$-trimmed mean discarding upper/lower 10% outlier client parameters.
+  * `"FedMedian"`: Coordinate-wise median aggregation.
+  * `"Krum"`: Geometric distance-based single client selection.
 
 ### `weighted_avg(metrics: List[Tuple[int, Metrics]]) -> Metrics`
 Computes sample-weighted accuracy, per-class F1-scores, and 5x5 confusion matrix cells across all responding edge defenders.
+
+---
+
+## 4b. Google Sheets Telemetry Dispatcher (`src/aggregator/sheets_sync.py`)
+
+### `send_round_metric(webhook_url, server_round, loss, accuracy, metrics, strategy_name, model_type)`
+Dispatches single-round training and validation telemetry to the `Live_Rounds` Google Sheet tab asynchronously in a daemon thread.
+
+### `send_table_sync(webhook_url, sheet_name, headers, rows, clear_existing=True) -> bool`
+Synchronously exports an entire tabular dataset (benchmark report CSV) into a dedicated Google Sheet tab with formatted and frozen header rows.
+
+### `send_promotion_event(webhook_url, server_round, champion_model, per_class_f1, passed, reason)`
+Asynchronously logs candidate model promotion evaluations and MLOps governance decisions to the `Model_Promotions` Google Sheet tab.
 
 ---
 
@@ -153,6 +167,24 @@ Evaluates Byzantine resilience across `FedAvg`, `FedMedian`, `Krum`, and `Trimme
 
 ### `tools/benchmark_dp.py`
 Computes the Differential Privacy (DP-SGD) privacy-utility trade-off curve across noise multipliers $\sigma \in [0.0, 1.0]$ with formal $(\epsilon, \delta)$ accounting.
+
+### `tools/audit_tech_debt.py`
+Scans the repository for technical debt markers (`TODO`, `FIXME`, `HACK`, `XXX`, `BUG`, `ponytail:`) across source code, infrastructure, and tools using strict word-boundary matching, exporting a structured CSV ledger.
+
+### `tools/audit_dependencies.py`
+Audits installed and required PyPI packages, versions, deprecation warnings (e.g. `torchao`), and open-source license compatibility across testbed roles.
+
+### `tools/check_infra_scripts.py`
+Audits Bash scripts, Perl hookscripts, and systemd units in `infra/` for POSIX LF line endings, valid shebangs, and network interface idempotency.
+
+### `tools/validate_dp_budget.py`
+Mathematically verifies differential privacy bounds for client DP-SGD training using analytical Rényi Differential Privacy (RDP) moments accountant calculations.
+
+### `tools/sync_sheets_webhook.py`
+CLI tool to push and synchronize benchmark CSV files in `data/reports/` to Google Spreadsheet tabs via Google Apps Script WebApp endpoint:
+* `--sync-all`: Synchronizes all 13 CSV benchmark reports into separate tabs.
+* `--test`: Verifies endpoint reachability and sends test round and promotion events.
+* `--file <path> --sheet <name>`: Pushes an individual CSV report to a specific worksheet tab.
 
 ### `tools/test_attack_gen.py`
 Validates modular dual-engine attack generator functionality, tool fallback order, and RFC/MITRE compliance across all 5 threat categories.

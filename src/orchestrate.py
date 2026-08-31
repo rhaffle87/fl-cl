@@ -23,6 +23,17 @@ import time
 import sys
 import os
 
+try:
+    from logger import get_logger
+    _log = get_logger("orchestrate")
+except ImportError:
+    try:
+        from src.logger import get_logger
+        _log = get_logger("orchestrate")
+    except ImportError:
+        import logging
+        _log = logging.getLogger("orchestrate")
+
 def load_env(env_name: str = ".env"):
     """Load environment variables from a .env file searching upward from the script directory."""
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -61,7 +72,7 @@ def load_config(config_path: str) -> dict:
         import yaml
     except ImportError:
         # Fallback: basic YAML parsing for simple configs
-        print("[!] PyYAML not installed locally. Using default config values.")
+        _log.error("[!] PyYAML not installed locally. Using default config values.")
         return {}
 
     with open(config_path, "r") as f:
@@ -85,7 +96,7 @@ def validate_sanitized_inputs(
     mlops_mode, production_strategy, jsd_threshold, gate_action, baseline_class_dist,
     poison_client_ids, poison_rate, poison_from_class, poison_to_class,
     dp_noise_multiplier, dp_max_grad_norm, aggregation_strategy, trimmed_mean_beta,
-    model_type, prune_fraction, attack_engine,
+    model_type, prune_fraction, attack_engine, drift_retrain_threshold,
     aggregator_ip, def_a_ip, def_b_ip, target_a_ip, target_b_ip, traffic_gen_ip
 ):
     """
@@ -134,6 +145,7 @@ def validate_sanitized_inputs(
     assert production_strategy in ("resume", "fresh"), f"Invalid production_strategy: {production_strategy}"
     
     assert isinstance(jsd_threshold, (int, float)) and 0.0 <= jsd_threshold <= 1.0, f"Invalid jsd_threshold: {jsd_threshold}"
+    assert isinstance(drift_retrain_threshold, (int, float)) and 0.0 <= drift_retrain_threshold <= 1.0, f"Invalid drift_retrain_threshold: {drift_retrain_threshold}"
     
     gate_action = str(gate_action).lower()
     assert gate_action in ("abort", "quarantine", "alert"), f"Invalid gate_action: {gate_action}"
@@ -170,10 +182,10 @@ def safe_print(text):
     import sys
     try:
         enc = sys.stdout.encoding or "utf-8"
-        print(str(text).encode(enc, errors="replace").decode(enc))
+        _log.error(str(text).encode(enc, errors="replace").decode(enc))
     except Exception:
         try:
-            print(str(text).encode("ascii", errors="ignore").decode())
+            _log.error(str(text).encode("ascii", errors="ignore").decode())
         except Exception:
             pass
 
@@ -217,19 +229,19 @@ class RemoteNode:
                     log_name = f"{self.name}.log"
             full_command = f"nohup {command} > /tmp/{log_name} 2>&1 &"
             ssh_cmd = ["ssh", "-n"] + opts + [f"{self.username}@{self.ip}", full_command]
-            print(f"[{self.name}] Spawning background (logs -> /tmp/{log_name}): {command}")
+            _log.info(f"[{self.name}] Spawning background (logs -> /tmp/{log_name}): {command}")
             proc = subprocess.Popen(ssh_cmd)
             self.procs.append(proc)
             return proc
         else:
             ssh_cmd = ["ssh", "-n"] + opts + [f"{self.username}@{self.ip}", command]
-            print(f"[{self.name}] Running: {command}")
+            _log.info(f"[{self.name}] Running: {command}")
             return subprocess.run(ssh_cmd, capture_output=True, text=True, encoding="utf-8")
 
     def scp_file(self, local_path, remote_path):
         opts = self._get_ssh_opts()
         scp_cmd = ["scp"] + opts + [local_path, f"{self.username}@{self.ip}:{remote_path}"]
-        print(f"[{self.name}] Transferring {local_path} -> {remote_path}")
+        _log.info(f"[{self.name}] Transferring {local_path} -> {remote_path}")
         return subprocess.run(scp_cmd, capture_output=True, text=True, encoding="utf-8")
 
     def cleanup(self, kill_mlflow=False):
@@ -238,7 +250,7 @@ class RemoteNode:
         if kill_mlflow:
             pattern += "|mlflow"
         kill_cmd = f"pkill -f '{pattern}' || pkill -x nc || true"
-        print(f"[{self.name}] Cleaning up background processes...")
+        _log.info(f"[{self.name}] Cleaning up background processes...")
         ssh_cmd = ["ssh", "-n"] + opts + [f"{self.username}@{self.ip}", kill_cmd]
         subprocess.run(ssh_cmd, capture_output=True)
 
@@ -252,16 +264,16 @@ def run_data_quality_check(defender_node: RemoteNode, dos_threshold: float = 200
         output = result.stdout.strip()
         if not output:
             if result.stderr:
-                print(f"[{defender_node.name}] Command stderr:\n{result.stderr}")
+                _log.info(f"[{defender_node.name}] Command stderr:\n{result.stderr}")
             return {}
         # Parse the JSON string
         raw_counts = json.loads(output)
         # Convert keys to integers
         return {int(k): int(v) for k, v in raw_counts.items()}
     except Exception as e:
-        print(f"[{defender_node.name}] Failed to parse output: {e}")
-        print(f"[{defender_node.name}] stdout: {result.stdout}")
-        print(f"[{defender_node.name}] stderr: {result.stderr}")
+        _log.error(f"[{defender_node.name}] Failed to parse output: {e}")
+        _log.info(f"[{defender_node.name}] stdout: {result.stdout}")
+        _log.info(f"[{defender_node.name}] stderr: {result.stderr}")
         return {}
 
 
@@ -277,7 +289,7 @@ def get_dataset_hash(node: RemoteNode) -> str:
 
 def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name, rounds, lambda_ewc, cl_strategy="EWC", gem_patterns=256, gem_memory_strength=0.5):
     """Dynamically imports and executes the metrics plotter, generating a run summary report."""
-    print("\n=== Phase 8b: Generating Post-Training Plots and Reports ===")
+    _log.info("\n=== Phase 8b: Generating Post-Training Plots and Reports ===")
     try:
         import sys
         import os
@@ -300,8 +312,8 @@ def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name,
         plots_dir = os.path.join(run_dir, "plots")
         os.makedirs(plots_dir, exist_ok=True)
 
-        print(f"[*] Exporting results to folder: {run_dir}")
-        print("[*] Retrieving metrics and plotting convergence graphs...")
+        _log.info(f"[*] Exporting results to folder: {run_dir}")
+        _log.info("[*] Retrieving metrics and plotting convergence graphs...")
         results = run_plotting(
             key_path=key_path,
             aggregator_ip=aggregator_ip,
@@ -315,7 +327,7 @@ def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name,
 
         # Generate Markdown Summary Report inside the specific run directory
         summary_path = os.path.join(run_dir, "run_summary.md")
-        print(f"[*] Writing training run summary report to {summary_path}...")
+        _log.info(f"[*] Writing training run summary report to {summary_path}...")
 
         with open(summary_path, "w") as f:
             f.write(f"# FL-CL Experiment Run Summary: {experiment_name}\n\n")
@@ -346,11 +358,11 @@ def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name,
                 f.write(f"### {display_name} Convergence Plot\n")
                 f.write(f"![{display_name} Accuracy Plot](plots/{plot_file})\n\n")
 
-        print(f"[OK] Visual report generated successfully at {summary_path}")
+        _log.info(f"[OK] Visual report generated successfully at {summary_path}")
 
         # Call Local LLM Threat Analysis & MLflow Artifact Upload
         try:
-            print("\n=== Phase 8c: Querying Local LLM for Report Analysis & Artifact Upload ===")
+            _log.info("\n=== Phase 8c: Querying Local LLM for Report Analysis & Artifact Upload ===")
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             tools_dir = os.path.join(project_root, "tools")
             if tools_dir not in sys.path:
@@ -368,12 +380,12 @@ def run_post_training_plots_and_report(key_path, aggregator_ip, experiment_name,
                 gem_memory_strength=gem_memory_strength
             )
         except Exception as llm_err:
-            print(f"[!] Warning: Local LLM reporting or artifact upload failed: {llm_err}")
+            _log.error(f"[!] Warning: Local LLM reporting or artifact upload failed: {llm_err}")
 
     except ImportError as ie:
-        print(f"[!] Warning: Could not run automated plotting because dependencies are missing: {ie}")
+        _log.error(f"[!] Warning: Could not run automated plotting because dependencies are missing: {ie}")
     except Exception as e:
-        print(f"[!] Warning: Automated plotting failed: {e}")
+        _log.error(f"[!] Warning: Automated plotting failed: {e}")
 
 
 # ─── Main ────────────────────────────────────────────────────────────────────
@@ -416,6 +428,7 @@ def main():
     parser.add_argument("--model-type", default=None, choices=["mlp", "cnn", "transformer"], help="Model architecture type (overrides config)")
     parser.add_argument("--prune-fraction", type=float, default=None, help="Export-time prune fraction parameter (overrides config)")
     parser.add_argument("--attack-engine", default=None, choices=["auto", "kali", "python"], help="Attack generation engine: auto, kali, or python")
+    parser.add_argument("--drift-retrain-threshold", type=float, default=None, help="JSD threshold to trigger automatic retraining (overrides config, default: 0.75)")
     args = parser.parse_args()
 
     # Load config — CLI args override YAML values
@@ -427,18 +440,18 @@ def main():
         local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "configs/local_experiment.yaml")
         if os.path.exists(local_path):
             config_file = "configs/local_experiment.yaml"
-            print(f"[orchestrator] Using local configuration override: {config_file}")
+            _log.info(f"[orchestrator] Using local configuration override: {config_file}")
 
     config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", config_file)
     if os.path.exists(config_path):
         config = load_config(config_path)
-        print(f"[*] Loaded config: {config_path}")
+        _log.info(f"[*] Loaded config: {config_path}")
     elif os.path.exists(config_file):
         config = load_config(config_file)
         config_path = config_file
-        print(f"[*] Loaded config: {config_file}")
+        _log.info(f"[*] Loaded config: {config_file}")
     else:
-        print(f"[!] Config not found at {args.config}. Using CLI defaults.")
+        _log.error(f"[!] Config not found at {args.config}. Using CLI defaults.")
         config_path = None
 
     rounds = args.rounds or get_config_value(config, "fl", "rounds", default=10)
@@ -470,6 +483,7 @@ def main():
 
     # Theme C Configs
     jsd_threshold = get_config_value(config, "data_quality", "jsd_threshold", default=0.6)
+    drift_retrain_threshold = args.drift_retrain_threshold if args.drift_retrain_threshold is not None else get_config_value(config, "data_quality", "drift_retrain_threshold", default=0.75)
     gate_action = get_config_value(config, "data_quality", "gate_action", default="abort")
     baseline_stats_path = get_config_value(config, "data_quality", "baseline_stats_path", default="configs/baseline_feature_stats.json")
     baseline_class_dist = get_config_value(config, "data_quality", "baseline_class_distribution", default="2000,10,200,50,100")
@@ -533,7 +547,7 @@ def main():
         mlops_mode, production_strategy, jsd_threshold, gate_action, baseline_class_dist,
         poison_client_ids, poison_rate, poison_from_class, poison_to_class,
         dp_noise_multiplier, dp_max_grad_norm, aggregation_strategy, trimmed_mean_beta,
-        model_type, prune_fraction, attack_engine,
+        model_type, prune_fraction, attack_engine, drift_retrain_threshold,
         aggregator_ip, def_a_ip, def_b_ip, target_a_ip, target_b_ip, traffic_gen_ip
     )
 
@@ -547,10 +561,10 @@ def main():
 
     nodes = [aggregator, def_a, def_b, target_a, target_b, traffic_gen]
 
-    print(f"\n{'='*60}")
-    print(f"  FL-CL Orchestrator - {experiment_name}")
-    print(f"  Rounds: {rounds} | EWC lambda: {lambda_ewc} | Duration: {duration}s")
-    print(f"{'='*60}\n")
+    _log.info(f"\n{'='*60}")
+    _log.info(f"  FL-CL Orchestrator - {experiment_name}")
+    _log.info(f"  Rounds: {rounds} | EWC lambda: {lambda_ewc} | Duration: {duration}s")
+    _log.info(f"{'='*60}\n")
 
     start_time = time.time()
 
@@ -573,27 +587,28 @@ def main():
         git_commit=git_commit
     )
 
-    print("=== Phase 1: Cleaning up any old testbed processes ===")
+    _log.info("=== Phase 1: Cleaning up any old testbed processes ===")
     for node in nodes:
         if node.name == "fl-aggregator":
             res = node.run_cmd("systemctl is-active --quiet mlflow")
             if res.returncode == 0:
-                print("[fl-aggregator] MLflow systemd service is active. Skipping MLflow process cleanup.")
+                _log.info("[fl-aggregator] MLflow systemd service is active. Skipping MLflow process cleanup.")
                 node.cleanup(kill_mlflow=False)
             else:
                 node.cleanup(kill_mlflow=True)
         else:
             node.cleanup(kill_mlflow=True)
             if node.name in ["defender-a", "defender-b"]:
-                print(f"[{node.name}] Cleaning up ramdisk flows directory...")
+                _log.info(f"[{node.name}] Cleaning up ramdisk flows directory...")
                 node.run_cmd("find /mnt/ramdisk/flows/ -maxdepth 1 -type f -delete || rm -rf /mnt/ramdisk/flows/* || true")
 
     try:
-        print("\n=== Phase 2: Synchronizing source code to remote nodes ===")
+        _log.info("\n=== Phase 2: Synchronizing source code to remote nodes ===")
         # Aggregator files — model.py comes from defender/ (single source of truth)
         aggregator.scp_file("src/aggregator/server.py", "~/server.py")
         aggregator.scp_file("src/defender/model.py", "~/model.py")
         aggregator.scp_file("src/notifications.py", "~/notifications.py")
+        aggregator.scp_file("src/logger.py", "~/logger.py")
 
         # Send experiment config to aggregator for MLflow artifact logging
         if config_path and os.path.exists(config_path):
@@ -604,6 +619,7 @@ def main():
         def_a.scp_file("src/defender/cl_strategy.py", "~/cl_strategy.py")
         def_a.scp_file("src/defender/model.py", "~/model.py")
         def_a.scp_file("src/defender/extractor.py", "~/extractor.py")
+        def_a.scp_file("src/logger.py", "~/logger.py")
         def_a.scp_file("tools/check_dataset.py", "~/check_dataset.py")
         def_a.scp_file("tools/check_features.py", "~/check_features.py")
 
@@ -612,6 +628,7 @@ def main():
         def_b.scp_file("src/defender/cl_strategy.py", "~/cl_strategy.py")
         def_b.scp_file("src/defender/model.py", "~/model.py")
         def_b.scp_file("src/defender/extractor.py", "~/extractor.py")
+        def_b.scp_file("src/logger.py", "~/logger.py")
         def_b.scp_file("tools/check_dataset.py", "~/check_dataset.py")
         def_b.scp_file("tools/check_features.py", "~/check_features.py")
 
@@ -627,17 +644,17 @@ def main():
         target_a.scp_file("src/traffic_gen/simple_httpd.sh", "/tmp/simple_httpd.sh")
         target_b.scp_file("src/traffic_gen/simple_httpd.sh", "/tmp/simple_httpd.sh")
 
-        print("\n=== Phase 3: Launching Benign Target Servers (simple_httpd.sh) ===")
+        _log.info("\n=== Phase 3: Launching Benign Target Servers (simple_httpd.sh) ===")
         target_a.run_cmd("chmod +x /tmp/simple_httpd.sh && nohup /tmp/simple_httpd.sh >/dev/null 2>&1 &", background=True)
         target_b.run_cmd("chmod +x /tmp/simple_httpd.sh && nohup /tmp/simple_httpd.sh >/dev/null 2>&1 &", background=True)
 
-        print("\n=== Phase 3b: Generating Normal Traffic from Defender Nodes ===")
+        _log.info("\n=== Phase 3b: Generating Normal Traffic from Defender Nodes ===")
         # Defender IPs (10.10.130.11/12) are NOT the traffic_gen IP (10.10.140.10),
         # so assign_label() classifies these flows as class 0 (Normal).
         # Use background=True (nohup mode) so the loop fully detaches without blocking orchestration.
         target_a_ip = get_config_value(config, "topology", "target_a", default="10.10.110.15")
         target_b_ip = get_config_value(config, "topology", "target_b", default="10.10.120.15")
-        print(f"[*] Spawning Normal traffic from defender nodes (curl -> {target_a_ip}, {target_b_ip})...")
+        _log.info(f"[*] Spawning Normal traffic from defender nodes (curl -> {target_a_ip}, {target_b_ip})...")
         def_a.run_cmd(
             f"bash -c 'while true; do normal_traffic_loop=1; curl -s -o /dev/null http://{target_a_ip}/ http://{target_b_ip}/ --max-time 3 --connect-timeout 2; sleep 0.5; done'",
             background=True,
@@ -649,17 +666,17 @@ def main():
             log_name="normal-traffic-b.log"
         )
 
-        print("\n=== Phase 4: Launching NFStream Traffic Extractors ===")
-        def_a.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 500", background=True)
-        def_b.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 500", background=True)
+        _log.info("\n=== Phase 4: Launching NFStream Traffic Extractors ===")
+        def_a.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 50", background=True)
+        def_b.run_cmd("~/fl-cl-env/bin/python3 extractor.py --interface ens19 --out-dir /mnt/ramdisk/flows/ --batch-size 50", background=True)
 
-        print("\n=== Phase 5: Launching MLflow & Flower Server ===")
+        _log.info("\n=== Phase 5: Launching MLflow & Flower Server ===")
         # Check if mlflow systemd service is active
         res = aggregator.run_cmd("systemctl is-active --quiet mlflow")
         if res.returncode == 0:
-            print("[fl-aggregator] MLflow is already running persistently as a systemd service.")
+            _log.info("[fl-aggregator] MLflow is already running persistently as a systemd service.")
         else:
-            print("[fl-aggregator] MLflow systemd service not active. Launching ad-hoc background process...")
+            _log.info("[fl-aggregator] MLflow systemd service not active. Launching ad-hoc background process...")
             aggregator.run_cmd("/opt/flower-env/bin/mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --allowed-hosts '*' --cors-allowed-origins '*' --x-frame-options NONE --disable-security-middleware", background=True)
             time.sleep(3)
 
@@ -687,7 +704,7 @@ def main():
             background=True
         )
 
-        print("\n=== Phase 6: Starting Threat Simulation Stages ===")
+        _log.info("\n=== Phase 6: Starting Threat Simulation Stages ===")
         # target_a_ip and target_b_ip already defined in Phase 3b above
 
         # 1. Benign background traffic from traffic-gen (labeled DoS/port-80 by assign_label)
@@ -716,37 +733,37 @@ def main():
         traffic_gen.run_cmd(f"~/traffic-env/bin/python3 attack_flow.py --mode botnet --target {target_b_ip} --duration {duration} --engine {attack_engine}", background=True)
         time.sleep(duration * 2)  # Extended wait (2x) — Botnet beaconing generates extremely sparse flows (1-3 per window)
 
-        print("\n=== Phase 6b: Waiting for flow data to accumulate on ramdisk ===")
-        print("[*] Polling defender-a ramdisk until at least one CSV appears (timeout: 120s)...")
+        _log.info("\n=== Phase 6b: Waiting for flow data to accumulate on ramdisk ===")
+        _log.info("[*] Polling defender-a ramdisk until at least one CSV appears (timeout: 120s)...")
         ramdisk_ready = False
         for _ in range(24):
             check = def_a.run_cmd("find /mnt/ramdisk/flows/ -maxdepth 1 -name '*.csv' 2>/dev/null | wc -l")
             count = check.stdout.strip()
             if count and int(count) > 0:
-                print(f"[OK] Ramdisk ready - {count} CSV file(s) found on defender-a. Proceeding.")
+                _log.info(f"[OK] Ramdisk ready - {count} CSV file(s) found on defender-a. Proceeding.")
                 ramdisk_ready = True
                 break
-            print("[~] No flow CSVs yet. Waiting 5s...")
+            _log.info("[~] No flow CSVs yet. Waiting 5s...")
             time.sleep(5)
         if not ramdisk_ready:
-            print("[!] WARNING: Ramdisk still empty after 120s. Clients will train on empty data this round.")
+            _log.error("[!] WARNING: Ramdisk still empty after 120s. Clients will train on empty data this round.")
 
 
-        print("\n=== Phase 6d: Computing Dataset Checksums for Provenance Lineage ===")
+        _log.info("\n=== Phase 6d: Computing Dataset Checksums for Provenance Lineage ===")
         hash_a = get_dataset_hash(def_a)
         hash_b = get_dataset_hash(def_b)
         import hashlib
         combined_hash_input = f"a:{hash_a}|b:{hash_b}"
         dataset_hash = hashlib.sha256(combined_hash_input.encode('utf-8')).hexdigest()
-        print(f"[orchestrator] defender-a dataset hash: {hash_a}")
-        print(f"[orchestrator] defender-b dataset hash: {hash_b}")
-        print(f"[orchestrator] Combined dataset checksum: {dataset_hash}")
+        _log.info(f"[orchestrator] defender-a dataset hash: {hash_a}")
+        _log.info(f"[orchestrator] defender-b dataset hash: {hash_b}")
+        _log.info(f"[orchestrator] Combined dataset checksum: {dataset_hash}")
 
         # Get the active MLflow run ID from the aggregator
         run_id_res = aggregator.run_cmd("cat /tmp/current_run_id.txt 2>/dev/null")
         active_run_id = run_id_res.stdout.strip()
         if active_run_id:
-            print(f"[orchestrator] Active MLflow run ID: {active_run_id}")
+            _log.info(f"[orchestrator] Active MLflow run ID: {active_run_id}")
             local_script_path = "log_dataset_temp.py"
             with open(local_script_path, "w") as sf:
                 sf.write(f"""import mlflow, json
@@ -770,12 +787,12 @@ def main():
                 os.remove(local_script_path)
             except Exception:
                 pass
-            print("[orchestrator] Registered dataset checksums & logged lineage artifact to MLflow run.")
+            _log.info("[orchestrator] Registered dataset checksums & logged lineage artifact to MLflow run.")
         else:
-            print("[orchestrator] Warning: Could not retrieve active MLflow run ID. Skipping logging dataset hashes.")
+            _log.warning("[orchestrator] Warning: Could not retrieve active MLflow run ID. Skipping logging dataset hashes.")
 
 
-        print("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
+        _log.info("\n=== Phase 7: Launching Flower Clients on Defender Nodes ===")
         # Security arguments logic for client A
         client_a_sec_args = ""
         if poison_enabled and "A" in poison_client_ids:
@@ -794,31 +811,31 @@ def main():
         def_b.run_cmd(f"~/fl-cl-env/bin/python3 client.py --server 10.10.130.10:8080 --client-id B --cl-strategy '{cl_strategy}' --ewc-lambda {lambda_ewc} --gem-patterns {gem_patterns} --gem-memory-strength {gem_memory_strength} --class-weights {weights_str} --lr {lr} --momentum {momentum} --dos-threshold-ms {dos_threshold} --batch-size {batch_size} --baseline '{baseline_class_dist}' --js-threshold {jsd_threshold}{client_b_sec_args} --model-type {model_type}", background=True)
 
         stopped_early = False
-        print("\n=== Phase 8: Monitoring Training Loop Convergence ===")
-        print("[*] Waiting for Flower server rounds to complete. Press Ctrl+C to terminate gracefully early.")
+        _log.info("\n=== Phase 8: Monitoring Training Loop Convergence ===")
+        _log.info("[*] Waiting for Flower server rounds to complete. Press Ctrl+C to terminate gracefully early.")
         start_wait = time.time()
         timeout = max(600, rounds * 25)
-        print(f"[*] Monitoring loop active. Max timeout set to {timeout}s ({timeout/60:.1f} minutes).")
+        _log.info(f"[*] Monitoring loop active. Max timeout set to {timeout}s ({timeout/60:.1f} minutes).")
         try:
             while time.time() - start_wait < timeout:
                 status = aggregator.run_cmd("pgrep -f '[s]erver.py'")
                 if not status.stdout.strip():
-                    print("[OK] Flower server has completed its rounds.")
+                    _log.info("[OK] Flower server has completed its rounds.")
                     break
                 time.sleep(5)
                 sys.stdout.write(".")
                 sys.stdout.flush()
         except KeyboardInterrupt:
-            print("\n[!] Ctrl+C detected. Gracefully stopping training early...")
+            _log.error("\n[!] Ctrl+C detected. Gracefully stopping training early...")
             stopped_early = True
             # Terminate clients first so they stop attempting to communicate
-            print("[*] Stopping Flower clients...")
+            _log.info("[*] Stopping Flower clients...")
             for client_node in [def_a, def_b]:
                 client_node.run_cmd("pkill -f 'client.py'")
             # Terminate server.py with SIGTERM to trigger its SystemExit cleanup logic
-            print("[*] Stopping Flower server...")
+            _log.info("[*] Stopping Flower server...")
             aggregator.run_cmd("pkill -f 'server.py'")
-            print("[*] Waiting 5 seconds for server to finalize metrics and checkpoints...")
+            _log.info("[*] Waiting 5 seconds for server to finalize metrics and checkpoints...")
             time.sleep(5)
 
         elapsed_min = (time.time() - start_time) / 60.0
@@ -843,11 +860,11 @@ def main():
                 class_accuracies = {int(k): float(v) for k, v in raw_classes.items()}
                 run_id = metrics_data.get("run_id")
                 experiment_id = metrics_data.get("experiment_id")
-                print(f"\n[aggregator] Training summary fetched successfully:")
-                print(f"  Final Accuracy: {accuracy*100:.2f}% | Final Loss: {loss:.4f}")
-                print(f"  Best Loss: {metrics_data.get('best_loss', 0.0):.4f} at round {metrics_data.get('best_round', 0)}")
+                _log.info(f"\n[aggregator] Training summary fetched successfully:")
+                _log.info(f"  Final Accuracy: {accuracy*100:.2f}% | Final Loss: {loss:.4f}")
+                _log.info(f"  Best Loss: {metrics_data.get('best_loss', 0.0):.4f} at round {metrics_data.get('best_round', 0)}")
             except Exception as e:
-                print(f"\n[!] Failed to parse training metrics JSON: {e}")
+                _log.error(f"\n[!] Failed to parse training metrics JSON: {e}")
 
         # Notify completion
         exp_name_modified = f"{experiment_name} (Stopped Early)" if stopped_early else experiment_name
@@ -874,35 +891,78 @@ def main():
             gem_memory_strength=gem_memory_strength
         )
 
+        # Automatic Retraining Trigger based on Drift Threshold (Gap 2)
+        _log.info("\n=== Phase 8c-2: Checking Drift Retraining Gates ===")
+        try:
+            drift_retrain_triggered = False
+            # Check if any client had JSD exceeding the automatic retraining threshold
+            for client_node, cid in [(def_a, "A"), (def_b, "B")]:
+                check_cmd = f"cat /tmp/client_{cid}_latest_jsd.txt 2>/dev/null"
+                jsd_check = client_node.run_cmd(check_cmd)
+                jsd_str = jsd_check.stdout.strip()
+                if jsd_str:
+                    try:
+                        measured_jsd = float(jsd_str)
+                        if measured_jsd > drift_retrain_threshold:
+                            _log.info(f"[orchestrator] Client {cid} drift JSD={measured_jsd:.4f} exceeded retrain threshold {drift_retrain_threshold:.4f}!")
+                            _log.info(f"[orchestrator] Triggering 1-shot local realignment training pass on defender-{cid.lower()}...")
+                            client_node.run_cmd(
+                                f"~/fl-cl-env/bin/python3 client.py --client-id {cid} --cl-strategy '{cl_strategy}' "
+                                f"--ewc-lambda {lambda_ewc} --lr {lr * 0.5} --batch-size {batch_size} "
+                                f"--baseline '{baseline_class_dist}' --js-threshold 1.0 --model-type {model_type}",
+                                background=False
+                            )
+                            drift_retrain_triggered = True
+                    except ValueError:
+                        pass
+
+            if active_run_id and drift_retrain_triggered:
+                log_retrain_script = f"""import mlflow
+mlflow.set_tracking_uri('http://localhost:5000')
+client = mlflow.tracking.MlflowClient()
+client.log_param('{active_run_id}', 'drift_retrain_triggered', 'True')
+"""
+                with open("log_retrain_temp.py", "w") as rf:
+                    rf.write(log_retrain_script)
+                aggregator.scp_file("log_retrain_temp.py", "~/log_retrain.py")
+                aggregator.run_cmd("/opt/flower-env/bin/python3 ~/log_retrain.py")
+                try:
+                    os.remove("log_retrain_temp.py")
+                except Exception:
+                    pass
+                _log.info("[orchestrator] Logged drift_retrain_triggered=True parameter to MLflow.")
+        except Exception as drift_err:
+            _log.error(f"[orchestrator] Warning: Drift retraining check failed: {drift_err}")
+
         # Trigger automated promotion gate validation
-        print("\n=== Phase 8d: Launching Model Validation and Promotion Gate ===")
+        _log.info("\n=== Phase 8d: Launching Model Validation and Promotion Gate ===")
         try:
             promote_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tools", "validate_promotion.py"))
             # Execute tools/validate_promotion.py locally
             res = subprocess.run([sys.executable, promote_script], capture_output=True, text=True, encoding="utf-8")
             safe_print(res.stdout)
             if res.stderr:
-                print("[!] Promotion Gate stderr:")
+                _log.error("[!] Promotion Gate stderr:")
                 safe_print(res.stderr)
         except Exception as e:
-            print(f"[!] Warning: Automated promotion gate execution failed: {e}")
+            _log.error(f"[!] Warning: Automated promotion gate execution failed: {e}")
 
     except KeyboardInterrupt:
-        print("\n[!] User interrupted the execution. Starting cleanup.")
+        _log.error("\n[!] User interrupted the execution. Starting cleanup.")
         elapsed_min = (time.time() - start_time) / 60.0
         notifier.notify_failure(experiment_name, "User interrupted (KeyboardInterrupt)", duration_min=elapsed_min)
     except Exception as e:
-        print(f"\n[!] Orchestration error: {e}")
+        _log.error(f"\n[!] Orchestration error: {e}")
         elapsed_min = (time.time() - start_time) / 60.0
         notifier.notify_failure(experiment_name, str(e), duration_min=elapsed_min)
     finally:
-        print("\n=== Phase 9: Cleaning up remote background processes ===")
+        _log.info("\n=== Phase 9: Cleaning up remote background processes ===")
         for node in nodes:
             node.cleanup(kill_mlflow=False)
 
         elapsed_min = (time.time() - start_time) / 60.0
-        print(f"\n[OK] Orchestration workflow finished in {elapsed_min:.1f} minutes.")
-        print("Check MLflow dashboard at http://10.10.130.10:5000 to verify continual learning metrics.")
+        _log.info(f"\n[OK] Orchestration workflow finished in {elapsed_min:.1f} minutes.")
+        _log.info("Check MLflow dashboard at http://10.10.130.10:5000 to verify continual learning metrics.")
 
 
 if __name__ == "__main__":

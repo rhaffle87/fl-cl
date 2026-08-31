@@ -22,6 +22,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import subprocess
 import json
@@ -39,6 +40,27 @@ import numpy as np
 from model import get_model
 from notifications import TelegramNotifier
 
+_log = logging.getLogger("server")
+if not _log.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("[%(name)s] %(levelname)s: %(message)s"))
+    _log.addHandler(_handler)
+_log.setLevel(getattr(logging, os.environ.get("FL_LOG_LEVEL", "INFO").upper(), logging.INFO))
+_log.propagate = False
+
+# Gap 3 — Prometheus push gateway (soft dependency)
+try:
+    from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
+    _PROM_REGISTRY = CollectorRegistry()
+    _PROM_LOSS    = Gauge("fl_round_loss",       "Aggregated FL round loss",        registry=_PROM_REGISTRY)
+    _PROM_ACC     = Gauge("fl_round_accuracy",   "Aggregated FL round accuracy",    registry=_PROM_REGISTRY)
+    _PROM_F1      = Gauge("fl_round_macro_f1",   "Aggregated FL round macro-F1",    registry=_PROM_REGISTRY)
+    _PROM_REJECT  = Gauge("fl_round_rejections", "Datasets rejected this round",    registry=_PROM_REGISTRY)
+    _PROM_AVAILABLE = True
+except ImportError:
+    _PROM_AVAILABLE = False
+    _log.debug("prometheus_client not installed — Prometheus push gateway disabled.")
+
 try:
     from alerts import send_byzantine_alert, send_drift_alert
 except ImportError:
@@ -47,6 +69,15 @@ except ImportError:
     except ImportError:
         send_byzantine_alert = lambda *args, **kwargs: False
         send_drift_alert = lambda *args, **kwargs: False
+
+try:
+    from sheets_sync import send_round_metric, send_promotion_event
+except ImportError:
+    try:
+        from src.aggregator.sheets_sync import send_round_metric, send_promotion_event
+    except ImportError:
+        send_round_metric = lambda *args, **kwargs: None
+        send_promotion_event = lambda *args, **kwargs: None
 
 
 
@@ -117,7 +148,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
     def __init__(self, checkpoint_dir: str = "/opt/mlflow-artifacts/checkpoints",
                  export_torchscript: bool = True, aggregation_strategy: str = "FedAvg",
                  trimmed_mean_beta: float = 0.1, model_type: str = "mlp",
-                 prune_fraction: float = 0.2, **kwargs):
+                 prune_fraction: float = 0.2, sheets_webhook_url: str = "", **kwargs):
         super().__init__(**kwargs)
         self.checkpoint_dir = checkpoint_dir
         self.export_torchscript = export_torchscript
@@ -125,6 +156,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
         self.trimmed_mean_beta = trimmed_mean_beta
         self.model_type = model_type
         self.prune_fraction = prune_fraction
+        self.sheets_webhook_url = sheets_webhook_url
         self.best_loss = float("inf")
         self.best_round = 0
         self.best_accuracy = 0.0
@@ -147,7 +179,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
             os.makedirs(self.checkpoint_dir, mode=0o700, exist_ok=True)
             os.chmod(self.checkpoint_dir, 0o700)
         except Exception as e:
-            print(f"[server] Warning: Could not enforce directory permissions on {self.checkpoint_dir}: {e}")
+            _log.warning("Could not enforce directory permissions on %s: %s", self.checkpoint_dir, e)
 
     @mlflow.trace(name="aggregate_evaluate")
     def aggregate_evaluate(self, server_round, results, failures):
@@ -159,7 +191,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
             self.latest_accuracy = accuracy
             self.latest_metrics = metrics
 
-            print(f"[server] Round {server_round} Aggregated Loss: {loss:.4f} | Accuracy: {accuracy:.4f}")
+            _log.info("Round %d | Loss: %.4f | Accuracy: %.4f", server_round, loss, accuracy)
             mlflow.log_metric("loss", loss, step=server_round)
             for k, v in metrics.items():
                 mlflow.log_metric(k, v, step=server_round)
@@ -243,10 +275,10 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                     
                     # Log to MLflow
                     mlflow.log_figure(fig, f"confusion_matrices/confusion_round_{server_round}.png")
-                    print(f"[server] Successfully generated and logged confusion matrix for round {server_round} to {cm_path}")
+                    _log.info("Confusion matrix logged for round %d to %s", server_round, cm_path)
                     plt.close(fig)
                 except Exception as cm_err:
-                    print(f"[server] Warning: Failed to generate/log confusion matrix heatmap: {cm_err}")
+                    _log.warning("Failed to generate/log confusion matrix heatmap: %s", cm_err)
 
             # Record round details for history table
             record = {
@@ -269,9 +301,41 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                 self.best_metrics = metrics.copy()
                 mlflow.log_metric("best_loss", loss, step=server_round)
                 mlflow.log_metric("best_round", server_round, step=server_round)
-                print(f"[server] New best model at round {server_round} (loss={loss:.4f})")
+                _log.info("New best model at round %d (loss=%.4f)", server_round, loss)
+
+            # Dispatch live metrics to Google Sheets if webhook URL configured
+            if hasattr(self, "sheets_webhook_url") and self.sheets_webhook_url:
+                send_round_metric(
+                    webhook_url=self.sheets_webhook_url,
+                    server_round=server_round,
+                    loss=loss,
+                    accuracy=accuracy,
+                    metrics=metrics,
+                    strategy_name=self.aggregation_strategy,
+                    model_type=self.model_type,
+                )
 
         return aggregated_result
+
+    def _push_prometheus_metrics(self, server_round: int, loss: float, accuracy: float,
+                                  macro_f1: float, rejections: int) -> None:
+        """Push per-round gauges to Prometheus Pushgateway (soft, non-blocking)."""
+        if not _PROM_AVAILABLE:
+            return
+        try:
+            _PROM_LOSS.set(loss)
+            _PROM_ACC.set(accuracy)
+            _PROM_F1.set(macro_f1)
+            _PROM_REJECT.set(rejections)
+            push_to_gateway(
+                os.environ.get("PUSHGATEWAY_URL", "localhost:9091"),
+                job="fl_server",
+                grouping_key={"round": str(server_round)},
+                registry=_PROM_REGISTRY,
+            )
+            _log.debug("Prometheus push OK (round %d)", server_round)
+        except Exception as prom_err:
+            _log.debug("Prometheus push skipped: %s", prom_err)
 
     @mlflow.trace(name="aggregate_fit")
     def aggregate_fit(self, server_round, results, failures):
@@ -279,11 +343,13 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
         if not results:
             return None
 
-        # Extract weights and number of samples
-        weights_results = [
-            (fl.common.parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples)
-            for _, fit_res in results
-        ]
+        # Extract weights and number of samples with strict float32 dtype validation
+        weights_results = []
+        for _, fit_res in results:
+            ndarrays = fl.common.parameters_to_ndarrays(fit_res.parameters)
+            assert all(w.dtype in (np.float32, np.int64, np.float64) for w in ndarrays), "Client parameter arrays must have valid numeric dtypes"
+            ndarrays_fp32 = [w.astype(np.float32) if np.issubdtype(w.dtype, np.floating) else w for w in ndarrays]
+            weights_results.append((ndarrays_fp32, fit_res.num_examples))
 
         # Robust Aggregation Logic (E3)
         if self.aggregation_strategy == "FedMedian":
@@ -294,7 +360,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                 stacked = np.stack([w[layer_idx] for w in weights_list], axis=0)
                 ndarrays.append(np.median(stacked, axis=0))
             aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
-            print(f"[server] Aggregated fit via FedMedian strategy")
+            _log.info(f"[server] Aggregated fit via FedMedian strategy")
         elif self.aggregation_strategy == "TrimmedMean":
             # Coordinate-wise trimmed mean
             weights_list = [w for w, _ in weights_results]
@@ -307,7 +373,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                     stacked = np.stack([w[layer_idx] for w in weights_list], axis=0)
                     ndarrays.append(np.median(stacked, axis=0))
                 aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
-                print(f"[server] Aggregated fit via TrimmedMean (small N={n} topology, adaptive FedMedian for outlier isolation)")
+                _log.info(f"[server] Aggregated fit via TrimmedMean (small N={n} topology, adaptive FedMedian for outlier isolation)")
             else:
                 ndarrays = []
                 for layer_idx in range(len(weights_list[0])):
@@ -319,7 +385,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                         trimmed = sorted_stacked
                     ndarrays.append(np.mean(trimmed, axis=0))
                 aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
-                print(f"[server] Aggregated fit via TrimmedMean strategy (beta={self.trimmed_mean_beta}, trimmed {k} outlier clients)")
+                _log.info(f"[server] Aggregated fit via TrimmedMean strategy (beta={self.trimmed_mean_beta}, trimmed {k} outlier clients)")
         elif self.aggregation_strategy == "Krum":
             # Krum selection
             weights_list = [w for w, _ in weights_results]
@@ -344,7 +410,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
             best_idx = int(np.argmin(scores))
             ndarrays = weights_list[best_idx]
             aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
-            print(f"[server] Aggregated fit via Krum strategy: Selected client index {best_idx} with score {scores[best_idx]:.6f}")
+            _log.info(f"[server] Aggregated fit via Krum strategy: Selected client index {best_idx} with score {scores[best_idx]:.6f}")
         elif self.aggregation_strategy == "MultiKrum":
             # Multi-Krum selection & averaging
             weights_list = [w for w, _ in weights_results]
@@ -373,7 +439,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                 stacked = np.stack([w[layer_idx] for w in selected_weights], axis=0)
                 ndarrays.append(np.mean(stacked, axis=0))
             aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
-            print(f"[server] Aggregated fit via MultiKrum strategy: Selected {m} clients {top_m_indices.tolist()}")
+            _log.info(f"[server] Aggregated fit via MultiKrum strategy: Selected {m} clients {top_m_indices.tolist()}")
         elif self.aggregation_strategy == "Bulyan":
             # Bulyan (Multi-Krum + Coordinate-wise TrimmedMean)
             weights_list = [w for w, _ in weights_results]
@@ -409,7 +475,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                     trimmed = sorted_stacked
                 ndarrays.append(np.mean(trimmed, axis=0))
             aggregated = (fl.common.ndarrays_to_parameters(ndarrays), {})
-            print(f"[server] Aggregated fit via Bulyan strategy: Selected {theta} clients {selected_indices.tolist()} with trimmed mean")
+            _log.info(f"[server] Aggregated fit via Bulyan strategy: Selected {theta} clients {selected_indices.tolist()} with trimmed mean")
         else:
             # Default to standard FedAvg (weighted average)
             aggregated = super().aggregate_fit(server_round, results, failures)
@@ -435,7 +501,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                 mlflow.log_metric(f"client_{client_id}_dataset_jsd", dataset_jsd, step=server_round)
                 if dataset_rejected > 0.0:
                     total_rejections += 1
-                    print(f"[server] WARNING: Client {client_id} dataset rejected due to data quality gate violation! (JSD: {dataset_jsd:.4f})")
+                    _log.warning("Client %s dataset rejected (JSD: %.4f)", client_id, dataset_jsd)
                     try:
                         send_drift_alert(client_id, server_round, dataset_jsd)
                     except Exception:
@@ -454,7 +520,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
 
                 metric_name = f"client_{client_id}_weight_drift"
                 mlflow.log_metric(metric_name, drift, step=server_round)
-                print(f"[server] Client {client_id} weight drift at round {server_round}: {drift:.6f}")
+                _log.info("Client %s weight drift at round %d: %.6f", client_id, server_round, drift)
 
                 if not hasattr(self, 'drift_history'):
                     self.drift_history = {}
@@ -485,7 +551,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                 if is_anomaly:
                     warning_tag_key = f"warning_round_{server_round}_client_{client_id}_anomaly"
                     mlflow.set_tag(warning_tag_key, warning_reason)
-                    print(f"[server] ANOMALY WARNING: {warning_reason}")
+                    _log.warning("ANOMALY: %s", warning_reason)
                     try:
                         send_byzantine_alert(client_id, warning_reason, drift, self.aggregation_strategy)
                     except Exception:
@@ -503,7 +569,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                     arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
                 sanitized_arrays.append(arr)
             if total_nan > 0:
-                print(f"[server] WARNING: Aggregated weights contained {total_nan} NaN/Inf values at round {server_round}. Sanitized to zero.")
+                _log.warning("Aggregated weights contained %d NaN/Inf values at round %d. Sanitized to zero.", total_nan, server_round)
 
             # Aggregate Fisher Diagonals from all reporting clients (H3)
             aggregated_fisher = {}
@@ -521,7 +587,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                                 aggregated_fisher[name] += imp_arr
                         fisher_client_count += 1
                     except Exception as e:
-                        print(f"[server] Error parsing client Fisher diagonals: {e}")
+                        _log.warning("Error parsing client Fisher diagonals: %s", e)
 
             if fisher_client_count > 0:
                 for name in aggregated_fisher:
@@ -569,7 +635,7 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                     quant_size = os.path.getsize(ts_quant_path)
                     mlflow.log_metric("model_quantized_bytes", float(quant_size), step=server_round)
                 except Exception as e:
-                    print(f"[server] Warning: Quantization export failed: {e}")
+                    _log.warning("Quantization export failed: %s", e)
 
                 # Export Pruned TorchScript Model
                 if self.prune_fraction > 0.0 and aggregated_fisher:
@@ -596,10 +662,27 @@ class MLflowFedAvg(fl.server.strategy.FedAvg):
                         pruned_size = os.path.getsize(ts_pruned_path)
                         mlflow.log_metric("model_pruned_bytes", float(pruned_size), step=server_round)
                     except Exception as e:
-                        print(f"[server] Warning: Pruning export failed: {e}")
+                        _log.warning("Pruning export failed: %s", e)
 
             if server_round % 10 == 0:
-                print(f"[server] Checkpoint saved: {ckpt_path}")
+                _log.info("Checkpoint saved: %s", ckpt_path)
+
+            # Gap 3 — push per-round metrics to Prometheus Pushgateway
+            _macro_f1_vals = [
+                self.latest_metrics.get(f"f1_class_{i}", -1.0) for i in range(5)
+                if self.latest_metrics.get(f"f1_class_{i}", -1.0) >= 0.0
+            ]
+            _macro_f1 = sum(_macro_f1_vals) / len(_macro_f1_vals) if _macro_f1_vals else 0.0
+            self._push_prometheus_metrics(
+                server_round=server_round,
+                loss=self.latest_loss,
+                accuracy=self.latest_accuracy,
+                macro_f1=_macro_f1,
+                rejections=int(sum(
+                    1 for _, fit_res in (results or [])
+                    if float(fit_res.metrics.get("dataset_rejected", 0.0)) > 0.0
+                )),
+            )
 
         return aggregated
 
@@ -631,12 +714,12 @@ def enable_sqlite_wal(db_path: str = "/root/mlflow.db"):
             cursor.execute("PRAGMA journal_mode=WAL;")
             mode = cursor.fetchone()[0]
             conn.close()
-            print(f"[server] SQLite WAL Mode enabled: {mode} (on {db_path})")
+            _log.info(f"[server] SQLite WAL Mode enabled: {mode} (on {db_path})")
             return True
         except Exception as e:
-            print(f"[server] Warning: Could not enable WAL mode: {e}")
+            _log.warning("Could not enable WAL mode: %s", e)
     else:
-        print(f"[server] SQLite DB not found at {db_path}, skipping WAL optimization.")
+        _log.debug("SQLite DB not found at %s, skipping WAL optimization.", db_path)
     return False
 
 
@@ -672,7 +755,7 @@ def generate_and_log_plots_and_reports(run_checkpoint_dir, strategy, args, new_v
 
         history = strategy.history_records
         if not history:
-            print("[server] No history records found. Skipping plot generation.")
+            _log.info("No history records found. Skipping plot generation.")
             return
 
         df = pd.DataFrame(history)
@@ -701,7 +784,7 @@ def generate_and_log_plots_and_reports(run_checkpoint_dir, strategy, args, new_v
         plt.savefig(loss_acc_path, dpi=150)
         plt.close()
         mlflow.log_artifact(loss_acc_path)
-        print(f"[server] Generated and logged loss/accuracy curves.")
+        _log.info("Loss/accuracy curves logged.")
 
         # 2. Per-class F1 Trends
         plt.figure(figsize=(8, 5))
@@ -720,7 +803,7 @@ def generate_and_log_plots_and_reports(run_checkpoint_dir, strategy, args, new_v
         plt.savefig(f1_path, dpi=150)
         plt.close()
         mlflow.log_artifact(f1_path)
-        print(f"[server] Generated and logged per-class F1 trends.")
+        _log.info("Per-class F1 trends logged.")
 
         # 3. Forgetting Curves (BWT Deltas)
         plt.figure(figsize=(8, 5))
@@ -738,7 +821,7 @@ def generate_and_log_plots_and_reports(run_checkpoint_dir, strategy, args, new_v
         plt.savefig(bwt_path, dpi=150)
         plt.close()
         mlflow.log_artifact(bwt_path)
-        print(f"[server] Generated and logged forgetting curves.")
+        _log.info("Forgetting curves logged.")
 
         # 4. Multi-run Comparison Chart
         try:
@@ -795,9 +878,9 @@ def generate_and_log_plots_and_reports(run_checkpoint_dir, strategy, args, new_v
                 plt.savefig(comparison_path, dpi=150)
                 plt.close()
                 mlflow.log_artifact(comparison_path)
-                print(f"[server] Generated and logged cross-run comparison chart.")
+                _log.info("Cross-run comparison chart logged.")
         except Exception as chart_err:
-            print(f"[server] Warning: Could not generate multi-run comparison chart: {chart_err}")
+            _log.warning("Could not generate multi-run comparison chart: %s", chart_err)
 
         # 5. Generate post_training_report.md
         active_run = mlflow.active_run()
@@ -856,7 +939,7 @@ def generate_and_log_plots_and_reports(run_checkpoint_dir, strategy, args, new_v
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(report_desc)
         mlflow.log_artifact(report_path)
-        print(f"[server] Successfully generated and logged post_training_report.md to MLflow.")
+        _log.info("post_training_report.md logged to MLflow.")
 
         # Write a copy under the docs/reports folder of the repo if possible
         try:
@@ -867,12 +950,12 @@ def generate_and_log_plots_and_reports(run_checkpoint_dir, strategy, args, new_v
             repo_report_path = os.path.join(repo_report_dir, f'post_training_report_{run_id_str[:8]}.md')
             with open(repo_report_path, 'w', encoding='utf-8') as f:
                 f.write(report_desc)
-            print(f"[server] Copied post-training report to project repo: {repo_report_path}")
+            _log.info("Post-training report copied to %s", repo_report_path)
         except Exception as copy_err:
-            print(f"[server] Warning: Could not write post-training report to docs/reports: {copy_err}")
+            _log.warning("Could not write post-training report to docs/reports: %s", copy_err)
 
     except Exception as e:
-        print(f"[server] Warning: Failed to generate and log plots or report: {e}")
+        _log.warning("Failed to generate/log plots or report: %s", e)
 
 
 def main():
@@ -906,6 +989,7 @@ def main():
     parser.add_argument("--telegram-bot-token", default="", help="Telegram bot token for alerts")
     parser.add_argument("--telegram-chat-id", default="", help="Telegram chat ID for alerts")
     parser.add_argument("--telegram-enabled", action="store_true", help="Force enable Telegram notifications")
+    parser.add_argument("--sheets-webhook-url", default="", help="Google Apps Script WebApp URL for real-time Google Sheets sync")
     
     # Robust Aggregation parameters
     parser.add_argument("--aggregation-strategy", default="FedAvg", choices=["FedAvg", "FedMedian", "Krum", "TrimmedMean"],
@@ -915,6 +999,9 @@ def main():
     parser.add_argument("--prune-fraction", type=float, default=0.2, help="Export-time prune fraction parameter")
     parser.add_argument("--experiment-name", default=None, help="MLflow experiment name (overrides default/config)")
     args = parser.parse_args()
+
+    # Google Sheets Webhook configuration
+    sheets_url = args.sheets_webhook_url or os.environ.get("GSHEETS_WEBHOOK_URL", "")
 
     # Instantiate notifier with optional YAML config fallback, prioritizing environment variables
     tg_token = args.telegram_bot_token or os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -939,8 +1026,10 @@ def main():
                             tg_chat_id = tg_conf.get("chat_id", "")
                         if not tg_enabled:
                             tg_enabled = tg_conf.get("enabled", False)
+                    if not sheets_url and "google_sheets_webhook" in config["notifications"]:
+                        sheets_url = config["notifications"].get("google_sheets_webhook", "")
         except Exception as e:
-            print(f"[server] Warning: Could not load config from file: {e}")
+            _log.warning("Could not load config from file: %s", e)
 
     if not exp_name:
         exp_name = "FL-CL-CyberDefense"
@@ -956,7 +1045,7 @@ def main():
     # Set up MLflow
     mlflow.set_tracking_uri(args.mlflow_uri)
     mlflow.set_experiment(exp_name)
-    print(f"[server] MLflow Active Experiment: {exp_name}")
+    _log.info("MLflow Active Experiment: %s", exp_name)
     mlflow.enable_system_metrics_logging()
 
     # Security audit: restrict directory permissions
@@ -964,7 +1053,7 @@ def main():
         os.makedirs(args.checkpoint_dir, mode=0o700, exist_ok=True)
         os.chmod(args.checkpoint_dir, 0o700)
     except Exception as e:
-        print(f"[server] Warning: Could not enforce base checkpoint directory permissions: {e}")
+        _log.warning("Could not enforce base checkpoint directory permissions: %s", e)
 
     # MLOps Warm-Start Checkpoint Resumption
     initial_parameters = None
@@ -979,26 +1068,26 @@ def main():
                 from mlflow.tracking import MlflowClient
                 client = MlflowClient(tracking_uri=args.mlflow_uri)
                 model_name = "CyberDefenseNet"
-                print(f"[server] Production Warm-Start: Querying MLflow Model Registry for '{model_name}' alias 'champion'...")
+                _log.info("Production Warm-Start: Querying registry for '%s' alias 'champion'...", model_name)
                 model_version_details = client.get_model_version_by_alias(model_name, "champion")
                 resumed_from_version = model_version_details.version
                 resumed_from_run_id = model_version_details.run_id
                 
-                print(f"[server] Production Warm-Start: Downloading model_latest.pt from run {resumed_from_run_id}...")
+                _log.info(f"[server] Production Warm-Start: Downloading model_latest.pt from run {resumed_from_run_id}...")
                 downloaded_path = mlflow.artifacts.download_artifacts(
                     run_id=resumed_from_run_id,
                     artifact_path="model/model_latest.pt"
                 )
                 if downloaded_path and os.path.exists(downloaded_path):
                     latest_ckpt_path = downloaded_path
-                    print(f"[server] Production Warm-Start: Successfully downloaded champion weights to {downloaded_path}")
+                    _log.info("Production Warm-Start: Downloaded champion weights to %s", downloaded_path)
             except Exception as e:
-                print(f"[server] Registry lookup for 'champion' failed ({e}). Falling back to local check.")
+                _log.warning("Registry lookup for 'champion' failed (%s). Falling back to local check.", e)
         else:
-            print(f"[server] Experimental Warm-Start: Checking local checkpoint {latest_ckpt_path}...")
+            _log.info("Experimental Warm-Start: Checking local checkpoint %s...", latest_ckpt_path)
 
         if os.path.exists(latest_ckpt_path):
-            print(f"[server] Warm-Start: Loading weights from {latest_ckpt_path}")
+            _log.info("Warm-Start: Loading weights from %s", latest_ckpt_path)
             try:
                 model = get_model(args.model_type)
                 # Security audit: use weights_only=True to prevent arbitrary code execution
@@ -1016,18 +1105,18 @@ def main():
                             resumed_from_version = meta.get("model_version")
                             resumed_from_run_id = meta.get("run_id")
             except Exception as e:
-                print(f"[server] Failed to load latest checkpoint: {e}. Starting fresh.")
+                _log.warning("Failed to load latest checkpoint: %s. Starting fresh.", e)
                 initial_parameters = None
         else:
-            print("[server] Warm-Start: No prior checkpoint found. Initializing new model weights.")
+            _log.info("Warm-Start: No prior checkpoint found. Initializing new model weights.")
     else:
-        print("[server] Fresh Start: Ignored prior checkpoints. Initializing new model weights from scratch.")
+        _log.info("Fresh Start: Ignored prior checkpoints. Initializing new model weights from scratch.")
 
-    print(f"[server] Starting Flower aggregator on {args.address}")
-    print(f"[server] Rounds: {args.rounds} | Min clients: {args.min_clients}")
-    print(f"[server] MLflow Server: {args.mlflow_uri}")
-    print(f"[server] Checkpoints Base Directory: {args.checkpoint_dir}")
-    print(f"[server] MLOps Mode: {args.mlops_mode} | Production Strategy: {args.production_strategy}")
+    _log.info("Starting Flower aggregator on %s", args.address)
+    _log.info("Rounds: %d | Min clients: %d", args.rounds, args.min_clients)
+    _log.info("MLflow Server: %s", args.mlflow_uri)
+    _log.info("Checkpoints Base Directory: %s", args.checkpoint_dir)
+    _log.info("MLOps Mode: %s | Production Strategy: %s", args.mlops_mode, args.production_strategy)
 
     with mlflow.start_run(run_name="FL-CL-Orchestrated-Run") as run:
         # Write run ID to a temporary file so orchestrator can retrieve it
@@ -1035,11 +1124,15 @@ def main():
             with open("/tmp/current_run_id.txt", "w") as f:
                 f.write(run.info.run_id)
         except Exception as e:
-            print(f"[server] Warning: Could not write current run ID file: {e}")
+            _log.warning("Could not write current run ID file: %s", e)
 
         # Define run-specific checkpoint directory to isolate outputs
         run_checkpoint_dir = os.path.join(args.checkpoint_dir, run.info.run_id)
         
+        # Define config functions so clients receive server_round in their config dict
+        def fit_config_fn(server_round: int):
+            return {"server_round": server_round}
+
         # Instantiate strategy inside the MLflow run context
         strategy = MLflowFedAvg(
             checkpoint_dir=run_checkpoint_dir,
@@ -1048,19 +1141,23 @@ def main():
             trimmed_mean_beta=args.trimmed_mean_beta,
             model_type=args.model_type,
             prune_fraction=args.prune_fraction,
+            sheets_webhook_url=sheets_url,
             initial_parameters=initial_parameters,
             fraction_fit=1.0,
             fraction_evaluate=1.0,
             min_fit_clients=args.min_clients,
             min_evaluate_clients=args.min_clients,
             min_available_clients=args.min_clients,
+            on_fit_config_fn=fit_config_fn,
+            on_evaluate_config_fn=fit_config_fn,
             evaluate_metrics_aggregation_fn=weighted_avg,
+            fit_metrics_aggregation_fn=weighted_avg,
         )
 
         # Link child run to parent run in MLflow if parent run ID is provided
         if args.parent_run_id:
             mlflow.set_tag("mlflow.parentRunId", args.parent_run_id)
-            print(f"[server] Linked child run to parent run ID: {args.parent_run_id}")
+            _log.info("Linked child run to parent run ID: %s", args.parent_run_id)
 
         # Performance optimization: batch log parameters and tags (reduces REST calls to 2)
         params = {
@@ -1082,7 +1179,7 @@ def main():
             params["gem_memory_strength"] = args.gem_memory_strength
         if args.dataset_hash:
             params["dataset_hash"] = args.dataset_hash
-            print(f"[server] Registered dataset hash parameter: {args.dataset_hash}")
+            _log.info("Registered dataset hash parameter: %s", args.dataset_hash)
         if args.cl_task_sequence:
             params["cl_task_sequence"] = args.cl_task_sequence
         if args.cl_complexity_score > 0.0:
@@ -1127,16 +1224,17 @@ def main():
         if args.config_file and os.path.exists(args.config_file):
             sanitized_path = sanitize_config(args.config_file)
             mlflow.log_artifact(sanitized_path, artifact_path="config")
-            print(f"[server] Logged sanitized config artifact: {sanitized_path}")
+            _log.info("Logged sanitized config artifact: %s", sanitized_path)
 
         try:
             fl.server.start_server(
                 server_address=args.address,
-                config=fl.server.ServerConfig(num_rounds=args.rounds),
+                config=fl.server.ServerConfig(num_rounds=args.rounds, round_timeout=300.0),
                 strategy=strategy,
+                grpc_max_message_length=536870912,
             )
         except (KeyboardInterrupt, SystemExit):
-            print("\n[server] [!] Caught termination signal. Initiating graceful early shutdown...")
+            _log.warning("Caught termination signal. Initiating graceful early shutdown...")
 
         # Log final best checkpoint as MLflow artifact using MLflow 3.x LoggedModel entities
         # Determine the best checkpoint path from best_round
@@ -1167,7 +1265,7 @@ def main():
                 serialization_format="pickle"
             )
             new_version = model_info.registered_model_version
-            print(f"[server] Logged model to artifact path. ID: {model_info.model_id} | Registry Version: {new_version}")
+            _log.info("Logged model. ID: %s | Registry Version: %s", model_info.model_id, new_version)
 
             # Inspect and retrieve LoggedModel safely
             try:
@@ -1201,9 +1299,9 @@ def main():
                     },
                     **extra_kwargs
                 )
-                print("[server] Successfully linked model metrics to dataset entity.")
+                _log.info("[server] Successfully linked model metrics to dataset entity.")
             except Exception as ds_err:
-                print(f"[server] Warning: Could not log dataset linkage: {ds_err}")
+                _log.warning("Could not log dataset linkage: %s", ds_err)
                 mlflow.log_metrics(
                     metrics={
                         "final_best_loss": strategy.best_loss,
@@ -1225,9 +1323,9 @@ def main():
                     if class_acc is not None:
                         run_desc += f"  - **{class_labels[i]}**: `{class_acc*100:.2f}%`\n"
                 mlflow.set_tag("mlflow.note.content", run_desc)
-                print("[server] Updated MLflow run description with final metrics summary.")
+                _log.info("Updated MLflow run description with final metrics summary.")
             except Exception as note_err:
-                print(f"[server] Warning: Could not update run description note: {note_err}")
+                _log.warning("Could not update run description note: %s", note_err)
 
             # Log custom Evaluation Table to MLflow
             try:
@@ -1244,17 +1342,17 @@ def main():
                     })
                 eval_df = pd.DataFrame(eval_data)
                 mlflow.log_table(data=eval_df, artifact_file="evaluation_metrics_summary.json")
-                print("[server] Logged evaluation metrics summary table to MLflow.")
+                _log.info("Logged evaluation metrics summary table to MLflow.")
 
                 if strategy.history_records:
                     history_df = pd.DataFrame(strategy.history_records)
                     mlflow.log_table(data=history_df, artifact_file="evaluation_history.json")
-                    print("[server] Logged evaluation history table to MLflow.")
+                    _log.info("Logged evaluation history table to MLflow.")
             except Exception as table_err:
-                print(f"[server] Warning: Could not log evaluation table artifact: {table_err}")
+                _log.warning("Could not log evaluation table artifact: %s", table_err)
 
             # Promote model to master checkpoint directory
-            print(f"[server] Copying best checkpoint to master directory: {latest_ckpt_path}")
+            _log.info("Copying best checkpoint to master directory: %s", latest_ckpt_path)
             shutil.copy(run_best_ckpt, latest_ckpt_path)
             os.chmod(latest_ckpt_path, 0o600)
 
@@ -1344,9 +1442,10 @@ def main():
                         # Read metrics from tags
                         champ_accuracy = float(current_champ.tags.get("accuracy", 0.0))
                         champ_loss = float(current_champ.tags.get("loss", float("inf")))
-                        print(f"[server] Current Champion Version: {current_champ.version} | Accuracy: {champ_accuracy*100:.2f}% | Loss: {champ_loss:.4f}")
+                        _log.info("Current Champion v%s | Accuracy: %.2f%% | Loss: %.4f",
+                                  current_champ.version, champ_accuracy * 100, champ_loss)
                     except Exception:
-                        print("[server] No active champion model found in Model Registry.")
+                        _log.info("No active champion model found in Model Registry.")
 
                     # Calculate total communication bytes
                     total_comm_bytes = sum(record["communication_bytes"] for record in strategy.history_records)
@@ -1408,9 +1507,9 @@ def main():
                         if bwt_val != -1.0:
                             promo_metrics[f"bwt_class_{i}"] = bwt_val
 
-                    print(f"[server] Validation Gate Checklist:")
+                    _log.info("Validation Gate Checklist:")
                     for detail in f1_details + bwt_details + [comm_detail]:
-                        print(f"  - {detail}")
+                        _log.info("  - %s", detail)
 
                     if passed_gate:
                         rationale = (
@@ -1423,7 +1522,7 @@ def main():
                             f"CL Sequence: {args.cl_task_sequence or 'N/A'}\n"
                             f"Complexity Score: {args.cl_complexity_score:.2f}"
                         )
-                        print(f"[server] MLOps Promotion: Validation GATE PASSED. Promoting version {new_version} to 'champion'...")
+                        _log.info("Promotion GATE PASSED. Promoting v%s to 'champion'...", new_version)
                         client.set_registered_model_alias(
                             name=model_name,
                             alias="champion",
@@ -1456,7 +1555,21 @@ def main():
                                 rationale=rationale
                             )
                         except Exception as e:
-                            print(f"[server] Telegram promotion notification failed: {e}")
+                            _log.warning("Telegram promotion notification failed: %s", e)
+
+                        # Send Google Sheets promotion event
+                        if sheets_url:
+                            try:
+                                send_promotion_event(
+                                    webhook_url=sheets_url,
+                                    server_round=strategy.best_round,
+                                    champion_model=f"{model_name} (v{new_version})",
+                                    per_class_f1=promo_metrics,
+                                    passed=True,
+                                    reason=rationale
+                                )
+                            except Exception as e:
+                                _log.warning("Sheets promotion notification failed: %s", e)
                     else:
                         failure_reason = ""
                         if not f1_ok:
@@ -1466,7 +1579,7 @@ def main():
                         if not comm_ok:
                             failure_reason += f"Communication bytes ({total_comm_bytes}) exceeded budget limit ({args.comm_overhead_budget}). "
 
-                        print(f"[server] MLOps Promotion: Validation GATE FAILED ({failure_reason}). Assigning 'challenger' alias...")
+                        _log.warning("Promotion GATE FAILED (%s). Assigning 'challenger' alias...", failure_reason)
                         client.set_registered_model_alias(
                             name=model_name,
                             alias="challenger",
@@ -1484,16 +1597,30 @@ def main():
                                 failure_reason=failure_reason
                             )
                         except Exception as e:
-                            print(f"[server] Telegram failure notification failed: {e}")
+                            _log.warning("Telegram failure notification failed: %s", e)
+
+                        # Send Google Sheets promotion failure event
+                        if sheets_url:
+                            try:
+                                send_promotion_event(
+                                    webhook_url=sheets_url,
+                                    server_round=strategy.best_round,
+                                    champion_model=f"{model_name} (v{new_version})",
+                                    per_class_f1=promo_metrics,
+                                    passed=False,
+                                    reason=failure_reason
+                                )
+                            except Exception as e:
+                                _log.warning("Sheets failure notification failed: %s", e)
                 else:
-                    print(f"[server] MLOps Promotion (experimental mode): Assigning 'challenger' alias to version {new_version}...")
+                    _log.info("Experimental mode: Assigning 'challenger' alias to v%s...", new_version)
                     client.set_registered_model_alias(
                         name=model_name,
                         alias="challenger",
                         version=str(new_version)
                     )
             except Exception as registry_err:
-                print(f"[server] Warning: Model registry metadata tagging or promotion failed: {registry_err}")
+                _log.warning("Model registry metadata tagging or promotion failed: %s", registry_err)
 
             # Generate and log visual plots and Markdown post-training report
             generate_and_log_plots_and_reports(
@@ -1514,12 +1641,12 @@ def main():
             with open(latest_meta_path, "w") as f:
                 json.dump(meta_data, f, indent=2)
             os.chmod(latest_meta_path, 0o600)
-            print(f"[server] Updated master latest model metadata: {meta_data}")
+            _log.info("Updated master latest model metadata: %s", meta_data)
 
         run_ckpt_path = os.path.join(run_checkpoint_dir, "model_latest.pt")
         if os.path.exists(run_ckpt_path):
             mlflow.log_artifact(run_ckpt_path, artifact_path="model")
-            print(f"[server] Logged State Dict model artifact")
+            _log.info("State Dict model artifact logged.")
             
             # Copy to master directory
             master_ckpt_path = os.path.join(args.checkpoint_dir, "model_latest.pt")
@@ -1529,7 +1656,7 @@ def main():
         run_ts_path = os.path.join(run_checkpoint_dir, "model_latest_scripted.pt")
         if os.path.exists(run_ts_path):
             mlflow.log_artifact(run_ts_path, artifact_path="model")
-            print(f"[server] Logged TorchScript model artifact")
+            _log.info("TorchScript model artifact logged.")
             
             # Copy to master directory
             master_ts_path = os.path.join(args.checkpoint_dir, "model_latest_scripted.pt")
@@ -1557,7 +1684,7 @@ def main():
         summary_path = "/tmp/flower-server-metrics.json"
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
-        print(f"[server] Wrote summary to {summary_path}")
+        _log.info("Wrote summary to %s", summary_path)
 
 
 if __name__ == "__main__":

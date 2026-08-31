@@ -130,7 +130,7 @@ In a federated-continual learning environment, tracking model checkpoints, task 
 
  ```bash
  pip install tensorboard
- tensorboard --logdir ~/fl-cl-env/runs/ --port 6006
+ tensorboard --logdir runs/tensorboard/ --port 6006
  ```
 
 The observability stack closes the feedback loop: metrics inform tuning decisions (e.g., adjusting `ewc_lambda` in [02_architecture.md](02_architecture.md) Section 5.2, modifying aggregation frequency in Section 5.4, or rebalancing traffic ratios in this document's Section 4).

@@ -29,6 +29,18 @@ import torch
 from extractor import calculate_energy_score
 from model import get_model
 
+try:
+    from logger import get_logger
+    _log = get_logger("dashboard")
+except ImportError:
+    try:
+        from src.logger import get_logger
+        _log = get_logger("dashboard")
+    except ImportError:
+        import logging
+        _log = logging.getLogger("dashboard")
+
+
 
 LABEL_NAMES = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: "DoS"}
 
@@ -62,15 +74,15 @@ def render_threat_gauge(energy_score: float) -> str:
 
 
 def stream_soc_events(model, test_mode: bool = False, max_events: int = 10, interval: float = 1.0):
-    print(render_banner())
+    _log.info(render_banner())
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
 
     counts = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
     total_flows = 0
 
-    print(f"\n{'TIME':<10} | {'FLOW ID':<10} | {'PREDICTED THREAT':<15} | {'CONF':<6} | {'ENERGY SCORE & STATUS':<35}")
-    print("-" * 85)
+    _log.info(f"\n{'TIME':<10} | {'FLOW ID':<10} | {'PREDICTED THREAT':<15} | {'CONF':<6} | {'ENERGY SCORE & STATUS':<35}")
+    _log.info("-" * 85)
 
     for step in range(1, max_events + 1 if test_mode else 1000000):
         # Generate synthetic live flow packet vector
@@ -97,15 +109,15 @@ def stream_soc_events(model, test_mode: bool = False, max_events: int = 10, inte
         threat_name = LABEL_NAMES.get(pred_class, "Unknown")
         gauge_str = render_threat_gauge(energy)
 
-        print(f"{t_str:<10} | {flow_id:<10} | {threat_name:<15} | {conf*100:4.1f}% | {gauge_str}")
+        _log.info(f"{t_str:<10} | {flow_id:<10} | {threat_name:<15} | {conf*100:4.1f}% | {gauge_str}")
 
         if interval > 0 and not test_mode:
             time.sleep(interval)
 
-    print("-" * 85)
-    print(f"[*] Stream summary: Processed {total_flows} flows.")
-    print(f"    Normal: {counts[0]} | Botnet: {counts[1]} | Exfil: {counts[2]} | BruteForce: {counts[3]} | DoS: {counts[4]}")
-    print("======================================================================\n")
+    _log.info("-" * 85)
+    _log.info(f"[*] Stream summary: Processed {total_flows} flows.")
+    _log.info(f"    Normal: {counts[0]} | Botnet: {counts[1]} | Exfil: {counts[2]} | BruteForce: {counts[3]} | DoS: {counts[4]}")
+    _log.info("======================================================================\n")
 
 
 def main():

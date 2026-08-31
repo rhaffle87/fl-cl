@@ -7,6 +7,7 @@ Benchmarks FedAvg, TrimmedMean, FedMedian, Krum, MultiKrum, and Bulyan across:
 3. 40% Coordinated Multi-Client Label Flip Attack
 4. Gaussian Gradient Poisoning Attack (variance = 1.0)
 """
+import argparse
 
 import sys
 import os
@@ -252,4 +253,6 @@ def run_benchmark():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Byzantine Threat Defense and Robust Aggregator Benchmark")
+    _ = parser.parse_args()
     run_benchmark()

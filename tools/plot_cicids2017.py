@@ -3,6 +3,8 @@ plot_cicids2017.py — High-fidelity visualization suite for the CIC-IDS2017 ben
 Generates publication-grade figures comparing CIC-IDS2017 class distributions, temporal structure,
 feature dynamics, and FL-CL physical testbed benchmark performance.
 """
+import argparse
+from pathlib import Path
 
 import os
 import glob
@@ -406,4 +408,6 @@ def main():
     print("=" * 70)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="CIC-IDS2017 Dataset Feature Distribution and Label Plotter")
+    _ = parser.parse_args()
     main()

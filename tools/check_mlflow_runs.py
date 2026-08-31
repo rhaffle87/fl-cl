@@ -1,6 +1,8 @@
 """
 tools/inspect_mlflow_runs.py — Deep inspection and readable scorecard of all MLflow runs in SQLite DB.
 """
+import argparse
+from pathlib import Path
 
 import os
 import sqlite3
@@ -116,4 +118,6 @@ def inspect_all_runs():
     print(f"[SUCCESS] Exported detailed inspection of {len(df_full)} runs to {report_file}")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="MLflow Active and Completed Run Diagnostics Inspector")
+    _ = parser.parse_args()
     inspect_all_runs()

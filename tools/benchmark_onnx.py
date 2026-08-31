@@ -4,6 +4,7 @@ benchmark_onnx.py — Multi-Runtime Edge Inference Benchmark
 Compares PyTorch FP32, PyTorch Dynamic INT8, and ONNX Runtime CPU execution provider
 across varied batch sizes (1, 16, 64, 256) for all three model backbones.
 """
+import argparse
 
 import os
 import sys
@@ -147,4 +148,6 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="ONNX Runtime vs PyTorch Edge Latency Benchmark")
+    _ = parser.parse_args()
     main()

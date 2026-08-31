@@ -4,6 +4,7 @@ benchmark_dp.py — Differential Privacy Noise Sensitivity Curve Suite
 Evaluates model convergence, loss, and per-class F1 score retention under varying
 client DP noise multipliers (sigma in [0.0, 0.01, 0.05, 0.10, 0.20]) and max grad norm 1.0.
 """
+import argparse
 
 import sys
 import os
@@ -149,4 +150,6 @@ def evaluate_dp_curve():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Differential Privacy (DP-SGD) Sensitivity and Epsilon Sweeper")
+    _ = parser.parse_args()
     evaluate_dp_curve()

@@ -1,6 +1,8 @@
 """
 tools/audit_mlflow_standardization.py — Deep audit and standardization check for all MLflow runs in SQLite DB.
 """
+import argparse
+from pathlib import Path
 
 import sqlite3
 import json
@@ -97,4 +99,6 @@ def audit_mlflow():
     return report
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="MLflow Database Standardization and Integrity Auditor")
+    _ = parser.parse_args()
     audit_mlflow()

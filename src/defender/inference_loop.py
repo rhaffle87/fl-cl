@@ -20,6 +20,17 @@ import numpy as np
 import pandas as pd
 import torch
 
+try:
+    from logger import get_logger
+    _log = get_logger("inference_loop")
+except ImportError:
+    try:
+        from src.logger import get_logger
+        _log = get_logger("inference_loop")
+    except ImportError:
+        import logging
+        _log = logging.getLogger("inference_loop")
+
 LABEL_NAMES = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: "DoS"}
 FEATURE_COLS = [
     "bidirectional_packets", "bidirectional_bytes", "duration_ms",
@@ -33,7 +44,7 @@ def load_model(checkpoint_path, device):
     """Load TorchScript model from path."""
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Model checkpoint not found at: {checkpoint_path}")
-    print(f"[inference] Loading model from: {checkpoint_path}")
+    _log.info(f"[inference] Loading model from: {checkpoint_path}")
     model = torch.jit.load(checkpoint_path, map_location=device)
     model.eval()
     return model, os.path.getmtime(checkpoint_path)
@@ -104,7 +115,7 @@ def process_flow_file(file_path, model, device, threshold, alerts_log, stats_pat
     try:
         df = pd.read_csv(file_path)
     except Exception as e:
-        print(f"[inference] Error reading {file_path.name}: {e}")
+        _log.error(f"[inference] Error reading {file_path.name}: {e}")
         return
 
     if df.empty:
@@ -138,16 +149,16 @@ def process_flow_file(file_path, model, device, threshold, alerts_log, stats_pat
             }
             
             # Print high-visibility warning to terminal
-            print(f"\n[ALERT] Malicious Traffic Detected!")
-            print(f"   Type:       {alert['predicted_label']} (Confidence: {alert['confidence']:.2%})")
-            print(f"   Connection: {alert['src_ip']}:{alert['src_port']} -> {alert['dst_ip']}:{alert['dst_port']} (Proto: {alert['protocol']})")
+            _log.info(f"\n[ALERT] Malicious Traffic Detected!")
+            _log.info(f"   Type:       {alert['predicted_label']} (Confidence: {alert['confidence']:.2%})")
+            _log.info(f"   Connection: {alert['src_ip']}:{alert['src_port']} -> {alert['dst_ip']}:{alert['dst_port']} (Proto: {alert['protocol']})")
             
             # Write alert JSON line to log file
             try:
                 with open(alerts_log, "a") as f:
                     f.write(json.dumps(alert) + "\n")
             except Exception as e:
-                print(f"[inference] Error writing alert log: {e}")
+                _log.error(f"[inference] Error writing alert log: {e}")
 
             # Dispatch live Telegram telemetry alert if enabled
             try:
@@ -167,7 +178,7 @@ def process_flow_file(file_path, model, device, threshold, alerts_log, stats_pat
             alerts_triggered += 1
             
     if alerts_triggered > 0:
-        print(f"[inference] Processed {file_path.name}: Triggered {alerts_triggered} alerts.")
+        _log.info(f"[inference] Processed {file_path.name}: Triggered {alerts_triggered} alerts.")
 
 
 def main():
@@ -186,21 +197,21 @@ def main():
     if not os.path.exists(stats_path):
         stats_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "configs", "baseline_feature_stats.json")
 
-    print("=" * 62)
-    print("      FL-CL Cyber Defense - Real-Time Inference Loop")
-    print("=" * 62)
-    print(f"Model Checkpoint: {args.checkpoint}")
-    print(f"Flows Directory:  {args.flows_dir}")
-    print(f"Alert Threshold:  {args.alert_threshold:.0%}")
-    print(f"Alert Log Path:   {args.alerts_log}")
-    print(f"Baseline Stats:   {stats_path}")
-    print("=" * 62)
+    _log.info("=" * 62)
+    _log.info("      FL-CL Cyber Defense - Real-Time Inference Loop")
+    _log.info("=" * 62)
+    _log.info(f"Model Checkpoint: {args.checkpoint}")
+    _log.info(f"Flows Directory:  {args.flows_dir}")
+    _log.info(f"Alert Threshold:  {args.alert_threshold:.0%}")
+    _log.info(f"Alert Log Path:   {args.alerts_log}")
+    _log.info(f"Baseline Stats:   {stats_path}")
+    _log.info("=" * 62)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Wait for the model checkpoint to become available
     while not os.path.exists(args.checkpoint):
-        print(f"[inference] Waiting for model checkpoint at {args.checkpoint}...")
+        _log.info(f"[inference] Waiting for model checkpoint at {args.checkpoint}...")
         time.sleep(5.0)
 
     model, last_mtime = load_model(args.checkpoint, device)
@@ -217,14 +228,14 @@ def main():
     try:
         while True:
             if args.duration > 0 and (time.time() - start_time) >= args.duration:
-                print(f"[inference] Duration limit ({args.duration}s) reached. Exiting gracefully.")
+                _log.info(f"[inference] Duration limit ({args.duration}s) reached. Exiting gracefully.")
                 break
 
             # 1. Check for model updates (dynamic hot-reloading)
             try:
                 current_mtime = os.path.getmtime(args.checkpoint)
                 if current_mtime > last_mtime:
-                    print(f"\n[inference] Model change detected on disk!")
+                    _log.info(f"\n[inference] Model change detected on disk!")
                     model, last_mtime = load_model(args.checkpoint, device)
             except Exception as e:
                 pass  # Ignore temporary locks on model update
@@ -252,7 +263,7 @@ def main():
             time.sleep(args.poll_interval)
             
     except KeyboardInterrupt:
-        print("\n[inference] Stopping inference loop. Exiting...")
+        _log.info("\n[inference] Stopping inference loop. Exiting...")
         sys.exit(0)
 
 

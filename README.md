@@ -19,7 +19,7 @@ fl-cl/
 ├── data/                         <- Organized local datasets, databases, exports, and reports
 │   ├── db/                       <- Local MLflow SQLite databases (mlflow.db)
 │   ├── exports/                  <- Synced experiment run exports and plots
-│   ├── models/                   <- Local PyTorch checkpoints (.pt)
+│   ├── models/                   <- Local PyTorch checkpoints (.pt) & MODEL_CARD.md
 │   ├── plots/                    <- Fact-checked visualization figures (.png, .svg)
 │   ├── references/               <- Reference research papers (.pdf)
 │   └── reports/                  <- Consolidated technical results reports (.md, .csv)
@@ -44,13 +44,17 @@ fl-cl/
 │   ├── 03_hookscripts/           <- Proxmox lifecycle hookscripts
 │   └── 04_guest_setup/           <- In-VM software provisioning
 │
-├── runs/                         <- Simulation preparation scripts
-│   ├── clean_testbed.py          <- Clean MLflow DB & target leftover flows/logs/processes
-│   └── setup_ssh_targets.py      <- Configure challenging target SSH passwords
+├── tools/                        <- Governance, benchmarking, test suites, and deployment
+│   ├── deploy_clean_testbed.py   <- Clean MLflow DB & target leftover flows/logs/processes
+│   └── deploy_setup_targets.py   <- Configure challenging target SSH passwords
 │
 ├── src/                          <- Python application code
 │   ├── aggregator/               <- FL Aggregator (LXC 300)
-│   │   └── server.py             <- Flower server + MLflow + checkpointing
+│   │   ├── alerts.py             <- Real-time Byzantine & drift incident dispatcher
+│   │   ├── dashboard.py          <- Aggregator live dashboard
+│   │   ├── google_sheets_webhook.js <- Google Apps Script WebApp webhook handler
+│   │   ├── server.py             <- Flower server + MLflow + checkpointing
+│   │   └── sheets_sync.py        <- Google Sheets Webhook async telemetry dispatcher
 │   ├── defender/                 <- Defender clients (VM 310 & 320)
 │   │   ├── client.py             <- Flower FL client + Avalanche CL
 │   │   ├── cl_strategy.py        <- EWC & GEM continual learning
@@ -80,10 +84,15 @@ fl-cl/
     ├── generate_paper_pdf.py     <- Academic LaTeX paper compiler
     ├── plot_cicids2017.py        <- CIC-IDS2017 dataset visualization suite
     ├── plot_metrics.py           <- Post-training convergence plot generator
+    ├── regenerate_figures.py     <- Standardized IEEE 300 DPI figure regenerator
+    ├── sync_sheets_webhook.py    <- Google Sheets Webhook CLI exporter & synchronizer
+    ├── test_attack_gen.py        <- Attack generation engine test suite
     ├── test_comprehensive.py     <- Comprehensive unit and integration test suite
     ├── test_local_train.py       <- Local training loop verification test
     ├── test_models.py            <- Architecture, TorchScript, INT8 & pruning tests
+    ├── test_onnx_edge.py         <- Edge ONNX inference loop verification test
     ├── train_local.py            <- Standalone training + confusion matrix
+    ├── train_quarantine_continual.py <- Quarantine self-healing retraining loop
     ├── validate_bwt.py           <- Standardized BWT validation suite with signatures
     ├── validate_model.py         <- Pre-deployment model validation gate
     └── validate_promotion.py     <- Automated CI/CD validation & registry promotion gate
@@ -103,9 +112,13 @@ fl-cl/
 First, configure your `.env` file at the root of the project with your credentials and SSH private key path:
 
 ```env
+# Telegram notifications credentials
 TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
 TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
 SSH_KEY_PATH="C:\Users\Username\.ssh\id_ed25519"
+
+# Google Sheets Webhook Integration (Google Apps Script WebApp)
+GSHEETS_WEBHOOK_URL="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
 
 # Ollama AI Reporting Configuration
 OLLAMA_ENDPOINT="https://YOUR_OLLAMA_SERVER_HOSTNAME"
@@ -117,10 +130,10 @@ Prepare the testbed by executing the helper scripts (which auto-load settings fr
 
 ```bash
 # Configure "admin" user with a challenging wordlist password on targets
-python runs/setup_ssh_targets.py
+python tools/deploy_setup_targets.py
 
 # Reset MLflow database, clear active flow CSVs, logs, and processes
-python runs/clean_testbed.py
+python tools/deploy_clean_testbed.py
 ```
 
 ### 2. Execute Training Run
@@ -215,7 +228,7 @@ Empirically validated across Byzantine adversarial scenarios ([`tools/benchmark_
 | **UU PDP No. 27/2022** *(Art. 65–66)* | Strict prohibition against transferring raw personal network data outside jurisdiction boundaries. | **Zero Raw Flow Transmission**: Raw packets and IP payloads remain isolated in local volatile tmpfs RAMDisks (`/mnt/ramdisk/flows/`). Only privacy-preserving gradient weights leave the node. | [`src/defender/client.py`](src/defender/client.py) & [ADR-004](docs/decisions/ADR-004_federated_aggregation.md) |
 | **GDPR (EU 2016/679)** *(Art. 5, 25, 32)* | Data minimization, purpose limitation, and Privacy by Design via cryptographic anonymization. | **DP-SGD & Batch Aggregation**: In-place gradient clipping and DP noise injection mathematically prevent gradient inversion or flow reconstruction. | [`tools/benchmark_dp.py`](tools/benchmark_dp.py) & [`privacy_utility_curve.csv`](data/reports/privacy_utility_curve.csv) |
 | **NIST SP 800-94 / 800-145** | Standards for Intrusion Detection and Prevention Systems (IDPS) and behavioral telemetry. | **32-Dimensional Statistical Representation**: Classifies threats using behavioral flow metadata (SPLT, PIAT, byte ratios) without inspecting encrypted payloads. | [`src/defender/extractor.py`](src/defender/extractor.py) & [`baseline_feature_stats.json`](configs/baseline_feature_stats.json) |
-| **MITRE ATT&CK** | Standardized adversary tactic and technique classification. | **Threat Coverage**: T1498 (Network DoS / Slowloris), T1110 (Brute Force / SSH), T1048 (Exfiltration over DNS), T1071 (Application Layer C2 Beaconing). | [`src/traffic_gen/attack_flow.py`](src/traffic_gen/attack_flow.py) & [ADR-007](docs/decisions/ADR-007_attack_engine_alternatives.md) |
+| **MITRE ATT&CK** | Standardized adversary tactic and technique classification. | **Threat Coverage**: T1498 (Network DoS / Slowloris), T1110 (Brute Force / SSH), T1048 (Exfiltration over DNS), T1071 (Application Layer C2 Beaconing). | [`src/traffic_gen/attack_flow.py`](src/traffic_gen/attack_flow.py) & [ADR-007](docs/decisions/ADR-007_attack_engines.md) |
 | **ISO/IEC 27001 / 27701** | Information Security & Privacy Information Management System governance. | **Cryptographic Lineage & Checksums**: SHA-256 dataset lineage graphs, Git commit tagging, and immutable MLflow artifact logging. | [`src/orchestrate.py`](src/orchestrate.py) & [`tools/audit_codebase.py`](tools/audit_codebase.py) |
 | **RFC 1035 / 793 / 7230** | DNS, TCP state machines, and HTTP/1.1 wire protocol specifications. | **Dual-Engine Protocol Conformance**: Modular `--engine auto|kali|python` generator creates compliant DNS query datagrams and TCP multi-round sessions. | [`src/traffic_gen/attack_flow.py`](src/traffic_gen/attack_flow.py) & [`tools/test_attack_gen.py`](tools/test_attack_gen.py) |
 
@@ -249,7 +262,8 @@ Empirically validated across Byzantine adversarial scenarios ([`tools/benchmark_
 | **Confusion Matrix Tracking** | Per-round 5x5 matrix summation at aggregator with automated MLflow heatmap plots |
 | **Class-Weighted Loss** | Per-class weights `[1.0, 250.0, 2.0, 5.0, 50.0]` for imbalanced data |
 | **Experiment Tracking** | MLflow at `http://10.10.130.10:5000` with git hash tagging, parameters, and metrics tracking |
-| **Notifications** | Telegram bot for start/complete/fail alerts |
+| **Google Sheets Live Sync** | Real-time live round metrics (`Live_Rounds`), promotion events (`Model_Promotions`), and bulk benchmark table exports via Google Apps Script Webhook |
+| **Notifications** | Telegram bot for start/complete/fail alerts and governance incidents |
 
 ---
 
@@ -278,6 +292,12 @@ python tools/benchmark_byzantine.py
 
 # Run Differential Privacy sensitivity sweep
 python tools/benchmark_dp.py
+
+# Sync all benchmark CSV reports to Google Spreadsheet tabs
+python tools/sync_sheets_webhook.py --sync-all
+
+# Test Google Sheets Webhook endpoint connectivity
+python tools/sync_sheets_webhook.py --test
 
 # Run attack generation engine verification suite
 python tools/test_attack_gen.py

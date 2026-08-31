@@ -1,6 +1,8 @@
 """
 tools/generate_matrix_export_visualizers.py — Generate high-contrast confusion matrix heatmaps and markdown scorecards for all sweep export directories.
 """
+import argparse
+from pathlib import Path
 
 import os
 import json
@@ -57,4 +59,6 @@ def process_all_exports():
     print(f"[SUCCESS] Processed and rendered confusion matrices across {count} export directories.")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Export Formatter for Matrix Benchmark Visualizations")
+    _ = parser.parse_args()
     process_all_exports()

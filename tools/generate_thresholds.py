@@ -24,7 +24,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src" / "defender"))
 
 from model import get_model
 
-LABEL_NAMES = {0: "Normal", 1: "BruteForce", 2: "DoS", 3: "Exfiltration", 4: "Botnet"}
+LABEL_NAMES = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: "DoS"}
 
 
 def calculate_optimal_thresholds(logits: np.ndarray, y_true: np.ndarray, num_classes: int = 5):

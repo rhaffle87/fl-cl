@@ -8,6 +8,7 @@ Cross-validates:
 4. Cluster IP topology, port mappings, and directory paths in docs vs actual configuration.
 5. All file paths, image embeds, and cross-references.
 """
+import argparse
 
 import ast
 import os
@@ -28,12 +29,21 @@ from model import get_model, CyberDefenseNet, CyberDefenseCNN, CyberDefenseTrans
 DOCS_DIR = PROJECT_ROOT / "docs"
 REPORTS_DIR = PROJECT_ROOT / "data" / "reports"
 CONFIGS_DIR = PROJECT_ROOT / "configs"
+DATASETS_DIR = PROJECT_ROOT / "datasets"
+AGENTS_DIR = PROJECT_ROOT / ".agents"
 
-ALL_DOC_PATHS = sorted(list(DOCS_DIR.rglob("*.md")) + list(DOCS_DIR.rglob("*.tex")) + [
-    PROJECT_ROOT / "README.md",
-    PROJECT_ROOT / "SECURITY.md",
-    PROJECT_ROOT / "TECH_STACK.md",
-])
+ALL_DOC_PATHS = sorted(
+    list(DOCS_DIR.rglob("*.md")) +
+    list(DOCS_DIR.rglob("*.tex")) +
+    list(AGENTS_DIR.rglob("*.md")) +
+    [
+        PROJECT_ROOT / "README.md",
+        PROJECT_ROOT / "SECURITY.md",
+        PROJECT_ROOT / "TECH_STACK.md",
+        PROJECT_ROOT / "CONTRIBUTE.md",
+        PROJECT_ROOT / "GEMINI.md",
+    ]
+)
 
 def check_model_parameters():
     """Verify exact parameter counts and shapes in PyTorch models."""
@@ -88,7 +98,38 @@ def check_csv_metrics():
         df_lat = pd.read_csv(lat_csv)
         metrics["lat_csv_rows"] = len(df_lat)
 
+    # 5. Privacy Utility Curve
+    pu_csv = REPORTS_DIR / "privacy_utility_curve.csv"
+    if pu_csv.exists():
+        df_pu = pd.read_csv(pu_csv)
+        metrics["privacy_rows"] = len(df_pu)
+        eps_02 = float(df_pu.loc[df_pu["dp_noise_multiplier"] == 0.20, "epsilon_approx_delta_1e5"].values[0])
+        metrics["eps_sigma_02"] = eps_02
+
     return metrics
+
+def check_raw_datasets():
+    """Verify presence and file volumes of raw benchmark datasets."""
+    datasets_stats = {}
+    cic = DATASETS_DIR / "CIC-IDS2017"
+    if cic.exists():
+        csvs = list(cic.glob("*.csv"))
+        datasets_stats["cic_ids2017_files"] = len(csvs)
+        datasets_stats["cic_ids2017_mb"] = round(sum(f.stat().st_size for f in csvs) / (1024 * 1024), 2)
+
+    doh = DATASETS_DIR / "CIRA-CIC-DoHBrw-2020-and-DoH-Tunnel-Traffic-HKD"
+    if doh.exists():
+        csvs = list(doh.glob("*.csv"))
+        datasets_stats["doh_files"] = len(csvs)
+        datasets_stats["doh_mb"] = round(sum(f.stat().st_size for f in csvs) / (1024 * 1024), 2)
+
+    ustc = DATASETS_DIR / "USTC-TFC2016"
+    if ustc.exists():
+        files = [f for f in ustc.rglob("*") if f.is_file()]
+        datasets_stats["ustc_files"] = len(files)
+        datasets_stats["ustc_mb"] = round(sum(f.stat().st_size for f in files) / (1024 * 1024), 2)
+
+    return datasets_stats
 
 def audit_facts():
     print("=" * 70)
@@ -111,7 +152,12 @@ def audit_facts():
         else:
             print(f"    - {k:<24s}: {v}")
 
-    print(f"\n[*] Scanning {len(ALL_DOC_PATHS)} documentation and paper files...")
+    ds_facts = check_raw_datasets()
+    print(f"\n[*] Raw Datasets Ground Truth:")
+    for k, v in ds_facts.items():
+        print(f"    - {k:<24s}: {v}")
+
+    print(f"\n[*] Scanning {len(ALL_DOC_PATHS)} documentation, rules, and paper files...")
     
     findings = []
     checked_claims = 0
@@ -179,4 +225,6 @@ def audit_facts():
         return 1
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Exhaustive Documentation & Paper Fact-Checking Suite")
+    _ = parser.parse_args()
     sys.exit(audit_facts())

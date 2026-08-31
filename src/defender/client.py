@@ -16,7 +16,9 @@ Per federated round:
   3. Returns updated weights to the aggregator via gRPC
 """
 
+import logging
 import os
+import sys
 import argparse
 from collections import OrderedDict
 from pathlib import Path
@@ -37,6 +39,15 @@ from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 from model import get_model
+
+try:
+    from logger import get_logger
+    _log = get_logger("client")
+except ImportError:
+    _log = logging.getLogger("client")
+    if not _log.handlers:
+        _log.addHandler(logging.StreamHandler())
+    _log.setLevel(logging.INFO)
 
 class MyTensorDataset(TensorDataset):
     """Custom TensorDataset that exposes a targets field for Avalanche 0.6.0+ compatibility."""
@@ -184,6 +195,10 @@ def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: 
     """
     Load all CSV flow files from the RAM disk and convert to PyTorch tensors.
     """
+    if flows_dir.startswith("/mnt/ramdisk") and sys.platform.startswith("linux"):
+        if os.path.exists("/mnt/ramdisk") and not os.path.ismount("/mnt/ramdisk"):
+            _log.warning("/mnt/ramdisk is not mounted as tmpfs! Potential disk I/O contention.")
+
     csv_files = sorted(Path(flows_dir).glob("*.csv"))
     if not csv_files:
         raise FileNotFoundError(f"No flow CSVs found in {flows_dir}")
@@ -360,7 +375,7 @@ class CyberDefenseClient(NumPyClientClass):
                 if len(self.baseline_dist) != 5:
                     raise ValueError("Baseline must contain exactly 5 class values.")
             except Exception as e:
-                print(f"[client-{client_id}] Error parsing baseline distribution: {e}")
+                _log.warning("Error parsing baseline distribution: %s", e)
                 self.baseline_dist = None
 
         # Store validation split in memory between fit() and evaluate()
@@ -368,15 +383,19 @@ class CyberDefenseClient(NumPyClientClass):
         self.y_val = None
 
     def get_parameters(self, config):
-        return [v.cpu().numpy() for _, v in self.net.state_dict().items()]
+        assert all(p.dtype == torch.float32 for p in self.net.parameters()), "All model parameters must be float32"
+        return [v.cpu().float().numpy() for _, v in self.net.state_dict().items()]
 
     def set_parameters(self, params):
         sanitized = []
         for v in params:
-            t = torch.tensor(v)
+            t = torch.tensor(v, dtype=torch.float32)
             nan_count = torch.isnan(t).sum().item() + torch.isinf(t).sum().item()
             if nan_count > 0:
-                print(f"[client] WARNING: Received {nan_count} NaN/Inf values in weight tensor. Replacing with zeros.")
+                _log.warning(
+                    "Received %d NaN/Inf values in weight tensor. Replacing with zeros.",
+                    nan_count,
+                )
                 t = torch.nan_to_num(t, nan=0.0, posinf=0.0, neginf=0.0)
             sanitized.append(t)
         state = OrderedDict(
@@ -409,17 +428,25 @@ class CyberDefenseClient(NumPyClientClass):
                         poison_indices = np.random.choice(indices, size=num_to_poison, replace=False)
                         y_np[poison_indices] = self.poison_to
                         y = torch.tensor(y_np, dtype=torch.int64)
-                        print(f"[client-{self.client_id}] POISON: Flipped {num_to_poison} labels from {self.poison_from} to {self.poison_to}")
+                        _log.info("POISON: Flipped %d labels from %d to %d", num_to_poison, self.poison_from, self.poison_to)
             
             # Check for JSD Label Shift
             if self.baseline_dist is not None and num_samples > 0:
                 y_np = y.cpu().numpy()
                 counts = [int(np.sum(y_np == i)) for i in range(5)]
                 jsd_val = jensen_shannon_divergence(counts, self.baseline_dist)
+                try:
+                    with open(f"/tmp/client_{self.client_id}_latest_jsd.txt", "w") as jf:
+                        jf.write(f"{jsd_val:.6f}\n")
+                except Exception:
+                    pass
                 
                 if jsd_val > self.js_threshold:
                     dataset_rejected = 1.0
-                    print(f"[client-{self.client_id}] DATA QUALITY GATE FAILED: JSD={jsd_val:.4f} > threshold={self.js_threshold}. Skipping local training for this round.")
+                    _log.warning(
+                        "DATA QUALITY GATE FAILED: JSD=%.4f > threshold=%.4f. Skipping local training.",
+                        jsd_val, self.js_threshold,
+                    )
                     
                     # Snapshot drifted data to persistent storage for offline debugging
                     snapshot_dir = os.path.expanduser(f"~/drift_snapshots/client_{self.client_id}/round_{current_round}")
@@ -428,9 +455,9 @@ class CyberDefenseClient(NumPyClientClass):
                         import shutil
                         for f in Path(self.flows_dir).glob("*.csv"):
                             shutil.copy2(f, snapshot_dir)
-                        print(f"[client-{self.client_id}] Drifted batch snapshotted to {snapshot_dir}")
+                        _log.info(f"[client-{self.client_id}] Drifted batch snapshotted to {snapshot_dir}")
                     except Exception as e:
-                        print(f"[client-{self.client_id}] Error snapshotting drifted data: {e}")
+                        _log.error(f"[client-{self.client_id}] Error snapshotting drifted data: {e}")
                     
                     # Return unchanged parameters, 1 sample (to avoid zero), and metrics indicating rejection
                     out_params = self.get_parameters(config={})
@@ -446,29 +473,28 @@ class CyberDefenseClient(NumPyClientClass):
                     }
                     return out_params, 1, metrics
             
-            # 80/20 Train/Test Split
-            from sklearn.model_selection import train_test_split
-            X_np, y_np = X.cpu().numpy(), y.cpu().numpy()
-            
-            if len(X_np) > 1:
-                # Stratify if possible, but fall back to random split if a class has only 1 sample
-                try:
-                    X_train, X_val, y_train, y_val = train_test_split(X_np, y_np, test_size=0.2, random_state=42, stratify=y_np)
-                except ValueError:
-                    X_train, X_val, y_train, y_val = train_test_split(X_np, y_np, test_size=0.2, random_state=42)
+            # Temporal 80/20 Train/Validation Split (preserves sequential CL task ordering without future leakage)
+            n_total = len(X)
+            if n_total > 1:
+                split_idx = int(np.ceil(0.8 * n_total))
+                X_train_t, X_val_t = X[:split_idx], X[split_idx:]
+                y_train_t, y_val_t = y[:split_idx], y[split_idx:]
+                if len(X_val_t) == 0:
+                    X_val_t, y_val_t = X_train_t, y_train_t
             else:
-                X_train, X_val, y_train, y_val = X_np, X_np, y_np, y_np
+                X_train_t, X_val_t = X, X
+                y_train_t, y_val_t = y, y
                 
-            X_train = torch.tensor(X_train)
-            y_train = torch.tensor(y_train, dtype=torch.int64)
-            self.X_val = torch.tensor(X_val)
-            self.y_val = torch.tensor(y_val, dtype=torch.int64)
+            X_train = X_train_t.clone().detach() if isinstance(X_train_t, torch.Tensor) else torch.tensor(X_train_t)
+            y_train = y_train_t.clone().detach().to(dtype=torch.int64) if isinstance(y_train_t, torch.Tensor) else torch.tensor(y_train_t, dtype=torch.int64)
+            self.X_val = X_val_t.clone().detach() if isinstance(X_val_t, torch.Tensor) else torch.tensor(X_val_t)
+            self.y_val = y_val_t.clone().detach().to(dtype=torch.int64) if isinstance(y_val_t, torch.Tensor) else torch.tensor(y_val_t, dtype=torch.int64)
             
             num_samples = len(X_train)
 
             experience = get_experience(X_train, y_train)
             self.cl.train(experience)
-            print(f"[client] Trained on {num_samples} flows")
+            _log.info("Trained on %d flows", num_samples)
 
             # Extract EWC Fisher Information Matrix diagonals (importance weights)
             ewc_plugin = None
@@ -526,7 +552,7 @@ class CyberDefenseClient(NumPyClientClass):
                     fisher_diagonals_serialized = json.dumps(fisher_diagonals)
 
         except FileNotFoundError as e:
-            print(f"[client] WARNING: {e}. Skipping training this round (no flows yet).")
+            _log.warning("%s. Skipping training this round (no flows yet).", e)
             
         # Validate outgoing parameters — never send NaN weights back to server
         out_params = self.get_parameters(config={})
@@ -534,7 +560,10 @@ class CyberDefenseClient(NumPyClientClass):
         for i, v in enumerate(out_params):
             t = torch.tensor(v)
             if torch.isnan(t).any() or torch.isinf(t).any():
-                print(f"[client] WARNING: Outgoing weight tensor[{i}] contains NaN/Inf. Replacing with zeros before upload.")
+                _log.warning(
+                    "Outgoing weight tensor[%d] contains NaN/Inf. Replacing with zeros before upload.",
+                    i,
+                )
                 t = torch.nan_to_num(t, nan=0.0, posinf=0.0, neginf=0.0)
             clean_params.append(t.numpy())
         # Return at least 1 so FedAvg aggregate_inplace never divides by zero
@@ -663,29 +692,39 @@ def main():
     parser.add_argument("--dp-enabled", action="store_true", help="Enable client-level Differential Privacy (DP-SGD)")
     parser.add_argument("--dp-noise-multiplier", type=float, default=0.1, help="Noise multiplier for DP-SGD")
     parser.add_argument("--dp-max-grad-norm", type=float, default=1.0, help="Gradient clip threshold for DP-SGD")
+    parser.add_argument("--mlflow-uri", default=None, help="MLflow Tracking Server URI")
+    parser.add_argument("--experiment-name", default=None, help="MLflow Experiment Name")
     args = parser.parse_args()
 
-    # Set up MLflow
-    mlflow.set_tracking_uri("http://10.10.130.10:5000")
-    mlflow.set_experiment("FL-CL-CyberDefense")
+    # Set up MLflow with environment and argument fallbacks
+    mlflow_uri = args.mlflow_uri or os.environ.get("MLFLOW_TRACKING_URI", "http://10.10.130.10:5000")
+    exp_name = args.experiment_name or os.environ.get("MLFLOW_EXPERIMENT_NAME", "FL-CL-CyberDefense")
+    mlflow.set_tracking_uri(mlflow_uri)
+    mlflow.set_experiment(exp_name)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[client-{args.client_id}] Device: {device}")
-    print(f"[client-{args.client_id}] Server: {args.server}")
-    print(f"[client-{args.client_id}] Flows:  {args.flows_dir}")
-    print(f"[client-{args.client_id}] CL Strategy: {args.cl_strategy}")
+    _log.info("Device:      %s", device)
+    _log.info("Server:      %s", args.server)
+    _log.info("Flows:       %s", args.flows_dir)
+    _log.info("CL Strategy: %s", args.cl_strategy)
     if args.cl_strategy.upper() == "EWC":
-        print(f"[client-{args.client_id}] EWC Lambda: {args.ewc_lambda}")
+        _log.info("EWC Lambda:  %s", args.ewc_lambda)
     elif args.cl_strategy.upper() == "GEM":
-        print(f"[client-{args.client_id}] GEM Patterns: {args.gem_patterns} | Memory Strength: {args.gem_memory_strength}")
-    print(f"[client-{args.client_id}] SGD lr: {args.lr} | momentum: {args.momentum} | batch_size: {args.batch_size}")
-    print(f"[client-{args.client_id}] DoS duration threshold: {args.dos_threshold_ms} ms")
-    print(f"[client-{args.client_id}] Traffic Gen IP: {args.traffic_gen_ip}")
-    
+        _log.info("GEM Patterns: %s | Memory Strength: %s", args.gem_patterns, args.gem_memory_strength)
+    _log.info("SGD lr: %s | momentum: %s | batch_size: %s", args.lr, args.momentum, args.batch_size)
+    _log.info("DoS duration threshold: %s ms", args.dos_threshold_ms)
+    _log.info("Traffic Gen IP: %s", args.traffic_gen_ip)
+
     if args.poison_enabled:
-        print(f"[client-{args.client_id}] POISON ENABLED: Flipping {args.poison_rate * 100}% of class {args.poison_from} to {args.poison_to}")
+        _log.warning(
+            "POISON ENABLED: Flipping %.0f%% of class %d to %d",
+            args.poison_rate * 100, args.poison_from, args.poison_to,
+        )
     if args.dp_enabled:
-        print(f"[client-{args.client_id}] DP ENABLED: Noise Multiplier={args.dp_noise_multiplier} | Max Grad Norm={args.dp_max_grad_norm}")
+        _log.info(
+            "DP ENABLED: Noise Multiplier=%s | Max Grad Norm=%s",
+            args.dp_noise_multiplier, args.dp_max_grad_norm,
+        )
 
     net = get_model(args.model_type).to(device)
     

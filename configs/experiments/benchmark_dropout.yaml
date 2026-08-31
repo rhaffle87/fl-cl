@@ -29,15 +29,15 @@ simulation:
   - dns_exfil
   - botnet
   attack_engine: auto
-fl_cl:
+fl:
   rounds: 10
-  min_fit_clients: 1
-  min_evaluate_clients: 1
-  min_available_clients: 1
-  sample_fraction_fit: 0.5
-  cl_strategy: EWC
+  min_clients: 1
+  fraction_fit: 0.5
+  fraction_evaluate: 1.0
+cl:
+  strategy: EWC
   ewc_lambda: 2.0
-  gem_patterns: 256
+  gem_patterns_per_exp: 256
   gem_memory_strength: 0.5
 model:
   type: cnn
