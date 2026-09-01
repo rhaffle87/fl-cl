@@ -1,25 +1,28 @@
-"""
-src/sweep.py — Multi-Run Hyperparameter Sweep & Grid Search Controller.
-"""
+# src/sweep.py — Multi-Run Hyperparameter Sweep & Grid Search Controller.
+# Orchestrates experiments across models, algorithms, and node counts.
 
-import os
-import sys
-import yaml
 import argparse
 import itertools
+import os
 import subprocess
+import sys
 from datetime import datetime
+
 import mlflow
+import yaml
 
 try:
     from logger import get_logger
+
     _log = get_logger("sweep")
 except ImportError:
     try:
         from src.logger import get_logger
+
         _log = get_logger("sweep")
     except ImportError:
         import logging
+
         _log = logging.getLogger("sweep")
 
 
@@ -45,29 +48,48 @@ def load_env(env_name: str = ".env"):
             break
         current_dir = parent
 
+
 # Load local environment variables
 load_env()
 
 # Prevent Windows Unicode/emoji console encoding errors
-if sys.platform.startswith('win'):
+if sys.platform.startswith("win"):
     try:
-        sys.stdout.reconfigure(encoding='utf-8')
-        sys.stderr.reconfigure(encoding='utf-8')
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
     except AttributeError:
         pass
 
 
 def load_yaml(path):
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         return yaml.safe_load(f)
+
 
 def main():
     parser = argparse.ArgumentParser(description="FCL Hyperparameter Sweep Controller")
-    parser.add_argument("--config", default="configs/sweeps/sweep_grid.yaml", help="Sweep configuration YAML file")
+    parser.add_argument(
+        "--config",
+        default="configs/sweeps/sweep_grid.yaml",
+        help="Sweep configuration YAML file",
+    )
     parser.add_argument("--key", default=None, help="Path to SSH private key")
-    parser.add_argument("--dry-run", action="store_true", help="Print sweep combinations without executing")
-    parser.add_argument("--start-index", type=int, default=1, help="1-based index of the combination to start/resume from")
-    parser.add_argument("--parent-run-id", default=None, help="Existing parent run ID to attach child runs to")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print sweep combinations without executing",
+    )
+    parser.add_argument(
+        "--start-index",
+        type=int,
+        default=1,
+        help="1-based index of the combination to start/resume from",
+    )
+    parser.add_argument(
+        "--parent-run-id",
+        default=None,
+        help="Existing parent run ID to attach child runs to",
+    )
     args = parser.parse_args()
 
     # Locate sweep config
@@ -77,29 +99,33 @@ def main():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(script_dir, "..", args.config)
         if not os.path.exists(config_path):
-            alt_path = os.path.join(script_dir, "..", "configs", "sweeps", os.path.basename(args.config))
+            alt_path = os.path.join(
+                script_dir, "..", "configs", "sweeps", os.path.basename(args.config)
+            )
             if os.path.exists(alt_path):
                 config_path = alt_path
             else:
-                _log.error(f"[!] Error: Sweep config file not found at {args.config} or {config_path}")
+                _log.error(
+                    f"[!] Error: Sweep config file not found at {args.config} or {config_path}"
+                )
                 sys.exit(1)
 
     config = load_yaml(config_path)
     exp_config = config.get("experiment", {})
     sweep_config = config.get("sweep", {})
-    
+
     exp_name = exp_config.get("name", "FCL-Sweep")
     parameters_dict = sweep_config.get("parameters", {})
-    
+
     # Generate grid combinations
     keys = list(parameters_dict.keys())
     values_list = [parameters_dict[k] for k in keys]
     combinations = list(itertools.product(*values_list))
-    
+
     _log.info(f"[*] Loaded sweep config from {config_path}")
     _log.info(f"[*] Sweep parameters: {list(keys)}")
     _log.info(f"[*] Total combinations to run: {len(combinations)}")
-    
+
     if args.dry_run:
         _log.info("\n=== Dry Run: Parameter Combinations ===")
         for idx, combo in enumerate(combinations):
@@ -110,7 +136,7 @@ def main():
     # Set up MLflow
     tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
     mlflow.set_tracking_uri(tracking_uri)
-    
+
     try:
         mlflow.set_experiment(exp_name)
     except Exception as e:
@@ -120,19 +146,30 @@ def main():
     # Start parent run
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     parent_run_name = f"Sweep-Parent-{timestamp}"
-    
+
     parent_run = None
     parent_run_id = args.parent_run_id or ""
-    
+
     if parent_run_id:
-        _log.info(f"[*] Resuming sweep under existing MLflow Parent Run ID: {parent_run_id}")
+        _log.info(
+            f"[*] Resuming sweep under existing MLflow Parent Run ID: {parent_run_id}"
+        )
     else:
         try:
-            parent_run = mlflow.start_run(run_name=parent_run_name, tags={"sweep_parent": "true"})
+            parent_run = mlflow.start_run(
+                run_name=parent_run_name, tags={"sweep_parent": "true"}
+            )
             parent_run_id = parent_run.info.run_id
-            _log.info(f"[*] Started MLflow Parent Run: {parent_run_name} (ID: {parent_run_id})")
+            _log.info(
+                f"[*] Started MLflow Parent Run: {parent_run_name} (ID: {parent_run_id})"
+            )
             # Log sweep metadata
-            mlflow.log_params({f"sweep_space_{k.replace('.', '_')}": str(v) for k, v in parameters_dict.items()})
+            mlflow.log_params(
+                {
+                    f"sweep_space_{k.replace('.', '_')}": str(v)
+                    for k, v in parameters_dict.items()
+                }
+            )
         except Exception as e:
             _log.error(f"[!] Warning: Failed to start parent MLflow run: {e}")
             _log.info("[*] Proceeding with child runs only.")
@@ -142,29 +179,41 @@ def main():
             if (idx + 1) < args.start_index:
                 continue
             param_map = dict(zip(keys, combo))
-            _log.info(f"\n==================================================")
+            _log.info("\n==================================================")
             _log.info(f"[*] Executing Run {idx + 1}/{len(combinations)}")
             _log.info(f"[*] Parameters: {param_map}")
-            _log.info(f"==================================================")
-            
-            cmd = [sys.executable, "src/orchestrate.py", "--mlops-mode", "experimental", "--config", args.config]
+            _log.info("==================================================")
+
+            cmd = [
+                sys.executable,
+                "src/orchestrate.py",
+                "--mlops-mode",
+                "experimental",
+                "--config",
+                args.config,
+            ]
             if args.key:
                 cmd.extend(["--key", args.key])
             if parent_run_id:
                 cmd.extend(["--parent-run-id", parent_run_id])
 
-                
             for k, val in param_map.items():
                 if k in ("cl.ewc_lambda", "ewc_lambda"):
                     cmd.extend(["--lambda-ewc", str(val)])
                 elif k in ("cl.strategy", "cl_strategy"):
                     cmd.extend(["--cl-strategy", str(val)])
-                elif k in ("cl.gem_patterns_per_exp", "cl.gem_patterns", "gem_patterns"):
+                elif k in (
+                    "cl.gem_patterns_per_exp",
+                    "cl.gem_patterns",
+                    "gem_patterns",
+                ):
                     cmd.extend(["--gem-patterns", str(val)])
                 elif k in ("cl.gem_memory_strength", "gem_memory_strength"):
                     cmd.extend(["--gem-memory-strength", str(val)])
                 elif k in ("cl.task_sequence", "cl_task_sequence"):
-                    seq_str = ",".join(map(str, val)) if isinstance(val, list) else str(val)
+                    seq_str = (
+                        ",".join(map(str, val)) if isinstance(val, list) else str(val)
+                    )
                     cmd.extend(["--cl-task-sequence", seq_str])
                 elif k in ("cl.complexity_score", "complexity_score"):
                     cmd.extend(["--cl-complexity-score", str(val)])
@@ -179,7 +228,9 @@ def main():
                 elif k in ("fl.rounds", "rounds"):
                     cmd.extend(["--rounds", str(val)])
                 elif k in ("training.class_weights", "class_weights"):
-                    weights_str = ",".join(map(str, val)) if isinstance(val, list) else str(val)
+                    weights_str = (
+                        ",".join(map(str, val)) if isinstance(val, list) else str(val)
+                    )
                     cmd.extend(["--class-weights", weights_str])
                 elif k in ("model.type", "model_type"):
                     cmd.extend(["--model-type", str(val)])
@@ -194,15 +245,35 @@ def main():
                 elif k in ("security.trimmed_mean_beta", "trimmed_mean_beta"):
                     cmd.extend(["--trimmed-mean-beta", str(val)])
                 elif k in ("security.dp_enabled", "dp_enabled"):
-                    cmd.extend(["--dp-enabled", "true" if val is True or str(val).lower() == "true" else "false"])
+                    cmd.extend(
+                        [
+                            "--dp-enabled",
+                            (
+                                "true"
+                                if val is True or str(val).lower() == "true"
+                                else "false"
+                            ),
+                        ]
+                    )
                 elif k in ("security.dp_noise_multiplier", "dp_noise_multiplier"):
                     cmd.extend(["--dp-noise-multiplier", str(val)])
                 elif k in ("security.dp_max_grad_norm", "dp_max_grad_norm"):
                     cmd.extend(["--dp-max-grad-norm", str(val)])
                 elif k in ("security.poison_enabled", "poison_enabled"):
-                    cmd.extend(["--poison-enabled", "true" if val is True or str(val).lower() == "true" else "false"])
+                    cmd.extend(
+                        [
+                            "--poison-enabled",
+                            (
+                                "true"
+                                if val is True or str(val).lower() == "true"
+                                else "false"
+                            ),
+                        ]
+                    )
                 elif k in ("security.poison_client_ids", "poison_client_ids"):
-                    ids_str = ",".join(map(str, val)) if isinstance(val, list) else str(val)
+                    ids_str = (
+                        ",".join(map(str, val)) if isinstance(val, list) else str(val)
+                    )
                     cmd.extend(["--poison-client-ids", ids_str])
                 elif k in ("security.poison_rate", "poison_rate"):
                     cmd.extend(["--poison-rate", str(val)])
@@ -214,20 +285,23 @@ def main():
                     cmd.extend(["--mlops-mode", str(val)])
                 elif k in ("mlops.production_strategy", "production_strategy"):
                     cmd.extend(["--production-strategy", str(val)])
-            
+
             _log.info(f"[*] Command: {' '.join(cmd)}")
             try:
                 # Run the orchestrator
                 subprocess.run(cmd, check=True)
                 _log.info(f"[+] Run {idx + 1} completed successfully.")
             except subprocess.CalledProcessError as e:
-                _log.error(f"[!] Error: Run {idx + 1} failed with exit code {e.returncode}")
+                _log.error(
+                    f"[!] Error: Run {idx + 1} failed with exit code {e.returncode}"
+                )
                 # Continue with the next combination in grid search
                 continue
     finally:
         if parent_run:
             mlflow.end_run()
             _log.info(f"[*] Ended MLflow Parent Run: {parent_run_name}")
+
 
 if __name__ == "__main__":
     main()

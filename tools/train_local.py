@@ -1,18 +1,15 @@
-"""
-train_local.py — Standalone Local Training & Confusion Matrix Diagnostic Utility.
-
-Trains the CyberDefenseNet backbone locally on an edge defender's ramdisk flow dataset
-(outside the distributed Flower FL loop) to diagnose classification convergence or label imbalance.
-
-Usage:
-    python3 tools/train_local.py [--flows-dir /mnt/ramdisk/flows] [--epochs 40] [--model-type cnn]
-"""
+# train_local.py — Standalone Local Training & Confusion Matrix Diagnostic Utility.
+#
+# Trains the CyberDefenseNet backbone locally on an edge defender's ramdisk flow dataset
+# (outside the distributed Flower FL loop) to diagnose classification convergence or label imbalance.
+#
+# Usage:
+# python3 tools/train_local.py [--flows-dir /mnt/ramdisk/flows] [--epochs 40] [--model-type cnn]
 
 import argparse
 import sys
-import os
-from pathlib import Path
 from collections import Counter
+from pathlib import Path
 
 # Standard path resolution
 repo_root = Path(__file__).resolve().parent.parent
@@ -20,26 +17,45 @@ sys.path.insert(0, str(repo_root / "src" / "defender"))
 sys.path.insert(0, str(repo_root / "src"))
 sys.path.append("/root")
 
+import client
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
+from model import get_model
 from torch.optim import Adam
 from torch.utils.data import DataLoader, TensorDataset
-
-import client
-from model import get_model
 
 LABEL_NAMES = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: "DoS"}
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Standalone local defender training with confusion matrix")
-    parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory on ramdisk (default: /mnt/ramdisk/flows)")
-    parser.add_argument("--epochs", type=int, default=40, help="Training epochs (default: 40)")
-    parser.add_argument("--lr", type=float, default=0.005, help="Learning rate (default: 0.005)")
-    parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms (default: 2000.0)")
-    parser.add_argument("--model-type", default="cnn", choices=["mlp", "cnn", "transformer"], help="Model architecture type (default: cnn)")
+    parser = argparse.ArgumentParser(
+        description="Standalone local defender training with confusion matrix"
+    )
+    parser.add_argument(
+        "--flows-dir",
+        default="/mnt/ramdisk/flows",
+        help="Flow CSV directory on ramdisk (default: /mnt/ramdisk/flows)",
+    )
+    parser.add_argument(
+        "--epochs", type=int, default=40, help="Training epochs (default: 40)"
+    )
+    parser.add_argument(
+        "--lr", type=float, default=0.005, help="Learning rate (default: 0.005)"
+    )
+    parser.add_argument(
+        "--dos-threshold-ms",
+        type=float,
+        default=2000.0,
+        help="DoS flow duration threshold in ms (default: 2000.0)",
+    )
+    parser.add_argument(
+        "--model-type",
+        default="cnn",
+        choices=["mlp", "cnn", "transformer"],
+        help="Model architecture type (default: cnn)",
+    )
     args = parser.parse_args()
 
     print("========================================================================")
@@ -47,7 +63,9 @@ def main():
     print("========================================================================")
     print(f"[*] Loading ramdisk flows from: {args.flows_dir}")
     try:
-        X, y = client.load_ramdisk_flows(args.flows_dir, dos_threshold_ms=args.dos_threshold_ms)
+        X, y = client.load_ramdisk_flows(
+            args.flows_dir, dos_threshold_ms=args.dos_threshold_ms
+        )
     except Exception as e:
         print(f"[FAIL] Error loading flows: {e}")
         sys.exit(1)
@@ -64,7 +82,9 @@ def main():
     optimizer = Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
 
-    print(f"\n[*] Training {args.model_type.upper()} locally for {args.epochs} epochs on {device}...")
+    print(
+        f"\n[*] Training {args.model_type.upper()} locally for {args.epochs} epochs on {device}..."
+    )
     model.train()
     for epoch in range(args.epochs):
         total_loss, correct, total = 0.0, 0, 0
@@ -81,7 +101,9 @@ def main():
             total += y_batch.size(0)
 
         if (epoch + 1) % 5 == 0 or epoch == 0:
-            print(f"  Epoch {epoch+1:>3d}/{args.epochs} — Loss: {total_loss/total:.4f}  Acc: {correct/total:.4f}")
+            print(
+                f"  Epoch {epoch+1:>3d}/{args.epochs} — Loss: {total_loss/total:.4f}  Acc: {correct/total:.4f}"
+            )
 
     # Evaluate: confusion matrix + per-class accuracy
     model.eval()
@@ -106,7 +128,9 @@ def main():
         mask = np.array(all_targets) == label
         if mask.sum() > 0:
             acc = (np.array(all_preds)[mask] == label).sum() / mask.sum()
-            print(f"  {label} ({LABEL_NAMES[label]:>13s}): {acc:.4f}  ({mask.sum()} samples)")
+            print(
+                f"  {label} ({LABEL_NAMES[label]:>13s}): {acc:.4f}  ({mask.sum()} samples)"
+            )
         else:
             print(f"  {label} ({LABEL_NAMES[label]:>13s}): N/A     (0 samples)")
 

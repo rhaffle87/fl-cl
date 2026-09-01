@@ -1,27 +1,27 @@
-"""
-src/aggregator/alerts.py — Real-Time Incident & Governance Alert Dispatcher (Telegram)
+# src/aggregator/alerts.py — Real-Time Incident & Governance Alert Dispatcher (Telegram)
+#
+# Dispatches real-time security alerts via Telegram Bot API using Python standard
+# library (urllib.request) with zero external dependencies and strictly no emoji characters.
+# Credentials are automatically resolved from environment variables or the project-root .env file.
 
-Dispatches real-time security alerts via Telegram Bot API using Python standard
-library (urllib.request) with zero external dependencies and strictly no emoji characters.
-Credentials are automatically resolved from environment variables or the project-root .env file.
-"""
-
-import os
-import sys
 import json
-import urllib.request
+import os
 import urllib.parse
+import urllib.request
 from pathlib import Path
 
 try:
     from logger import get_logger
+
     _log = get_logger("alerts")
 except ImportError:
     try:
         from src.logger import get_logger
+
         _log = get_logger("alerts")
     except ImportError:
         import logging
+
         _log = logging.getLogger("alerts")
 
 
@@ -64,7 +64,12 @@ def escape_html(text: str) -> str:
     """Escapes special characters for safe Telegram HTML formatting."""
     if not isinstance(text, str):
         text = str(text)
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 
 def send_telegram_message(token: str, chat_id: str, text: str) -> bool:
@@ -103,11 +108,15 @@ def send_alert(title: str, body: str, level: str = "INFO") -> bool:
     tg_text = f"<b>{level_tag} FL-CL: {title_esc}</b>\n\n{body_esc}"
 
     if cfg["telegram_token"] and cfg["telegram_chat_id"]:
-        return send_telegram_message(cfg["telegram_token"], cfg["telegram_chat_id"], tg_text)
+        return send_telegram_message(
+            cfg["telegram_token"], cfg["telegram_chat_id"], tg_text
+        )
     return False
 
 
-def send_byzantine_alert(client_id: str, anomaly_type: str, weight_drift: float, strategy: str) -> bool:
+def send_byzantine_alert(
+    client_id: str, anomaly_type: str, weight_drift: float, strategy: str
+) -> bool:
     """Alert on Byzantine parameter poisoning or anomaly detection."""
     title = f"Byzantine Attack Detected on Client {client_id}"
     body = (
@@ -122,11 +131,15 @@ def send_promotion_alert(model_name: str, version: int, metrics: dict) -> bool:
     """Alert on autonomous MLOps Champion promotion."""
     title = f"New Production Champion Promoted: {model_name} (v{version})"
     metrics_str = "\n".join([f"- {k}: {v}" for k, v in metrics.items()])
-    body = f"Model checkpoint successfully passed all validation gates.\n\n{metrics_str}"
+    body = (
+        f"Model checkpoint successfully passed all validation gates.\n\n{metrics_str}"
+    )
     return send_alert(title, body, level="SUCCESS")
 
 
-def send_drift_alert(client_id: str, round_num: int, jsd_score: float, threshold: float = 0.60) -> bool:
+def send_drift_alert(
+    client_id: str, round_num: int, jsd_score: float, threshold: float = 0.60
+) -> bool:
     """Alert on JSD covariate shift data quality gate rejection."""
     title = f"Data Quality Gate Tripped (Client {client_id})"
     body = (
@@ -156,4 +169,3 @@ def send_sweep_alert(
         f"- Tracking Dashboard: http://10.10.130.10:5000"
     )
     return send_alert(title, body, level="SUCCESS")
-

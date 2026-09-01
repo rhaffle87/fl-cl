@@ -1,18 +1,15 @@
-"""
-src/aggregator/dashboard.py — Real-Time SOC Stream Visualizer & Monitor.
-
-Provides a live console and stream visualizer displaying:
-1. Live flow classification rates across threat classes.
-2. Free Energy Out-of-Distribution (OOD) Threat Gauge.
-3. Client JSD covariate drift & data quality gate statuses.
-4. Active model parameters, Fisher statistics, and DP-SGD bounds.
-
-Usage:
-    python src/aggregator/dashboard.py [--test-mode] [--interval 1.0]
-"""
+# src/aggregator/dashboard.py — Real-Time SOC Stream Visualizer & Monitor.
+#
+# Provides a live console and stream visualizer displaying:
+# 1. Live flow classification rates across threat classes.
+# 2. Free Energy Out-of-Distribution (OOD) Threat Gauge.
+# 3. Client JSD covariate drift & data quality gate statuses.
+# 4. Active model parameters, Fisher statistics, and DP-SGD bounds.
+#
+# Usage:
+# python src/aggregator/dashboard.py [--test-mode] [--interval 1.0]
 
 import argparse
-import os
 import sys
 import time
 from datetime import datetime
@@ -31,15 +28,17 @@ from model import get_model
 
 try:
     from logger import get_logger
+
     _log = get_logger("dashboard")
 except ImportError:
     try:
         from src.logger import get_logger
+
         _log = get_logger("dashboard")
     except ImportError:
         import logging
-        _log = logging.getLogger("dashboard")
 
+        _log = logging.getLogger("dashboard")
 
 
 LABEL_NAMES = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: "DoS"}
@@ -73,7 +72,9 @@ def render_threat_gauge(energy_score: float) -> str:
     return f"[{bar}] {energy_score:+.2f} {status}"
 
 
-def stream_soc_events(model, test_mode: bool = False, max_events: int = 10, interval: float = 1.0):
+def stream_soc_events(
+    model, test_mode: bool = False, max_events: int = 10, interval: float = 1.0
+):
     _log.info(render_banner())
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
@@ -81,17 +82,23 @@ def stream_soc_events(model, test_mode: bool = False, max_events: int = 10, inte
     counts = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
     total_flows = 0
 
-    _log.info(f"\n{'TIME':<10} | {'FLOW ID':<10} | {'PREDICTED THREAT':<15} | {'CONF':<6} | {'ENERGY SCORE & STATUS':<35}")
+    _log.info(
+        f"\n{'TIME':<10} | {'FLOW ID':<10} | {'PREDICTED THREAT':<15} | {'CONF':<6} | {'ENERGY SCORE & STATUS':<35}"
+    )
     _log.info("-" * 85)
 
     for step in range(1, max_events + 1 if test_mode else 1000000):
         # Generate synthetic live flow packet vector
         if step % 5 == 0:
             # Inject zero-day anomaly flow
-            raw_flow = np.random.normal(loc=2.5, scale=1.5, size=(1, 32)).astype(np.float32)
+            raw_flow = np.random.normal(loc=2.5, scale=1.5, size=(1, 32)).astype(
+                np.float32
+            )
         else:
             # Normal / known threat flow
-            raw_flow = np.random.normal(loc=0.0, scale=1.0, size=(1, 32)).astype(np.float32)
+            raw_flow = np.random.normal(loc=0.0, scale=1.0, size=(1, 32)).astype(
+                np.float32
+            )
 
         x_tensor = torch.tensor(raw_flow).to(device)
         with torch.no_grad():
@@ -109,27 +116,53 @@ def stream_soc_events(model, test_mode: bool = False, max_events: int = 10, inte
         threat_name = LABEL_NAMES.get(pred_class, "Unknown")
         gauge_str = render_threat_gauge(energy)
 
-        _log.info(f"{t_str:<10} | {flow_id:<10} | {threat_name:<15} | {conf*100:4.1f}% | {gauge_str}")
+        _log.info(
+            f"{t_str:<10} | {flow_id:<10} | {threat_name:<15} | {conf*100:4.1f}% | {gauge_str}"
+        )
 
         if interval > 0 and not test_mode:
             time.sleep(interval)
 
     _log.info("-" * 85)
     _log.info(f"[*] Stream summary: Processed {total_flows} flows.")
-    _log.info(f"    Normal: {counts[0]} | Botnet: {counts[1]} | Exfil: {counts[2]} | BruteForce: {counts[3]} | DoS: {counts[4]}")
-    _log.info("======================================================================\n")
+    _log.info(
+        f"    Normal: {counts[0]} | Botnet: {counts[1]} | Exfil: {counts[2]} | BruteForce: {counts[3]} | DoS: {counts[4]}"
+    )
+    _log.info(
+        "======================================================================\n"
+    )
 
 
 def main():
-    parser = argparse.ArgumentParser(description="FL-CL Real-Time SOC Stream Visualizer")
-    parser.add_argument("--model-type", choices=["cnn", "mlp", "transformer"], default="cnn", help="Champion backbone")
-    parser.add_argument("--test-mode", action="store_true", help="Run in mock/test mode for 10 simulated flows")
-    parser.add_argument("--interval", type=float, default=0.5, help="Update interval in seconds")
-    parser.add_argument("--max-events", type=int, default=10, help="Maximum events in test mode")
+    parser = argparse.ArgumentParser(
+        description="FL-CL Real-Time SOC Stream Visualizer"
+    )
+    parser.add_argument(
+        "--model-type",
+        choices=["cnn", "mlp", "transformer"],
+        default="cnn",
+        help="Champion backbone",
+    )
+    parser.add_argument(
+        "--test-mode",
+        action="store_true",
+        help="Run in mock/test mode for 10 simulated flows",
+    )
+    parser.add_argument(
+        "--interval", type=float, default=0.5, help="Update interval in seconds"
+    )
+    parser.add_argument(
+        "--max-events", type=int, default=10, help="Maximum events in test mode"
+    )
     args = parser.parse_args()
 
     model = get_model(args.model_type, input_dim=32, num_classes=5)
-    stream_soc_events(model, test_mode=args.test_mode, max_events=args.max_events, interval=args.interval)
+    stream_soc_events(
+        model,
+        test_mode=args.test_mode,
+        max_events=args.max_events,
+        interval=args.interval,
+    )
 
 
 if __name__ == "__main__":

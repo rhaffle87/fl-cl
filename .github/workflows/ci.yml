@@ -32,7 +32,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install flwr avalanche-lib pyyaml pandas numpy scikit-learn onnx onnxruntime requests mlflow matplotlib
+          pip install flwr avalanche-lib pyyaml pandas numpy scikit-learn onnx onnxruntime requests mlflow matplotlib black ruff isort
+
+      - name: Run Formatting & Linting Checks
+        run: |
+          black --check .
+          ruff check .
 
       - name: Run Master Codebase & Invariant Auditor (ADR-006)
         run: |

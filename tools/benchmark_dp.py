@@ -1,22 +1,18 @@
-"""
-benchmark_dp.py — Differential Privacy Noise Sensitivity Curve Suite
+# benchmark_dp.py — Differential Privacy Noise Sensitivity Curve Suite
+#
+# Evaluates model convergence, loss, and per-class F1 score retention under varying
+# client DP noise multipliers (sigma in [0.0, 0.01, 0.05, 0.10, 0.20]) and max grad norm 1.0.
 
-Evaluates model convergence, loss, and per-class F1 score retention under varying
-client DP noise multipliers (sigma in [0.0, 0.01, 0.05, 0.10, 0.20]) and max grad norm 1.0.
-"""
 import argparse
-
 import sys
-import os
-import time
-import json
 from pathlib import Path
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
+
 import numpy as np
 import pandas as pd
-from sklearn.metrics import f1_score, accuracy_score
+import torch
+import torch.nn as nn
+from sklearn.metrics import accuracy_score, f1_score
+from torch.utils.data import DataLoader, TensorDataset
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src" / "defender"))
@@ -31,16 +27,16 @@ def generate_synthetic_threat_stream(n_samples=2000, input_dim=32):
     # Class distribution: 0: 75% (Normal), 1: 3% (Botnet), 2: 12% (Exfil), 3: 5% (BruteForce), 4: 5% (DoS)
     probs = [0.75, 0.03, 0.12, 0.05, 0.05]
     y = np.random.choice(5, size=n_samples, p=probs)
-    
+
     # Class centroids with realistic cluster separation
     centers = {
         0: np.zeros(input_dim),
         1: np.array([2.5 if i % 2 == 0 else -1.5 for i in range(input_dim)]),
         2: np.array([-2.0 if i % 3 == 0 else 1.8 for i in range(input_dim)]),
         3: np.array([3.0 if i < 16 else -2.0 for i in range(input_dim)]),
-        4: np.array([4.0 if i % 4 == 0 else 0.5 for i in range(input_dim)])
+        4: np.array([4.0 if i % 4 == 0 else 0.5 for i in range(input_dim)]),
     }
-    
+
     X = np.zeros((n_samples, input_dim), dtype=np.float32)
     for i in range(n_samples):
         c = y[i]
@@ -60,7 +56,9 @@ def evaluate_dp_curve():
     input_dim = 32
     num_classes = 5
 
-    X_train, y_train = generate_synthetic_threat_stream(n_samples=3000, input_dim=input_dim)
+    X_train, y_train = generate_synthetic_threat_stream(
+        n_samples=3000, input_dim=input_dim
+    )
     X_val, y_val = generate_synthetic_threat_stream(n_samples=1000, input_dim=input_dim)
 
     train_ds = TensorDataset(X_train, y_train)
@@ -70,7 +68,9 @@ def evaluate_dp_curve():
     results = []
 
     for sigma in noise_multipliers:
-        print(f"\n[*] Evaluating DP Noise Multiplier sigma = {sigma:.2f} (max_grad_norm=1.0)...")
+        print(
+            f"\n[*] Evaluating DP Noise Multiplier sigma = {sigma:.2f} (max_grad_norm=1.0)..."
+        )
         torch.manual_seed(42)
         np.random.seed(42)
 
@@ -120,7 +120,7 @@ def evaluate_dp_curve():
         T = epochs * len(train_loader)
         if sigma > 0.0:
             delta = 1e-5
-            eps_approx = (np.sqrt(2 * np.log(1.0 / delta) * (q ** 2) * T) / sigma)
+            eps_approx = np.sqrt(2 * np.log(1.0 / delta) * (q**2) * T) / sigma
             eps_val = round(float(eps_approx), 2)
         else:
             eps_val = "Infinity (No DP)"
@@ -134,13 +134,17 @@ def evaluate_dp_curve():
             "f1_normal_0": round(f1_per_class[0], 4),
             "f1_botnet_1": round(f1_per_class[1] if len(f1_per_class) > 1 else 0.0, 4),
             "f1_exfil_2": round(f1_per_class[2] if len(f1_per_class) > 2 else 0.0, 4),
-            "f1_bruteforce_3": round(f1_per_class[3] if len(f1_per_class) > 3 else 0.0, 4),
-            "f1_dos_4": round(f1_per_class[4] if len(f1_per_class) > 4 else 0.0, 4)
+            "f1_bruteforce_3": round(
+                f1_per_class[3] if len(f1_per_class) > 3 else 0.0, 4
+            ),
+            "f1_dos_4": round(f1_per_class[4] if len(f1_per_class) > 4 else 0.0, 4),
         }
         results.append(res)
 
-        print(f"  sigma = {sigma:4.2f} | Loss: {train_loss:.4f} | Accuracy: {acc*100:6.2f}% | "
-              f"Macro F1: {macro_f1:.4f} | Botnet F1: {res['f1_botnet_1']:.4f}")
+        print(
+            f"  sigma = {sigma:4.2f} | Loss: {train_loss:.4f} | Accuracy: {acc*100:6.2f}% | "
+            f"Macro F1: {macro_f1:.4f} | Botnet F1: {res['f1_botnet_1']:.4f}"
+        )
 
     df = pd.DataFrame(results)
     out_csv = REPORTS_DIR / "privacy_utility_curve.csv"
@@ -150,6 +154,8 @@ def evaluate_dp_curve():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Differential Privacy (DP-SGD) Sensitivity and Epsilon Sweeper")
+    parser = argparse.ArgumentParser(
+        description="Differential Privacy (DP-SGD) Sensitivity and Epsilon Sweeper"
+    )
     _ = parser.parse_args()
     evaluate_dp_curve()

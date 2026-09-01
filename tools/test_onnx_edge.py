@@ -1,16 +1,16 @@
-"""
-tools/test_onnx_edge.py — Comprehensive validation of production ONNX export and edge daemon execution.
-"""
-import argparse
-from pathlib import Path
+# tools/test_onnx_edge.py — Comprehensive validation of production ONNX export and edge daemon execution.
+# Validates ONNX conversions and simulates local inference.
 
+import argparse
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath("."))
 import numpy as np
 
 from deploy.onnx.export_champion_onnx import export_champion_onnx
 from deploy.onnx.onnx_edge_daemon import ONNXEdgeClassifier, run_edge_benchmark
+
 
 def main():
     print("=" * 60)
@@ -27,14 +27,19 @@ def main():
     # 3. Test Single Flow
     single_flow = np.random.randn(1, 32).astype(np.float32)
     c_ids, confs, energies, lat = classifier.classify_batch(single_flow)
-    print(f"[OK] Single-flow classification: Class {c_ids[0]} (Confidence: {confs[0]*100:.2f}%, Energy: {energies[0]:.2f}) in {lat*1000:.2f} us")
+    print(
+        f"[OK] Single-flow classification: Class {c_ids[0]} (Confidence: {confs[0]*100:.2f}%, Energy: {energies[0]:.2f}) in {lat*1000:.2f} us"
+    )
 
     # 4. Benchmark Throughput
     run_edge_benchmark(num_flows=5000, batch_size=32)
 
     print("\n[SUCCESS] Production ONNX Edge Gateway suite verified successfully!")
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="ONNX Edge Model Forward Pass and Quantization Test Suite")
+    parser = argparse.ArgumentParser(
+        description="ONNX Edge Model Forward Pass and Quantization Test Suite"
+    )
     _ = parser.parse_args()
     main()

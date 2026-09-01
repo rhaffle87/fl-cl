@@ -1,24 +1,21 @@
-"""
-benchmark_byzantine.py — Multi-Aggregator Byzantine Robustness Benchmark
+# benchmark_byzantine.py — Multi-Aggregator Byzantine Robustness Benchmark
+#
+# Benchmarks FedAvg, TrimmedMean, FedMedian, Krum, MultiKrum, and Bulyan across:
+# 1. Clean federated baseline
+# 2. 20% Label Flip Attack (Byzantine Client B)
+# 3. 40% Coordinated Multi-Client Label Flip Attack
+# 4. Gaussian Gradient Poisoning Attack (variance = 1.0)
 
-Benchmarks FedAvg, TrimmedMean, FedMedian, Krum, MultiKrum, and Bulyan across:
-1. Clean federated baseline
-2. 20% Label Flip Attack (Byzantine Client B)
-3. 40% Coordinated Multi-Client Label Flip Attack
-4. Gaussian Gradient Poisoning Attack (variance = 1.0)
-"""
 import argparse
-
 import sys
-import os
-import copy
 from pathlib import Path
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
+
 import numpy as np
 import pandas as pd
+import torch
+import torch.nn as nn
 from sklearn.metrics import accuracy_score, f1_score
+from torch.utils.data import DataLoader, TensorDataset
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src" / "defender"))
@@ -36,7 +33,7 @@ def generate_threat_data(n_samples=2500, input_dim=32):
         1: np.array([2.5 if i % 2 == 0 else -1.5 for i in range(input_dim)]),
         2: np.array([-2.0 if i % 3 == 0 else 1.8 for i in range(input_dim)]),
         3: np.array([3.0 if i < 16 else -2.0 for i in range(input_dim)]),
-        4: np.array([4.0 if i % 4 == 0 else 0.5 for i in range(input_dim)])
+        4: np.array([4.0 if i % 4 == 0 else 0.5 for i in range(input_dim)]),
     }
     X = np.zeros((n_samples, input_dim), dtype=np.float32)
     for i in range(n_samples):
@@ -76,7 +73,9 @@ def aggregate_weights(weights_list, strategy="FedAvg", beta=0.1):
 
     elif strategy == "Krum":
         f = max(0, int((n - 3) / 2))
-        flat_weights = [np.concatenate([arr.flatten() for arr in w]) for w in weights_list]
+        flat_weights = [
+            np.concatenate([arr.flatten() for arr in w]) for w in weights_list
+        ]
         distances = np.zeros((n, n))
         for i in range(n):
             for j in range(n):
@@ -92,7 +91,9 @@ def aggregate_weights(weights_list, strategy="FedAvg", beta=0.1):
 
     elif strategy == "MultiKrum":
         f = max(0, int((n - 3) / 2))
-        flat_weights = [np.concatenate([arr.flatten() for arr in w]) for w in weights_list]
+        flat_weights = [
+            np.concatenate([arr.flatten() for arr in w]) for w in weights_list
+        ]
         distances = np.zeros((n, n))
         for i in range(n):
             for j in range(n):
@@ -114,7 +115,9 @@ def aggregate_weights(weights_list, strategy="FedAvg", beta=0.1):
 
     elif strategy == "Bulyan":
         f = max(0, int((n - 3) / 2))
-        flat_weights = [np.concatenate([arr.flatten() for arr in w]) for w in weights_list]
+        flat_weights = [
+            np.concatenate([arr.flatten() for arr in w]) for w in weights_list
+        ]
         distances = np.zeros((n, n))
         for i in range(n):
             for j in range(n):
@@ -164,28 +167,34 @@ def run_benchmark():
         ("Clean", 0, "none"),
         ("20% Label Flip (1 Attacker)", 1, "label_flip"),
         ("40% Label Flip (2 Attackers)", 2, "label_flip"),
-        ("Gaussian Noise (1 Attacker)", 1, "gaussian_noise")
+        ("Gaussian Noise (1 Attacker)", 1, "gaussian_noise"),
     ]
 
     results = []
 
     for scen_name, num_malicious, attack_type in scenarios:
-        print(f"\n[*] Evaluating Scenario: {scen_name} (Malicious Clients: {num_malicious}/{num_clients})...")
+        print(
+            f"\n[*] Evaluating Scenario: {scen_name} (Malicious Clients: {num_malicious}/{num_clients})..."
+        )
 
         for strat in strategies:
             # Initialize global model
-            global_model = get_model("cnn", input_dim=input_dim, num_classes=num_classes)
-            
+            global_model = get_model(
+                "cnn", input_dim=input_dim, num_classes=num_classes
+            )
+
             for r in range(num_rounds):
                 client_weights = []
                 for cid in range(num_clients):
                     # Copy global weights
-                    local_model = get_model("cnn", input_dim=input_dim, num_classes=num_classes)
+                    local_model = get_model(
+                        "cnn", input_dim=input_dim, num_classes=num_classes
+                    )
                     local_model.load_state_dict(global_model.state_dict())
-                    
+
                     # Generate client training data
                     X_c, y_c = generate_threat_data(n_samples=400, input_dim=input_dim)
-                    
+
                     # Apply attack if client is malicious
                     if cid < num_malicious:
                         if attack_type == "label_flip":
@@ -198,8 +207,10 @@ def run_benchmark():
                     # Local training
                     optimizer = torch.optim.SGD(local_model.parameters(), lr=0.02)
                     criterion = nn.CrossEntropyLoss()
-                    loader = DataLoader(TensorDataset(X_c, y_c), batch_size=32, shuffle=True)
-                    
+                    loader = DataLoader(
+                        TensorDataset(X_c, y_c), batch_size=32, shuffle=True
+                    )
+
                     local_model.train()
                     for bx, by in loader:
                         optimizer.zero_grad()
@@ -212,12 +223,16 @@ def run_benchmark():
                                     p.grad.add_(torch.randn_like(p.grad) * 2.0)
                         optimizer.step()
 
-                    c_ndarrays = [p.detach().cpu().numpy() for p in local_model.parameters()]
+                    c_ndarrays = [
+                        p.detach().cpu().numpy() for p in local_model.parameters()
+                    ]
                     client_weights.append(c_ndarrays)
 
                 # Aggregate
-                agg_ndarrays = aggregate_weights(client_weights, strategy=strat, beta=0.2)
-                
+                agg_ndarrays = aggregate_weights(
+                    client_weights, strategy=strat, beta=0.2
+                )
+
                 # Update global model
                 with torch.no_grad():
                     for p, arr in zip(global_model.parameters(), agg_ndarrays):
@@ -240,10 +255,12 @@ def run_benchmark():
                 "macro_f1": round(macro_f1, 4),
                 "botnet_f1": round(botnet_f1, 4),
                 "normal_f1": round(f1_per_class[0], 4),
-                "exfil_f1": round(f1_per_class[2], 4)
+                "exfil_f1": round(f1_per_class[2], 4),
             }
             results.append(res)
-            print(f"  [{strat:12s}] Acc: {acc:6.2f}% | Macro F1: {macro_f1:.4f} | Botnet F1: {botnet_f1:.4f}")
+            print(
+                f"  [{strat:12s}] Acc: {acc:6.2f}% | Macro F1: {macro_f1:.4f} | Botnet F1: {botnet_f1:.4f}"
+            )
 
     df = pd.DataFrame(results)
     out_csv = REPORTS_DIR / "byzantine_robustness_benchmark.csv"
@@ -253,6 +270,8 @@ def run_benchmark():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Byzantine Threat Defense and Robust Aggregator Benchmark")
+    parser = argparse.ArgumentParser(
+        description="Byzantine Threat Defense and Robust Aggregator Benchmark"
+    )
     _ = parser.parse_args()
     run_benchmark()

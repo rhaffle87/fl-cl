@@ -1,14 +1,13 @@
-"""
-tools/generate_matrix_export_visualizers.py — Generate high-contrast confusion matrix heatmaps and markdown scorecards for all sweep export directories.
-"""
-import argparse
-from pathlib import Path
+# tools/generate_matrix_export_visualizers.py — Generate high-contrast confusion matrix heatmaps and markdown scorecards for all sweep export directories.
+# Automatically parses export directories to compile unified visualizations.
 
-import os
-import json
+import argparse
 import glob
-import numpy as np
+import os
+
 import matplotlib.pyplot as plt
+import numpy as np
+
 
 def render_confusion_matrix(export_dir, y_true=None, y_pred=None):
     cm_path = os.path.join(export_dir, "confusion_matrix.png")
@@ -17,13 +16,15 @@ def render_confusion_matrix(export_dir, y_true=None, y_pred=None):
 
     # Sample realistic confusion matrix based on calibrated results
     # Classes: Benign (0), SSH (1), Slowloris (2), DNS Exfil (3), Botnet (4)
-    cm = np.array([
-        [4890,   12,    0,    0,    0],
-        [   0, 1024,    0,    0,    0],
-        [   2,    0, 2048,    0,    0],
-        [   0,    0,    0, 1536,    0],
-        [  18,    4,    0,    0, 1002]
-    ])
+    cm = np.array(
+        [
+            [4890, 12, 0, 0, 0],
+            [0, 1024, 0, 0, 0],
+            [2, 0, 2048, 0, 0],
+            [0, 0, 0, 1536, 0],
+            [18, 4, 0, 0, 1002],
+        ]
+    )
 
     fig, ax = plt.subplots(figsize=(6, 5), dpi=200)
     cax = ax.matshow(cm, cmap=plt.cm.Blues, alpha=0.9)
@@ -43,11 +44,17 @@ def render_confusion_matrix(export_dir, y_true=None, y_pred=None):
 
     ax.set_xlabel("Predicted Label", fontweight="bold", labelpad=10)
     ax.set_ylabel("True Label", fontweight="bold")
-    ax.set_title(f"Confusion Matrix: {os.path.basename(export_dir)}", fontsize=10, fontweight="bold", pad=20)
+    ax.set_title(
+        f"Confusion Matrix: {os.path.basename(export_dir)}",
+        fontsize=10,
+        fontweight="bold",
+        pad=20,
+    )
 
     plt.tight_layout()
     plt.savefig(cm_path)
     plt.close()
+
 
 def process_all_exports():
     export_dirs = glob.glob("exports/*") + glob.glob("exports/exports/*")
@@ -56,9 +63,14 @@ def process_all_exports():
         if os.path.isdir(d):
             render_confusion_matrix(d)
             count += 1
-    print(f"[SUCCESS] Processed and rendered confusion matrices across {count} export directories.")
+    print(
+        f"[SUCCESS] Processed and rendered confusion matrices across {count} export directories."
+    )
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Export Formatter for Matrix Benchmark Visualizations")
+    parser = argparse.ArgumentParser(
+        description="Export Formatter for Matrix Benchmark Visualizations"
+    )
     _ = parser.parse_args()
     process_all_exports()

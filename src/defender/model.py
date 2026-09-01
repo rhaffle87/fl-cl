@@ -1,19 +1,17 @@
-"""
-model.py — CyberDefenseNet: Multi-Layer Perceptron for Encrypted Traffic Classification
-
-Maps 32 scaled ETA features (JA3 fingerprints, SPLT statistics, flow entropy)
-to 5 threat classes: Normal, Botnet, Exfiltration, BruteForce, DoS.
-
-Research Citations:
-- [8] Jin, et al. (2024). Continual Federated Learning for Intrusion Detection in IoT Networks.
-  (Primary comparative baseline architecture. Theirs uses Replay Memory, ours uses EWC/GEM).
-- [13] Bilal, et al. (2026). Dataset-centric evaluation of federated intrusion detection models in IoT networks.
-  (Baseline feature space and structural topology mapping for the MLP/CNN models).
-
-Deploy on: Defender VMs (VM 310, VM 320)
-Input:     Feature vectors from extractor.py → /mnt/ramdisk/flows/
-Output:    Class predictions for network flow classification
-"""
+# model.py — CyberDefenseNet: Multi-Layer Perceptron for Encrypted Traffic Classification
+#
+# Maps 32 scaled ETA features (JA3 fingerprints, SPLT statistics, flow entropy)
+# to 5 threat classes: Normal, Botnet, Exfiltration, BruteForce, DoS.
+#
+# Research Citations:
+# - [8] Jin, et al. (2024). Continual Federated Learning for Intrusion Detection in IoT Networks.
+# (Primary comparative baseline architecture. Theirs uses Replay Memory, ours uses EWC/GEM).
+# - [13] Bilal, et al. (2026). Dataset-centric evaluation of federated intrusion detection models in IoT networks.
+# (Baseline feature space and structural topology mapping for the MLP/CNN models).
+#
+# Deploy on: Defender VMs (VM 310, VM 320)
+# Input:     Feature vectors from extractor.py → /mnt/ramdisk/flows/
+# Output:    Class predictions for network flow classification
 
 import torch
 import torch.nn as nn
@@ -179,18 +177,12 @@ def get_model(
     """
     m_type = model_type.lower()
     if m_type == "mlp":
-        return CyberDefenseNet(
-            input_dim=input_dim, num_classes=num_classes, **kwargs
-        )
+        return CyberDefenseNet(input_dim=input_dim, num_classes=num_classes, **kwargs)
     elif m_type == "cnn":
-        return CyberDefenseCNN(
-            input_dim=input_dim, num_classes=num_classes, **kwargs
-        )
+        return CyberDefenseCNN(input_dim=input_dim, num_classes=num_classes, **kwargs)
     elif m_type == "transformer":
         return CyberDefenseTransformer(
             input_dim=input_dim, num_classes=num_classes, **kwargs
         )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
-
-

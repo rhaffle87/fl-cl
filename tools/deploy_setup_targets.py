@@ -1,20 +1,19 @@
-"""
-tools/deploy_setup_targets.py — Target VM SSH Credential Configuration Utility
-
-Configures the 'admin' benchmark user on Target VMs (10.10.110.15, 10.10.120.15)
-with password credentials selected from the Hydra wordlist on the traffic generator VM.
-
-Usage:
-    python tools/deploy_setup_targets.py --config configs/experiment.yaml
-"""
+# tools/deploy_setup_targets.py — Target VM SSH Credential Configuration Utility
+#
+# Configures the 'admin' benchmark user on Target VMs (10.10.110.15, 10.10.120.15)
+# with password credentials selected from the Hydra wordlist on the traffic generator VM.
+#
+# Usage:
+# python tools/deploy_setup_targets.py --config configs/experiment.yaml
 
 import argparse
 import json
 import os
-from pathlib import Path
 import shlex
 import subprocess
 import sys
+from pathlib import Path
+
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -42,7 +41,9 @@ def load_config(config_path: Path) -> dict:
         return yaml.safe_load(f)
 
 
-def run_ssh(ip: str, command: str, username: str = "root", key_path: str = None) -> subprocess.CompletedProcess:
+def run_ssh(
+    ip: str, command: str, username: str = "root", key_path: str = None
+) -> subprocess.CompletedProcess:
     opts = ["-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5"]
     if key_path:
         opts += ["-i", key_path]
@@ -56,7 +57,9 @@ def setup_targets(config_path: Path, key_path: str, password_index: int) -> None
     config = load_config(config_path)
     topology = config.get("topology", {})
 
-    traffic_gen = topology.get("traffic_gen", os.environ.get("TRAFFIC_GEN_HOST", "10.10.140.10"))
+    traffic_gen = topology.get(
+        "traffic_gen", os.environ.get("TRAFFIC_GEN_HOST", "10.10.140.10")
+    )
     target_a = topology.get("target_a", os.environ.get("TARGET_A_HOST", "10.10.110.15"))
     target_b = topology.get("target_b", os.environ.get("TARGET_B_HOST", "10.10.120.15"))
 
@@ -69,14 +72,22 @@ def setup_targets(config_path: Path, key_path: str, password_index: int) -> None
     res = run_ssh(traffic_gen, cmd_read, key_path=key_path)
 
     if res.stdout and len(res.stdout.strip()) > 0:
-        words = [line.strip() for line in res.stdout.strip().split("\n") if line.strip()]
+        words = [
+            line.strip() for line in res.stdout.strip().split("\n") if line.strip()
+        ]
         if len(words) > password_index:
             selected_password = words[password_index]
-            print(f"[+] Loaded password index {password_index} from traffic generator: '{selected_password}'")
+            print(
+                f"[+] Loaded password index {password_index} from traffic generator: '{selected_password}'"
+            )
         else:
-            print(f"[!] Password index {password_index} out of range ({len(words)} words). Using fallback.")
+            print(
+                f"[!] Password index {password_index} out of range ({len(words)} words). Using fallback."
+            )
     else:
-        print(f"[!] Could not read wordlist from {traffic_gen}. Using fallback: '{selected_password}'")
+        print(
+            f"[!] Could not read wordlist from {traffic_gen}. Using fallback: '{selected_password}'"
+        )
 
     print(f"\n[*] Selected Target password: '{selected_password}'")
 
@@ -94,15 +105,19 @@ def setup_targets(config_path: Path, key_path: str, password_index: int) -> None
 
         res = run_ssh(target_ip, setup_cmds, key_path=key_path)
         if "SUCCESS" in res.stdout:
-            print(f"[+] Successfully configured admin user on {target_name} ({target_ip})")
+            print(
+                f"[+] Successfully configured admin user on {target_name} ({target_ip})"
+            )
         else:
-            print(f"[!] Configuration output on {target_name}:\n{res.stderr}\n{res.stdout}")
+            print(
+                f"[!] Configuration output on {target_name}:\n{res.stderr}\n{res.stdout}"
+            )
 
     # 3. Save target credentials locally for reference
     credentials = {
         "username": "admin",
         "password": selected_password,
-        "targets": [target_a, target_b]
+        "targets": [target_a, target_b],
     }
 
     cred_file = PROJECT_ROOT / "data" / "target_credentials.json"
@@ -110,20 +125,33 @@ def setup_targets(config_path: Path, key_path: str, password_index: int) -> None
     with open(cred_file, "w", encoding="utf-8") as f:
         json.dump(credentials, f, indent=4)
 
-    print(f"\n[+] Credentials saved: data/target_credentials.json")
+    print("\n[+] Credentials saved: data/target_credentials.json")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Configure Target SSH Credentials for Hydra Testing")
-    parser.add_argument("--config", default="configs/experiment.yaml", help="Path to experiment config YAML")
+    parser = argparse.ArgumentParser(
+        description="Configure Target SSH Credentials for Hydra Testing"
+    )
+    parser.add_argument(
+        "--config",
+        default="configs/experiment.yaml",
+        help="Path to experiment config YAML",
+    )
 
     default_key = os.path.expanduser("~/.ssh/id_ed25519")
-    if not os.path.exists(default_key) and os.path.exists(os.path.expanduser("~/.ssh/id_rsa")):
+    if not os.path.exists(default_key) and os.path.exists(
+        os.path.expanduser("~/.ssh/id_rsa")
+    ):
         default_key = os.path.expanduser("~/.ssh/id_rsa")
     default_key = os.environ.get("SSH_KEY_PATH") or default_key
 
     parser.add_argument("--key", default=default_key, help="Path to private SSH key")
-    parser.add_argument("--password-index", type=int, default=45, help="Index of password in fasttrack.txt")
+    parser.add_argument(
+        "--password-index",
+        type=int,
+        default=45,
+        help="Index of password in fasttrack.txt",
+    )
     args = parser.parse_args()
 
     cfg_path = Path(args.config)

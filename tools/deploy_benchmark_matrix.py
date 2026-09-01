@@ -4,18 +4,18 @@ tools/deploy_benchmark_matrix.py — Automated Batch Benchmark & Matrix Evaluati
 
 Orchestrates sequential, unattended execution across multiple experiment configuration
 tiers (Quick, Security, Continual Learning, Multi-Backbone, or All 17 Profiles).
-Parses results and generates a consolidated comparison matrix at data/reports/batch_benchmark_matrix.csv.
+Parses results and generates a consolidated comparison matrix at data/reports/benchmarks/batch_benchmark_matrix.csv.
 
 Usage:
     python3 tools/deploy_benchmark_matrix.py [--tier quick|security|continual|backbone|all] [--dry-run]
 """
 
-import os
-import sys
-import time
 import argparse
 import subprocess
+import sys
+import time
 from pathlib import Path
+
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -49,7 +49,7 @@ TIER_MAP = {
 def resolve_tier_configs(tier_name: str):
     if tier_name == "all":
         return sorted(list(CONFIGS_DIR.glob("*.yaml")))
-    
+
     file_list = TIER_MAP.get(tier_name, [])
     resolved = []
     for f in file_list:
@@ -60,16 +60,31 @@ def resolve_tier_configs(tier_name: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="FL-CL Batch Benchmark Matrix Evaluator")
+    parser = argparse.ArgumentParser(
+        description="FL-CL Batch Benchmark Matrix Evaluator"
+    )
     parser.add_argument(
         "--tier",
         default="quick",
         choices=["quick", "security", "continual", "backbone", "all"],
-        help="Benchmark tier to execute (default: quick)"
+        help="Benchmark tier to execute (default: quick)",
     )
-    parser.add_argument("--attack-engine", default="auto", choices=["auto", "kali", "python"], help="Attack generation engine")
-    parser.add_argument("--dry-run", action="store_true", help="Simulate batch execution without launching remote cluster runners")
-    parser.add_argument("--out-report", default="data/reports/batch_benchmark_matrix.csv", help="Destination CSV report path")
+    parser.add_argument(
+        "--attack-engine",
+        default="auto",
+        choices=["auto", "kali", "python"],
+        help="Attack generation engine",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Simulate batch execution without launching remote cluster runners",
+    )
+    parser.add_argument(
+        "--out-report",
+        default="data/reports/benchmarks/batch_benchmark_matrix.csv",
+        help="Destination CSV report path",
+    )
     args = parser.parse_args()
 
     print("=" * 80)
@@ -77,7 +92,9 @@ def main():
     print("=" * 80)
 
     configs = resolve_tier_configs(args.tier)
-    print(f"[*] Target Tier: '{args.tier.upper()}' | Discovered {len(configs)} configuration profiles:")
+    print(
+        f"[*] Target Tier: '{args.tier.upper()}' | Discovered {len(configs)} configuration profiles:"
+    )
     for idx, cfg in enumerate(configs, 1):
         print(f"  [{idx:2d}] {cfg.name}")
 
@@ -86,7 +103,9 @@ def main():
         sys.exit(1)
 
     if args.dry_run:
-        print("\n[OK] Dry-run validation passed. All target configuration profiles exist and resolve.")
+        print(
+            "\n[OK] Dry-run validation passed. All target configuration profiles exist and resolve."
+        )
         print("=" * 80)
         return
 
@@ -102,8 +121,10 @@ def main():
         cmd = [
             sys.executable,
             str(PROJECT_ROOT / "src" / "orchestrate.py"),
-            "--config", str(cfg),
-            "--attack-engine", args.attack_engine,
+            "--config",
+            str(cfg),
+            "--attack-engine",
+            args.attack_engine,
         ]
 
         t0 = time.time()
@@ -113,14 +134,16 @@ def main():
         status = "SUCCESS" if proc.returncode == 0 else "FAILED"
         print(f"[*] Completed in {elapsed:.2f}s | Exit Status: {status}")
 
-        results.append({
-            "Tier": args.tier,
-            "Config": cfg.name,
-            "Attack_Engine": args.attack_engine,
-            "Status": status,
-            "Duration_sec": round(elapsed, 2),
-            "Exit_Code": proc.returncode,
-        })
+        results.append(
+            {
+                "Tier": args.tier,
+                "Config": cfg.name,
+                "Attack_Engine": args.attack_engine,
+                "Status": status,
+                "Duration_sec": round(elapsed, 2),
+                "Exit_Code": proc.returncode,
+            }
+        )
 
     total_elapsed = time.time() - start_total_time
     print("\n" + "=" * 80)

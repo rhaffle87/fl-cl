@@ -11,8 +11,9 @@ Analyzes task evaluation matrices to compute:
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
+
 import numpy as np
+
 
 def compute_cl_metrics(R: np.ndarray, bwt_threshold: float = -0.05) -> dict:
     """
@@ -26,7 +27,7 @@ def compute_cl_metrics(R: np.ndarray, bwt_threshold: float = -0.05) -> dict:
             "average_accuracy": float(R[0, 0]),
             "bwt": 0.0,
             "fwt": 0.0,
-            "forgetting_alert": False
+            "forgetting_alert": False,
         }
 
     # Final Average Accuracy
@@ -48,13 +49,28 @@ def compute_cl_metrics(R: np.ndarray, bwt_threshold: float = -0.05) -> dict:
         "bwt": bwt,
         "fwt": fwt,
         "forgetting_alert": forgetting_alert,
-        "task_forgetting_deltas": {f"task_{j}": float(bwt_elements[j]) for j in range(T - 1)}
+        "task_forgetting_deltas": {
+            f"task_{j}": float(bwt_elements[j]) for j in range(T - 1)
+        },
     }
 
+
 def main():
-    parser = argparse.ArgumentParser(description="FL-CL Continual Learning Forgetting Diagnostic")
-    parser.add_argument("--eval-matrix", type=str, default=None, help="Path to CSV containing R[i,j] accuracy matrix")
-    parser.add_argument("--bwt-threshold", type=float, default=-0.05, help="Alert threshold for negative BWT")
+    parser = argparse.ArgumentParser(
+        description="FL-CL Continual Learning Forgetting Diagnostic"
+    )
+    parser.add_argument(
+        "--eval-matrix",
+        type=str,
+        default=None,
+        help="Path to CSV containing R[i,j] accuracy matrix",
+    )
+    parser.add_argument(
+        "--bwt-threshold",
+        type=float,
+        default=-0.05,
+        help="Alert threshold for negative BWT",
+    )
     args = parser.parse_args()
 
     print("=" * 80)
@@ -64,20 +80,26 @@ def main():
     if args.eval_matrix and Path(args.eval_matrix).exists():
         R = np.loadtxt(args.eval_matrix, delimiter=",")
     else:
-        print("[INFO] No external matrix provided or found. Using standard benchmark simulation matrix.")
+        print(
+            "[INFO] No external matrix provided or found. Using standard benchmark simulation matrix."
+        )
         # Synthetic benchmark matrix for 4 tasks (e.g. Benign, PortScan, DDoS, Botnet)
-        R = np.array([
-            [0.985, 0.120, 0.080, 0.050],
-            [0.965, 0.978, 0.150, 0.090],
-            [0.952, 0.960, 0.982, 0.210],
-            [0.948, 0.955, 0.971, 0.989]
-        ])
+        R = np.array(
+            [
+                [0.985, 0.120, 0.080, 0.050],
+                [0.965, 0.978, 0.150, 0.090],
+                [0.952, 0.960, 0.982, 0.210],
+                [0.948, 0.955, 0.971, 0.989],
+            ]
+        )
 
     metrics = compute_cl_metrics(R, args.bwt_threshold)
 
     print(f"Total Continual Tasks (T): {metrics['num_tasks']}")
     print(f"Final Average Accuracy   : {metrics['average_accuracy'] * 100:.2f}%")
-    print(f"Backward Transfer (BWT)  : {metrics['bwt']:+.4f} (Threshold: {args.bwt_threshold:+.4f})")
+    print(
+        f"Backward Transfer (BWT)  : {metrics['bwt']:+.4f} (Threshold: {args.bwt_threshold:+.4f})"
+    )
     print(f"Forward Transfer (FWT)   : {metrics['fwt']:+.4f}")
     print("-" * 80)
     print("Per-Task Forgetting Breakdown:")
@@ -87,11 +109,14 @@ def main():
 
     print("=" * 80)
     if metrics["forgetting_alert"]:
-        print("[WARNING] Catastrophic forgetting exceeds acceptable threshold! Increase EWC lambda.")
+        print(
+            "[WARNING] Catastrophic forgetting exceeds acceptable threshold! Increase EWC lambda."
+        )
         sys.exit(1)
     else:
         print("[OK] Continual learning stability verified within acceptable bounds.")
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

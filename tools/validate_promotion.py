@@ -1,20 +1,16 @@
-"""
-validate_promotion.py — CI/CD Automated Model Validation Gate and Champion Promotion Utility.
+# validate_promotion.py — CI/CD Automated Model Validation Gate and Champion Promotion Utility.
+#
+# Queries MLflow for the latest registered model version under the 'challenger' alias,
+# runs the validation gate (tools/validate_model.py) locally or remotely on defender nodes,
+# and promotes the version to the 'champion' alias if per-class F1 and accuracy bounds pass.
+#
+# Usage:
+# python3 tools/validate_promotion.py [--model-name CyberDefenseNet] [--mlflow-uri http://10.10.130.10:5000]
 
-Queries MLflow for the latest registered model version under the 'challenger' alias,
-runs the validation gate (tools/validate_model.py) locally or remotely on defender nodes,
-and promotes the version to the 'champion' alias if per-class F1 and accuracy bounds pass.
-
-Usage:
-    python3 tools/validate_promotion.py [--model-name CyberDefenseNet] [--mlflow-uri http://10.10.130.10:5000]
-"""
-
-import os
-import sys
-import subprocess
-import shutil
-import json
 import argparse
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 # Standard path resolution
@@ -25,6 +21,7 @@ sys.path.insert(0, str(repo_root / "src" / "defender"))
 sys.path.insert(0, str(repo_root / "src" / "aggregator"))
 
 import mlflow
+
 from src.notifications import TelegramNotifier
 
 
@@ -59,7 +56,7 @@ def get_git_key_path():
     env_path = os.environ.get("SSH_KEY_PATH")
     if env_path and os.path.exists(env_path):
         return env_path
-    
+
     home = os.path.expanduser("~")
     for name in ["id_rsa", "id_ed25519"]:
         p = os.path.join(home, ".ssh", name)
@@ -91,33 +88,35 @@ def safe_print(text):
     try:
         print(text)
     except UnicodeEncodeError:
-        encoding = sys.stdout.encoding or 'ascii'
-        encoded = text.encode(encoding, errors='replace')
+        encoding = sys.stdout.encoding or "ascii"
+        encoded = text.encode(encoding, errors="replace")
         decoded = encoded.decode(encoding)
         print(decoded)
 
 
-def format_validation_logs_to_markdown(validation_output, version_num, validation_passed):
+def format_validation_logs_to_markdown(
+    validation_output, version_num, validation_passed
+):
     summary = f"### Model Version v{version_num} Validation Report\n\n"
-    
+
     lines = validation_output.split("\n")
     overall_acc = "N/A"
     avg_loss = "N/A"
     total_samples = "N/A"
     checkpoint_path = "N/A"
     flows_dir = "N/A"
-    
+
     per_class_rows = []
     confusion_matrix_lines = []
     in_per_class = False
     in_confusion = False
     status_msg = ""
-    
+
     for line in lines:
         line_strip = line.strip()
         if not line_strip:
             continue
-            
+
         if "Loading checkpoint:" in line_strip:
             checkpoint_path = line_strip.split("Loading checkpoint:")[-1].strip()
         elif "Loading flows from:" in line_strip:
@@ -147,7 +146,7 @@ def format_validation_logs_to_markdown(validation_output, version_num, validatio
                     per_class_rows.append(parts)
             elif in_confusion:
                 confusion_matrix_lines.append(line)
-                
+
     # Build Overall Metrics Table
     summary += "#### Overall Metrics\n"
     summary += "| Metric | Value |\n"
@@ -159,7 +158,7 @@ def format_validation_logs_to_markdown(validation_output, version_num, validatio
     summary += f"| **Total Samples** | `{total_samples}` |\n"
     summary += f"| **Checkpoint** | `{checkpoint_path}` |\n"
     summary += f"| **Flows Source** | `{flows_dir}` |\n\n"
-    
+
     # Build Per-Class Table
     if per_class_rows:
         summary += "#### Per-Class Performance\n"
@@ -168,36 +167,66 @@ def format_validation_logs_to_markdown(validation_output, version_num, validatio
         for row in per_class_rows:
             if len(row) >= 6:
                 cls_name = " ".join(row[:-5])
-                acc, f1, thresh, status, samples = row[-5], row[-4], row[-3], row[-2], row[-1]
-                status_fmt = "**PASS**" if status == "PASS" else "**FAIL**" if status == "FAIL" else f"**{status}**"
+                acc, f1, thresh, status, samples = (
+                    row[-5],
+                    row[-4],
+                    row[-3],
+                    row[-2],
+                    row[-1],
+                )
+                status_fmt = (
+                    "**PASS**"
+                    if status == "PASS"
+                    else "**FAIL**" if status == "FAIL" else f"**{status}**"
+                )
                 summary += f"| **{cls_name}** | {acc} | {f1} | {thresh} | {status_fmt} | {samples} |\n"
         summary += "\n"
-        
+
     # Build Confusion Matrix Code Block
     if confusion_matrix_lines:
         summary += "#### Confusion Matrix\n"
         summary += "```text\n"
         summary += "\n".join(confusion_matrix_lines).strip() + "\n"
         summary += "```\n\n"
-        
+
     if status_msg:
         summary += f"**Conclusion**: `{status_msg}`\n"
-        
+
     return summary
 
 
 def main():
-    parser = argparse.ArgumentParser(description="CI/CD Model Promotion Gate & Challenger Validation")
-    parser.add_argument("--model-name", default="CyberDefenseNet", help="Registered model name in MLflow (default: CyberDefenseNet)")
-    parser.add_argument("--mlflow-uri", default="http://10.10.130.10:5000", help="MLflow Tracking Server URI")
-    parser.add_argument("--defender-ip", default="10.10.130.11", help="Defender VM IP for validation run")
-    parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV folder on defender ramdisk")
+    parser = argparse.ArgumentParser(
+        description="CI/CD Model Promotion Gate & Challenger Validation"
+    )
+    parser.add_argument(
+        "--model-name",
+        default="CyberDefenseNet",
+        help="Registered model name in MLflow (default: CyberDefenseNet)",
+    )
+    parser.add_argument(
+        "--mlflow-uri",
+        default="http://10.10.130.10:5000",
+        help="MLflow Tracking Server URI",
+    )
+    parser.add_argument(
+        "--defender-ip",
+        default="10.10.130.11",
+        help="Defender VM IP for validation run",
+    )
+    parser.add_argument(
+        "--flows-dir",
+        default="/mnt/ramdisk/flows",
+        help="Flow CSV folder on defender ramdisk",
+    )
     args = parser.parse_args()
 
     # Load notifications credentials
     tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     tg_chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
-    notifier = TelegramNotifier(tg_token, tg_chat_id, enabled=bool(tg_token and tg_chat_id))
+    notifier = TelegramNotifier(
+        tg_token, tg_chat_id, enabled=bool(tg_token and tg_chat_id)
+    )
 
     # Configure MLflow
     mlflow_uri = os.environ.get("MLFLOW_TRACKING_URI", args.mlflow_uri)
@@ -206,7 +235,9 @@ def main():
 
     print(f"[CI/CD] Querying MLflow registry at: {mlflow_uri}")
     try:
-        challenger_version = client.get_model_version_by_alias(args.model_name, "challenger")
+        challenger_version = client.get_model_version_by_alias(
+            args.model_name, "challenger"
+        )
     except Exception as e:
         print(f"[CI/CD] No candidate version with alias 'challenger' found: {e}")
         print("[CI/CD] Nothing to validate. Exiting.")
@@ -214,35 +245,38 @@ def main():
 
     version_num = challenger_version.version
     run_id = challenger_version.run_id
-    print(f"[CI/CD] Found candidate 'challenger' Model Version: v{version_num} (Run ID: {run_id})")
+    print(
+        f"[CI/CD] Found candidate 'challenger' Model Version: v{version_num} (Run ID: {run_id})"
+    )
 
     # Download scripted TorchScript artifact
     print("[CI/CD] Downloading candidate TorchScript model from MLflow...")
     temp_dir = Path("/tmp/candidate_download")
     temp_dir.mkdir(parents=True, exist_ok=True)
-    
+
     try:
         artifact_path = client.download_artifacts(
-            run_id=run_id,
-            path="model/model_latest_scripted.pt",
-            dst_path=str(temp_dir)
+            run_id=run_id, path="model/model_latest_scripted.pt", dst_path=str(temp_dir)
         )
     except Exception as e:
         print(f"[CI/CD] Error downloading scripted artifact: {e}")
         try:
             artifact_path = client.download_artifacts(
-                run_id=run_id,
-                path="model/model_latest.pt",
-                dst_path=str(temp_dir)
+                run_id=run_id, path="model/model_latest.pt", dst_path=str(temp_dir)
             )
         except Exception as e2:
-            print(f"[CI/CD] Critical error: failed to download model weights from MLflow: {e2}")
+            print(
+                f"[CI/CD] Critical error: failed to download model weights from MLflow: {e2}"
+            )
             sys.exit(1)
 
     print(f"[CI/CD] Downloaded model path: {artifact_path}")
 
     # Determine execution environment (local on defender vs remote over SSH)
-    is_local_defender = os.path.exists(args.flows_dir) and (repo_root / "tools" / "validate_model.py").exists()
+    is_local_defender = (
+        os.path.exists(args.flows_dir)
+        and (repo_root / "tools" / "validate_model.py").exists()
+    )
     key_path = get_git_key_path()
 
     validation_passed = False
@@ -252,35 +286,46 @@ def main():
         print("[CI/CD] Running validation locally on defender node...")
         local_val_script = str(repo_root / "tools" / "validate_model.py")
         run_cmd = [
-            sys.executable, local_val_script,
-            "--checkpoint", artifact_path,
-            "--flows-dir", args.flows_dir
+            sys.executable,
+            local_val_script,
+            "--checkpoint",
+            artifact_path,
+            "--flows-dir",
+            args.flows_dir,
         ]
         result = subprocess.run(run_cmd, capture_output=True, text=True)
         validation_output = result.stdout + "\n" + result.stderr
-        validation_passed = (result.returncode == 0)
+        validation_passed = result.returncode == 0
     else:
-        print(f"[CI/CD] Transferring checkpoint and running validation remotely on defender ({args.defender_ip})...")
+        print(
+            f"[CI/CD] Transferring checkpoint and running validation remotely on defender ({args.defender_ip})..."
+        )
         remote_dest = "/tmp/candidate_scripted.pt"
-        
+
         # SCP checkpoint to defender
-        scp_res = scp_file_to_remote(args.defender_ip, artifact_path, remote_dest, key_path=key_path)
+        scp_res = scp_file_to_remote(
+            args.defender_ip, artifact_path, remote_dest, key_path=key_path
+        )
         if scp_res.returncode != 0:
             print(f"[CI/CD] SCP checkpoint transfer failed:\n{scp_res.stderr}")
             sys.exit(1)
-            
+
         # SCP validate_model.py to defender
         local_script = str(repo_root / "tools" / "validate_model.py")
-        scp_script_res = scp_file_to_remote(args.defender_ip, local_script, "~/validate_model.py", key_path=key_path)
+        scp_script_res = scp_file_to_remote(
+            args.defender_ip, local_script, "~/validate_model.py", key_path=key_path
+        )
         if scp_script_res.returncode != 0:
-            print(f"[CI/CD] SCP validate_model.py transfer failed:\n{scp_script_res.stderr}")
+            print(
+                f"[CI/CD] SCP validate_model.py transfer failed:\n{scp_script_res.stderr}"
+            )
             sys.exit(1)
-            
+
         # Run validate_model.py on defender
         remote_cmd = f"~/fl-cl-env/bin/python3 ~/validate_model.py --checkpoint {remote_dest} --flows-dir {args.flows_dir}"
         result = run_remote_cmd(args.defender_ip, remote_cmd, key_path=key_path)
         validation_output = result.stdout + "\n" + result.stderr
-        validation_passed = (result.returncode == 0)
+        validation_passed = result.returncode == 0
 
     print("\n" + "=" * 62)
     print("                    VALIDATION LOGS")
@@ -301,46 +346,46 @@ def main():
             except ValueError:
                 pass
 
-    md_desc = format_validation_logs_to_markdown(validation_output, version_num, validation_passed)
-    
+    md_desc = format_validation_logs_to_markdown(
+        validation_output, version_num, validation_passed
+    )
+
     if validation_passed:
-        print(f"\n[CI/CD] SUCCESS: Promoting model version {version_num} to 'champion' alias...")
-        client.set_registered_model_alias(
-            name=args.model_name,
-            alias="champion",
-            version=str(version_num)
+        print(
+            f"\n[CI/CD] SUCCESS: Promoting model version {version_num} to 'champion' alias..."
         )
-        
+        client.set_registered_model_alias(
+            name=args.model_name, alias="champion", version=str(version_num)
+        )
+
         success_desc = f"**Model version v{version_num} promoted to 'champion' via CI/CD Pipeline**.\n\n{md_desc}"
         client.update_model_version(
-            name=args.model_name,
-            version=str(version_num),
-            description=success_desc
+            name=args.model_name, version=str(version_num), description=success_desc
         )
-        
+
         notifier.notify_promotion(
             model_name=args.model_name,
             version=int(version_num),
             metrics=eval_metrics,
-            rationale=f"Model Version v{version_num} passed all validation thresholds on production flow dataset."
+            rationale=f"Model Version v{version_num} passed all validation thresholds on production flow dataset.",
         )
         sys.exit(0)
     else:
-        print(f"\n[CI/CD] FAIL: Model version {version_num} failed validation thresholds.")
+        print(
+            f"\n[CI/CD] FAIL: Model version {version_num} failed validation thresholds."
+        )
         client.set_tag(run_id, "validation_status", "FAILED")
-        
+
         failure_desc = f"**Model version v{version_num} failed validation via CI/CD Pipeline**.\n\n{md_desc}"
         client.update_model_version(
-            name=args.model_name,
-            version=str(version_num),
-            description=failure_desc
+            name=args.model_name, version=str(version_num), description=failure_desc
         )
-        
+
         notifier.notify_promotion_failure(
             model_name=args.model_name,
             candidate_version=int(version_num),
             metrics=eval_metrics,
-            failure_reason="One or more per-class validation metrics fell below acceptable production thresholds."
+            failure_reason="One or more per-class validation metrics fell below acceptable production thresholds.",
         )
         sys.exit(2)
 

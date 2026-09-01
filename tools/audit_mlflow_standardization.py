@@ -1,13 +1,11 @@
-"""
-tools/audit_mlflow_standardization.py — Deep audit and standardization check for all MLflow runs in SQLite DB.
-"""
-import argparse
-from pathlib import Path
+# tools/audit_mlflow_standardization.py — Deep audit and standardization check for all MLflow runs in SQLite DB.
+# Audits DB metadata, metrics integrity, and ensures correct paths.
 
-import sqlite3
+import argparse
 import json
 import os
-import sys
+import sqlite3
+
 
 def audit_mlflow():
     db_path = "/root/mlflow.db" if os.path.exists("/root/mlflow.db") else "mlflow.db"
@@ -29,18 +27,22 @@ def audit_mlflow():
         "matrix_runs_count": 0,
         "by_model": {},
         "by_cl": {},
-        "by_agg": {}
+        "by_agg": {},
     }
 
     # 1. Audit Experiments
-    cur.execute("SELECT experiment_id, name, artifact_location, lifecycle_stage FROM experiments")
+    cur.execute(
+        "SELECT experiment_id, name, artifact_location, lifecycle_stage FROM experiments"
+    )
     for row in cur.fetchall():
-        report["experiments"].append({
-            "id": row[0], "name": row[1], "artifact_loc": row[2], "stage": row[3]
-        })
+        report["experiments"].append(
+            {"id": row[0], "name": row[1], "artifact_loc": row[2], "stage": row[3]}
+        )
 
     # 2. Total & Status Audit
-    cur.execute("SELECT run_uuid, experiment_id, status, start_time, end_time FROM runs")
+    cur.execute(
+        "SELECT run_uuid, experiment_id, status, start_time, end_time FROM runs"
+    )
     runs = cur.fetchall()
     report["total_runs"] = len(runs)
 
@@ -49,9 +51,9 @@ def audit_mlflow():
         if status == "FINISHED":
             report["finished_runs"] += 1
         else:
-            report["abnormal_runs"].append({
-                "run_id": run_id, "exp_id": exp_id, "status": status
-            })
+            report["abnormal_runs"].append(
+                {"run_id": run_id, "exp_id": exp_id, "status": status}
+            )
 
     # 3. Parameter Alignment Check
     required_params = ["model_type", "cl_strategy", "aggregation_strategy"]
@@ -83,7 +85,7 @@ def audit_mlflow():
         m_type = p.get("model_type")
         cl = p.get("cl_strategy")
         agg = p.get("aggregation_strategy")
-        
+
         if m_type:
             report["by_model"][m_type] = report["by_model"].get(m_type, 0) + 1
         if cl:
@@ -92,13 +94,18 @@ def audit_mlflow():
             report["by_agg"][agg] = report["by_agg"].get(agg, 0) + 1
 
     # Compute score
-    deductions = len(report["abnormal_runs"]) * 1.5 + len(report["missing_params"]) * 0.5
+    deductions = (
+        len(report["abnormal_runs"]) * 1.5 + len(report["missing_params"]) * 0.5
+    )
     report["standardization_score"] = max(0.0, 100.0 - deductions)
 
     print(json.dumps(report, indent=2))
     return report
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="MLflow Database Standardization and Integrity Auditor")
+    parser = argparse.ArgumentParser(
+        description="MLflow Database Standardization and Integrity Auditor"
+    )
     _ = parser.parse_args()
     audit_mlflow()

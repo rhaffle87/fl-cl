@@ -9,9 +9,10 @@ Usage:
     python3 tools/benchmark_ood.py [--model-path data/models/cyberdefense_cnn.pt] [--temperature 1.0]
 """
 
-import sys
 import argparse
+import sys
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import torch
@@ -19,8 +20,8 @@ import torch
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src" / "defender"))
 
-from model import get_model
 from extractor import calculate_energy_score
+from model import get_model
 
 
 def compute_auroc_and_fpr95(id_energy: np.ndarray, ood_energy: np.ndarray):
@@ -61,7 +62,9 @@ def compute_auroc_and_fpr95(id_energy: np.ndarray, ood_energy: np.ndarray):
     if trapz_func is not None:
         auroc = trapz_func(tpr_arr[order], fpr_arr[order])
     else:
-        auroc = np.sum(0.5 * (tpr_arr[order][:-1] + tpr_arr[order][1:]) * np.diff(fpr_arr[order]))
+        auroc = np.sum(
+            0.5 * (tpr_arr[order][:-1] + tpr_arr[order][1:]) * np.diff(fpr_arr[order])
+        )
     auroc = float(np.clip(auroc, 0.0, 1.0))
 
     # Calculate FPR at TPR >= 0.95
@@ -76,9 +79,19 @@ def compute_auroc_and_fpr95(id_energy: np.ndarray, ood_energy: np.ndarray):
 
 def main():
     parser = argparse.ArgumentParser(description="Energy OOD Detection Benchmark")
-    parser.add_argument("--model-path", default="data/models/cyberdefense_cnn.pt", help="Model checkpoint path")
-    parser.add_argument("--temperature", type=float, default=1.0, help="Energy scaling temperature")
-    parser.add_argument("--out-report", default="data/reports/ood_benchmark_report.csv", help="CSV report path")
+    parser.add_argument(
+        "--model-path",
+        default="data/models/cyberdefense_cnn.pt",
+        help="Model checkpoint path",
+    )
+    parser.add_argument(
+        "--temperature", type=float, default=1.0, help="Energy scaling temperature"
+    )
+    parser.add_argument(
+        "--out-report",
+        default="data/reports/benchmarks/ood_benchmark_report.csv",
+        help="CSV report path",
+    )
     args = parser.parse_args()
 
     print("=" * 70)
@@ -101,7 +114,9 @@ def main():
 
     # 1. Generate In-Distribution (ID) test flows
     n_samples = 1000
-    print(f"[*] Simulating {n_samples} In-Distribution (ID) flows across 5 threat classes...")
+    print(
+        f"[*] Simulating {n_samples} In-Distribution (ID) flows across 5 threat classes..."
+    )
     # Distinct structured cluster inputs for ID classes
     id_x = []
     for c in range(num_classes):
@@ -116,14 +131,23 @@ def main():
 
     # 2. Generate OOD Evaluation Datasets
     ood_scenarios = {
-        "Uniform Noise (Novel Raw Payload)": np.random.uniform(-5.0, 5.0, (n_samples, input_dim)),
-        "High Variance Gaussian (Volumetric Shift)": np.random.randn(n_samples, input_dim) * 4.0,
-        "Unseen Cipher Anomaly (Extreme Jitter)": np.random.exponential(scale=3.0, size=(n_samples, input_dim)),
+        "Uniform Noise (Novel Raw Payload)": np.random.uniform(
+            -5.0, 5.0, (n_samples, input_dim)
+        ),
+        "High Variance Gaussian (Volumetric Shift)": np.random.randn(
+            n_samples, input_dim
+        )
+        * 4.0,
+        "Unseen Cipher Anomaly (Extreme Jitter)": np.random.exponential(
+            scale=3.0, size=(n_samples, input_dim)
+        ),
     }
 
     results = []
     print("\n[*] Evaluating Free Energy Score distributions...")
-    print(f"  - In-Distribution (ID) Energy Mean: {np.mean(id_energy):.4f} (+/- {np.std(id_energy):.4f})")
+    print(
+        f"  - In-Distribution (ID) Energy Mean: {np.mean(id_energy):.4f} (+/- {np.std(id_energy):.4f})"
+    )
 
     for name, ood_x in ood_scenarios.items():
         with torch.no_grad():
@@ -133,16 +157,20 @@ def main():
         auroc, fpr95 = compute_auroc_and_fpr95(id_energy, ood_energy)
         mean_diff = float(np.mean(ood_energy) - np.mean(id_energy))
 
-        results.append({
-            "Scenario": name,
-            "ID_Energy_Mean": round(float(np.mean(id_energy)), 4),
-            "OOD_Energy_Mean": round(float(np.mean(ood_energy)), 4),
-            "Delta_Energy": round(mean_diff, 4),
-            "AUROC": round(auroc, 4),
-            "FPR95": round(fpr95, 4),
-            "Status": "PASSED" if auroc >= 0.85 else "BORDERLINE"
-        })
-        print(f"  - [{name:42s}] AUROC: {auroc:.4f} | FPR@95% TPR: {fpr95:.4f} | Delta E: {mean_diff:+.4f}")
+        results.append(
+            {
+                "Scenario": name,
+                "ID_Energy_Mean": round(float(np.mean(id_energy)), 4),
+                "OOD_Energy_Mean": round(float(np.mean(ood_energy)), 4),
+                "Delta_Energy": round(mean_diff, 4),
+                "AUROC": round(auroc, 4),
+                "FPR95": round(fpr95, 4),
+                "Status": "PASSED" if auroc >= 0.85 else "BORDERLINE",
+            }
+        )
+        print(
+            f"  - [{name:42s}] AUROC: {auroc:.4f} | FPR@95% TPR: {fpr95:.4f} | Delta E: {mean_diff:+.4f}"
+        )
 
     df = pd.DataFrame(results)
     out_path = Path(PROJECT_ROOT / args.out_report)

@@ -1,47 +1,47 @@
-"""
-client.py — Flower FL Client with Avalanche CL Integration
+# client.py — Flower FL Client with Avalanche CL Integration
+#
+# Bridges the local Continual Learning training loop (Avalanche EWC) to the
+# global Federated Learning aggregation (Flower FedAvg).
+#
+# Research Citations:
+# - [4] Zhang, et al. (2023). FedSI: Federated Learning with Sequential Intrusion Data.
+# (Precedent for handling highly non-IID sequential streaming traffic at the edge).
+# - [13] Bilal, et al. (2026). Dataset-centric evaluation of federated intrusion detection models in IoT networks.
+# (Numerical baseline justification for the dynamic label parsing and JSD shift thresholds).
+#
+# Per federated round:
+# 1. Receives global model weights from the aggregator (LXC 300)
+# 2. Trains locally on flows from /mnt/ramdisk/flows/ using EWC
+# 3. Returns updated weights to the aggregator via gRPC
 
-Bridges the local Continual Learning training loop (Avalanche EWC) to the
-global Federated Learning aggregation (Flower FedAvg).
-
-Research Citations:
-- [4] Zhang, et al. (2023). FedSI: Federated Learning with Sequential Intrusion Data.
-  (Precedent for handling highly non-IID sequential streaming traffic at the edge).
-- [13] Bilal, et al. (2026). Dataset-centric evaluation of federated intrusion detection models in IoT networks.
-  (Numerical baseline justification for the dynamic label parsing and JSD shift thresholds).
-
-Per federated round:
-  1. Receives global model weights from the aggregator (LXC 300)
-  2. Trains locally on flows from /mnt/ramdisk/flows/ using EWC
-  3. Returns updated weights to the aggregator via gRPC
-"""
-
+import argparse
 import logging
 import os
 import sys
-import argparse
 from collections import OrderedDict
 from pathlib import Path
 
 try:
     import flwr as fl
+
     NumPyClientClass = fl.client.NumPyClient
 except ImportError:
     fl = None
+
     class DummyNumPyClient:
         pass
+
     NumPyClientClass = DummyNumPyClient
 
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.preprocessing import StandardScaler
-from torch.utils.data import DataLoader, TensorDataset
-
 from model import get_model
+from torch.utils.data import DataLoader, TensorDataset
 
 try:
     from logger import get_logger
+
     _log = get_logger("client")
 except ImportError:
     _log = logging.getLogger("client")
@@ -49,11 +49,14 @@ except ImportError:
         _log.addHandler(logging.StreamHandler())
     _log.setLevel(logging.INFO)
 
+
 class MyTensorDataset(TensorDataset):
     """Custom TensorDataset that exposes a targets field for Avalanche 0.6.0+ compatibility."""
+
     def __init__(self, x, y):
         super().__init__(x, y)
         self.targets = y
+
 
 # Robust Avalanche Imports
 make_tensor_classification_dataset = None
@@ -103,12 +106,18 @@ def assign_labels_vectorized(df, dos_threshold_ms=2000, traffic_gen_ip=None):
     src_ips = df["src_ip"].astype(str).values
     dst_ips = df["dst_ip"].astype(str).values
 
-    src_ports = pd.to_numeric(df["src_port"], errors="coerce").fillna(0).astype(int).values
-    dst_ports = pd.to_numeric(df["dst_port"], errors="coerce").fillna(0).astype(int).values
-    durations = pd.to_numeric(df["duration_ms"], errors="coerce").fillna(0).astype(float).values
+    src_ports = (
+        pd.to_numeric(df["src_port"], errors="coerce").fillna(0).astype(int).values
+    )
+    dst_ports = (
+        pd.to_numeric(df["dst_port"], errors="coerce").fillna(0).astype(int).values
+    )
+    durations = (
+        pd.to_numeric(df["duration_ms"], errors="coerce").fillna(0).astype(float).values
+    )
 
-    is_from_tg = (src_ips == traffic_gen_ip)
-    is_to_tg = (dst_ips == traffic_gen_ip)
+    is_from_tg = src_ips == traffic_gen_ip
+    is_to_tg = dst_ips == traffic_gen_ip
     is_tg = is_from_tg | is_to_tg
 
     labels = np.zeros(len(df), dtype=np.int64)
@@ -118,21 +127,38 @@ def assign_labels_vectorized(df, dos_threshold_ms=2000, traffic_gen_ip=None):
     labels[bf_mask] = 3
 
     # Botnet (ports 8080, 8888, 9000)
-    botnet_mask = is_tg & (~bf_mask) & (np.isin(src_ports, [8080, 8888, 9000]) | np.isin(dst_ports, [8080, 8888, 9000]))
+    botnet_mask = (
+        is_tg
+        & (~bf_mask)
+        & (
+            np.isin(src_ports, [8080, 8888, 9000])
+            | np.isin(dst_ports, [8080, 8888, 9000])
+        )
+    )
     labels[botnet_mask] = 1
 
     # Exfiltration (port 53)
-    exfil_mask = is_tg & (~bf_mask) & (~botnet_mask) & ((src_ports == 53) | (dst_ports == 53))
+    exfil_mask = (
+        is_tg & (~bf_mask) & (~botnet_mask) & ((src_ports == 53) | (dst_ports == 53))
+    )
     labels[exfil_mask] = 2
 
     # DoS (ports 80, 443 with duration > dos_threshold_ms)
     web_ports = [80, 443]
-    web_mask = is_tg & (~bf_mask) & (~botnet_mask) & (~exfil_mask) & (np.isin(src_ports, web_ports) | np.isin(dst_ports, web_ports))
+    web_mask = (
+        is_tg
+        & (~bf_mask)
+        & (~botnet_mask)
+        & (~exfil_mask)
+        & (np.isin(src_ports, web_ports) | np.isin(dst_ports, web_ports))
+    )
     dos_web_mask = web_mask & (durations > dos_threshold_ms)
     labels[dos_web_mask] = 4
 
     # Default attack label for any other TG traffic
-    default_attack_mask = is_tg & (~bf_mask) & (~botnet_mask) & (~exfil_mask) & (~web_mask)
+    default_attack_mask = (
+        is_tg & (~bf_mask) & (~botnet_mask) & (~exfil_mask) & (~web_mask)
+    )
     labels[default_attack_mask] = 4
 
     return labels
@@ -143,6 +169,7 @@ def scale_features(X, available_cols, stats_path=None):
     Deterministic Z-score scaler using class-0 (benign) stats to avoid covariate shift.
     """
     import json
+
     default_stats = {
         "bidirectional_packets": {"mean": 15.2, "std": 12.4},
         "bidirectional_bytes": {"mean": 2500.5, "std": 1800.1},
@@ -153,9 +180,9 @@ def scale_features(X, available_cols, stats_path=None):
         "dst2src_bytes": {"mean": 1300.3, "std": 850.7},
         "src2dst_mean_piat_ms": {"mean": 45.6, "std": 35.2},
         "dst2src_mean_piat_ms": {"mean": 38.2, "std": 29.8},
-        "dst_port": {"mean": 80.0, "std": 1.0}
+        "dst_port": {"mean": 80.0, "std": 1.0},
     }
-    
+
     stats = default_stats
     if stats_path and os.path.exists(stats_path):
         try:
@@ -187,17 +214,25 @@ def assign_label(row, dos_threshold_ms=2000, traffic_gen_ip=None):
     Fallback row-by-row label assignment. Maintained for backward compatibility.
     """
     df_temp = pd.DataFrame([row])
-    labels = assign_labels_vectorized(df_temp, dos_threshold_ms=dos_threshold_ms, traffic_gen_ip=traffic_gen_ip)
+    labels = assign_labels_vectorized(
+        df_temp, dos_threshold_ms=dos_threshold_ms, traffic_gen_ip=traffic_gen_ip
+    )
     return labels[0] if len(labels) > 0 else 0
 
 
-def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: float = 2000, traffic_gen_ip: str = None):
+def load_ramdisk_flows(
+    flows_dir: str = "/mnt/ramdisk/flows",
+    dos_threshold_ms: float = 2000,
+    traffic_gen_ip: str = None,
+):
     """
     Load all CSV flow files from the RAM disk and convert to PyTorch tensors.
     """
     if flows_dir.startswith("/mnt/ramdisk") and sys.platform.startswith("linux"):
         if os.path.exists("/mnt/ramdisk") and not os.path.ismount("/mnt/ramdisk"):
-            _log.warning("/mnt/ramdisk is not mounted as tmpfs! Potential disk I/O contention.")
+            _log.warning(
+                "/mnt/ramdisk is not mounted as tmpfs! Potential disk I/O contention."
+            )
 
     csv_files = sorted(Path(flows_dir).glob("*.csv"))
     if not csv_files:
@@ -221,21 +256,33 @@ def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: 
 
     # Select feature columns: flow statistics + dst_port (critical for class separation)
     feature_cols = [
-        "bidirectional_packets", "bidirectional_bytes", "duration_ms",
-        "src2dst_packets", "src2dst_bytes", "dst2src_packets", "dst2src_bytes",
-        "src2dst_mean_piat_ms", "dst2src_mean_piat_ms",
+        "bidirectional_packets",
+        "bidirectional_bytes",
+        "duration_ms",
+        "src2dst_packets",
+        "src2dst_bytes",
+        "dst2src_packets",
+        "dst2src_bytes",
+        "src2dst_mean_piat_ms",
+        "dst2src_mean_piat_ms",
         "dst_port",
     ]
     available_cols = [c for c in feature_cols if c in df.columns]
 
     X = df[available_cols].fillna(0).values.astype(np.float32)
-    
+
     # Load baseline stats to avoid covariate shift
     stats_path = os.path.expanduser("~/baseline_stats.json")
     if not os.path.exists(stats_path):
         # Fallback check relative to workspace configs
-        stats_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "configs", "baseline_feature_stats.json")
-    
+        stats_path = os.path.join(
+            os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            ),
+            "configs",
+            "baseline_feature_stats.json",
+        )
+
     X = scale_features(X, available_cols, stats_path)
 
     # Pad or truncate to match model input_dim (32)
@@ -251,12 +298,19 @@ def load_ramdisk_flows(flows_dir: str = "/mnt/ramdisk/flows", dos_threshold_ms: 
         if col in df.columns:
             label_col = col
             break
-            
+
     if label_col is not None:
-        y = pd.to_numeric(df[label_col], errors="coerce").fillna(0).astype(np.int64).values
+        y = (
+            pd.to_numeric(df[label_col], errors="coerce")
+            .fillna(0)
+            .astype(np.int64)
+            .values
+        )
     else:
         # Assign labels dynamically based on IP and port fields (live traffic fallback)
-        y = assign_labels_vectorized(df, dos_threshold_ms=dos_threshold_ms, traffic_gen_ip=traffic_gen_ip)
+        y = assign_labels_vectorized(
+            df, dos_threshold_ms=dos_threshold_ms, traffic_gen_ip=traffic_gen_ip
+        )
 
     return torch.tensor(X), torch.tensor(y)
 
@@ -265,8 +319,7 @@ def get_experience(x_tensor, y_tensor):
     """Wraps PyTorch tensors into an Avalanche experience object."""
     if tensor_benchmark is not None:
         bm = tensor_benchmark(
-            train_tensors=[(x_tensor, y_tensor)],
-            test_tensors=[(x_tensor, y_tensor)]
+            train_tensors=[(x_tensor, y_tensor)], test_tensors=[(x_tensor, y_tensor)]
         )
         return bm.train_stream[0]
 
@@ -274,20 +327,17 @@ def get_experience(x_tensor, y_tensor):
     if as_classification_dataset is not None and benchmark_from_datasets is not None:
         td = MyTensorDataset(x_tensor, y_tensor)
         ds = as_classification_dataset(td)
-        bm = benchmark_from_datasets(
-            train=[ds],
-            test=[ds]
-        )
+        bm = benchmark_from_datasets(train=[ds], test=[ds])
         return bm.train_stream[0]
 
-    if make_tensor_classification_dataset is not None and benchmark_from_datasets is not None:
+    if (
+        make_tensor_classification_dataset is not None
+        and benchmark_from_datasets is not None
+    ):
         av_dataset = make_tensor_classification_dataset(
             dataset_tensors=(x_tensor, y_tensor)
         )
-        bm = benchmark_from_datasets(
-            train=[av_dataset],
-            test=[av_dataset]
-        )
+        bm = benchmark_from_datasets(train=[av_dataset], test=[av_dataset])
         return bm.train_stream[0]
 
     raise ImportError("No valid Avalanche dataset generators or benchmarks found.")
@@ -299,17 +349,23 @@ except ImportError:
     mlflow = None
 
 if mlflow is None or not hasattr(mlflow, "trace"):
+
     def dummy_trace(name=None):
         def decorator(func):
             return func
+
         return decorator
+
     class DummyMlflow:
         def trace(self, name=None):
             return dummy_trace(name)
+
         def set_tracking_uri(self, uri):
             pass
+
         def set_experiment(self, name):
             pass
+
     mlflow = DummyMlflow()
 
 
@@ -317,24 +373,24 @@ def jensen_shannon_divergence(p, q):
     """Compute the Jensen-Shannon Divergence between two distributions using base 2."""
     p = np.array(p, dtype=float)
     q = np.array(q, dtype=float)
-    
+
     p_sum = np.sum(p)
     q_sum = np.sum(q)
-    
+
     p = p / p_sum if p_sum > 0 else np.zeros_like(p)
     q = q / q_sum if q_sum > 0 else np.zeros_like(q)
-    
+
     if np.sum(p) == 0 or np.sum(q) == 0:
         return 1.0
-        
+
     m = 0.5 * (p + q)
-    
+
     def kl_div(x, y):
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             val = np.where(x > 0, x * np.log2(x / np.where(y > 0, y, 1.0)), 0.0)
             val = np.nan_to_num(val, nan=0.0, posinf=0.0, neginf=0.0)
         return np.sum(val)
-        
+
     jsd = 0.5 * kl_div(p, m) + 0.5 * kl_div(q, m)
     return float(np.clip(jsd, 0.0, 1.0))
 
@@ -342,9 +398,24 @@ def jensen_shannon_divergence(p, q):
 class CyberDefenseClient(NumPyClientClass):
     """Flower client wrapping the Avalanche CL training loop."""
 
-    def __init__(self, net, cl_strategy, flows_dir, client_id="A", dos_threshold_ms=2000, traffic_gen_ip=None, baseline=None, js_threshold=0.6,
-                 poison_enabled=False, poison_rate=0.0, poison_from=0, poison_to=4,
-                 dp_enabled=False, dp_noise_multiplier=0.1, dp_max_grad_norm=1.0):
+    def __init__(
+        self,
+        net,
+        cl_strategy,
+        flows_dir,
+        client_id="A",
+        dos_threshold_ms=2000,
+        traffic_gen_ip=None,
+        baseline=None,
+        js_threshold=0.6,
+        poison_enabled=False,
+        poison_rate=0.0,
+        poison_from=0,
+        poison_to=4,
+        dp_enabled=False,
+        dp_noise_multiplier=0.1,
+        dp_max_grad_norm=1.0,
+    ):
         self.net = net
         self.cl = cl_strategy
         self.flows_dir = flows_dir
@@ -352,22 +423,23 @@ class CyberDefenseClient(NumPyClientClass):
         self.dos_threshold_ms = dos_threshold_ms
         self.traffic_gen_ip = traffic_gen_ip
         self.js_threshold = js_threshold
-        
+
         self.poison_enabled = poison_enabled
         self.poison_rate = poison_rate
         self.poison_from = poison_from
         self.poison_to = poison_to
-        
+
         self.dp_enabled = dp_enabled
         self.dp_noise_multiplier = dp_noise_multiplier
         self.dp_max_grad_norm = dp_max_grad_norm
-        
+
         # Initialize TensorBoard SummaryWriter for H2 FIM telemetry
         from torch.utils.tensorboard import SummaryWriter
+
         tb_dir = f"runs/tensorboard/client_{client_id}"
         os.makedirs(tb_dir, exist_ok=True)
         self.writer = SummaryWriter(log_dir=tb_dir)
-        
+
         self.baseline_dist = None
         if baseline:
             try:
@@ -383,7 +455,9 @@ class CyberDefenseClient(NumPyClientClass):
         self.y_val = None
 
     def get_parameters(self, config):
-        assert all(p.dtype == torch.float32 for p in self.net.parameters()), "All model parameters must be float32"
+        assert all(
+            p.dtype == torch.float32 for p in self.net.parameters()
+        ), "All model parameters must be float32"
         return [v.cpu().float().numpy() for _, v in self.net.state_dict().items()]
 
     def set_parameters(self, params):
@@ -413,11 +487,15 @@ class CyberDefenseClient(NumPyClientClass):
         fisher_max = 0.0
         fisher_diagonals_serialized = ""
         current_round = int(config.get("server_round", 1))
-        
+
         try:
-            X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms, traffic_gen_ip=self.traffic_gen_ip)
+            X, y = load_ramdisk_flows(
+                self.flows_dir,
+                dos_threshold_ms=self.dos_threshold_ms,
+                traffic_gen_ip=self.traffic_gen_ip,
+            )
             num_samples = len(X)
-            
+
             # Simulate Data Poisoning Attack (E1)
             if self.poison_enabled and num_samples > 0:
                 y_np = y.cpu().numpy()
@@ -425,40 +503,57 @@ class CyberDefenseClient(NumPyClientClass):
                 if len(indices) > 0:
                     num_to_poison = int(np.round(self.poison_rate * len(indices)))
                     if num_to_poison > 0:
-                        poison_indices = np.random.choice(indices, size=num_to_poison, replace=False)
+                        poison_indices = np.random.choice(
+                            indices, size=num_to_poison, replace=False
+                        )
                         y_np[poison_indices] = self.poison_to
                         y = torch.tensor(y_np, dtype=torch.int64)
-                        _log.info("POISON: Flipped %d labels from %d to %d", num_to_poison, self.poison_from, self.poison_to)
-            
+                        _log.info(
+                            "POISON: Flipped %d labels from %d to %d",
+                            num_to_poison,
+                            self.poison_from,
+                            self.poison_to,
+                        )
+
             # Check for JSD Label Shift
             if self.baseline_dist is not None and num_samples > 0:
                 y_np = y.cpu().numpy()
                 counts = [int(np.sum(y_np == i)) for i in range(5)]
                 jsd_val = jensen_shannon_divergence(counts, self.baseline_dist)
                 try:
-                    with open(f"/tmp/client_{self.client_id}_latest_jsd.txt", "w") as jf:
+                    with open(
+                        f"/tmp/client_{self.client_id}_latest_jsd.txt", "w"
+                    ) as jf:
                         jf.write(f"{jsd_val:.6f}\n")
                 except Exception:
                     pass
-                
+
                 if jsd_val > self.js_threshold:
                     dataset_rejected = 1.0
                     _log.warning(
                         "DATA QUALITY GATE FAILED: JSD=%.4f > threshold=%.4f. Skipping local training.",
-                        jsd_val, self.js_threshold,
+                        jsd_val,
+                        self.js_threshold,
                     )
-                    
+
                     # Snapshot drifted data to persistent storage for offline debugging
-                    snapshot_dir = os.path.expanduser(f"~/drift_snapshots/client_{self.client_id}/round_{current_round}")
+                    snapshot_dir = os.path.expanduser(
+                        f"~/drift_snapshots/client_{self.client_id}/round_{current_round}"
+                    )
                     os.makedirs(snapshot_dir, exist_ok=True)
                     try:
                         import shutil
+
                         for f in Path(self.flows_dir).glob("*.csv"):
                             shutil.copy2(f, snapshot_dir)
-                        _log.info(f"[client-{self.client_id}] Drifted batch snapshotted to {snapshot_dir}")
+                        _log.info(
+                            f"[client-{self.client_id}] Drifted batch snapshotted to {snapshot_dir}"
+                        )
                     except Exception as e:
-                        _log.error(f"[client-{self.client_id}] Error snapshotting drifted data: {e}")
-                    
+                        _log.error(
+                            f"[client-{self.client_id}] Error snapshotting drifted data: {e}"
+                        )
+
                     # Return unchanged parameters, 1 sample (to avoid zero), and metrics indicating rejection
                     out_params = self.get_parameters(config={})
                     metrics = {
@@ -469,10 +564,10 @@ class CyberDefenseClient(NumPyClientClass):
                         "client_id": self.client_id,
                         "fisher_mean": 0.0,
                         "fisher_max": 0.0,
-                        "fisher_diagonals": ""
+                        "fisher_diagonals": "",
                     }
                     return out_params, 1, metrics
-            
+
             # Temporal 80/20 Train/Validation Split (preserves sequential CL task ordering without future leakage)
             n_total = len(X)
             if n_total > 1:
@@ -484,12 +579,28 @@ class CyberDefenseClient(NumPyClientClass):
             else:
                 X_train_t, X_val_t = X, X
                 y_train_t, y_val_t = y, y
-                
-            X_train = X_train_t.clone().detach() if isinstance(X_train_t, torch.Tensor) else torch.tensor(X_train_t)
-            y_train = y_train_t.clone().detach().to(dtype=torch.int64) if isinstance(y_train_t, torch.Tensor) else torch.tensor(y_train_t, dtype=torch.int64)
-            self.X_val = X_val_t.clone().detach() if isinstance(X_val_t, torch.Tensor) else torch.tensor(X_val_t)
-            self.y_val = y_val_t.clone().detach().to(dtype=torch.int64) if isinstance(y_val_t, torch.Tensor) else torch.tensor(y_val_t, dtype=torch.int64)
-            
+
+            X_train = (
+                X_train_t.clone().detach()
+                if isinstance(X_train_t, torch.Tensor)
+                else torch.tensor(X_train_t)
+            )
+            y_train = (
+                y_train_t.clone().detach().to(dtype=torch.int64)
+                if isinstance(y_train_t, torch.Tensor)
+                else torch.tensor(y_train_t, dtype=torch.int64)
+            )
+            self.X_val = (
+                X_val_t.clone().detach()
+                if isinstance(X_val_t, torch.Tensor)
+                else torch.tensor(X_val_t)
+            )
+            self.y_val = (
+                y_val_t.clone().detach().to(dtype=torch.int64)
+                if isinstance(y_val_t, torch.Tensor)
+                else torch.tensor(y_val_t, dtype=torch.int64)
+            )
+
             num_samples = len(X_train)
 
             experience = get_experience(X_train, y_train)
@@ -503,12 +614,12 @@ class CyberDefenseClient(NumPyClientClass):
                     if p.__class__.__name__ == "EWCPlugin":
                         ewc_plugin = p
                         break
-            
+
             if ewc_plugin is not None and hasattr(ewc_plugin, "importances"):
                 param_to_name = {p: name for name, p in self.net.named_parameters()}
                 fisher_diagonals = {}
                 all_importances = []
-                
+
                 for key, val in ewc_plugin.importances.items():
                     # Case 1: Key is a tuple (task_id, param) - used by mock or some Avalanche versions
                     if isinstance(key, tuple) and len(key) == 2:
@@ -520,40 +631,61 @@ class CyberDefenseClient(NumPyClientClass):
                             fisher_diagonals[name] = imp_np.tolist()
                             all_importances.append(imp_np)
                             if hasattr(self, "writer") and self.writer is not None:
-                                tb_tag = f"fisher/{name.replace('.', '/')}_task_{task_id}"
-                                self.writer.add_histogram(tb_tag, imp_tensor, global_step=current_round)
-                                self.writer.add_scalar(f"fisher_mean/{name.replace('.', '/')}_task_{task_id}", float(imp_np.mean()), global_step=current_round)
-                    
+                                tb_tag = (
+                                    f"fisher/{name.replace('.', '/')}_task_{task_id}"
+                                )
+                                self.writer.add_histogram(
+                                    tb_tag, imp_tensor, global_step=current_round
+                                )
+                                self.writer.add_scalar(
+                                    f"fisher_mean/{name.replace('.', '/')}_task_{task_id}",
+                                    float(imp_np.mean()),
+                                    global_step=current_round,
+                                )
+
                     # Case 2: Key is task_id (int) and val is dict of {param_name/param: imp_data} - used by actual Avalanche
                     elif isinstance(key, int) and isinstance(val, dict):
                         task_id = key
                         for p_key, imp_data in val.items():
-                            imp_tensor = imp_data.data if hasattr(imp_data, "data") else imp_data
+                            imp_tensor = (
+                                imp_data.data if hasattr(imp_data, "data") else imp_data
+                            )
                             name = None
                             if isinstance(p_key, str):
                                 name = p_key
                             elif p_key in param_to_name:
                                 name = param_to_name[p_key]
-                            
-                            if name is not None and isinstance(imp_tensor, torch.Tensor):
+
+                            if name is not None and isinstance(
+                                imp_tensor, torch.Tensor
+                            ):
                                 imp_np = imp_tensor.cpu().numpy()
                                 fisher_diagonals[name] = imp_np.tolist()
                                 all_importances.append(imp_np)
                                 if hasattr(self, "writer") and self.writer is not None:
                                     tb_tag = f"fisher/{name.replace('.', '/')}_task_{task_id}"
-                                    self.writer.add_histogram(tb_tag, imp_tensor, global_step=current_round)
-                                    self.writer.add_scalar(f"fisher_mean/{name.replace('.', '/')}_task_{task_id}", float(imp_np.mean()), global_step=current_round)
-                
+                                    self.writer.add_histogram(
+                                        tb_tag, imp_tensor, global_step=current_round
+                                    )
+                                    self.writer.add_scalar(
+                                        f"fisher_mean/{name.replace('.', '/')}_task_{task_id}",
+                                        float(imp_np.mean()),
+                                        global_step=current_round,
+                                    )
+
                 if all_importances:
-                    flat_importances = np.concatenate([arr.flatten() for arr in all_importances])
+                    flat_importances = np.concatenate(
+                        [arr.flatten() for arr in all_importances]
+                    )
                     fisher_mean = float(np.mean(flat_importances))
                     fisher_max = float(np.max(flat_importances))
                     import json
+
                     fisher_diagonals_serialized = json.dumps(fisher_diagonals)
 
         except FileNotFoundError as e:
             _log.warning("%s. Skipping training this round (no flows yet).", e)
-            
+
         # Validate outgoing parameters — never send NaN weights back to server
         out_params = self.get_parameters(config={})
         clean_params = []
@@ -568,14 +700,18 @@ class CyberDefenseClient(NumPyClientClass):
             clean_params.append(t.numpy())
         # Return at least 1 so FedAvg aggregate_inplace never divides by zero
         # when all clients have an empty ramdisk (e.g. extractor not ready yet).
-        return clean_params, max(num_samples, 1), {
-            "client_id": self.client_id,
-            "dataset_rejected": dataset_rejected,
-            "dataset_jsd": jsd_val,
-            "fisher_mean": fisher_mean,
-            "fisher_max": fisher_max,
-            "fisher_diagonals": fisher_diagonals_serialized
-        }
+        return (
+            clean_params,
+            max(num_samples, 1),
+            {
+                "client_id": self.client_id,
+                "dataset_rejected": dataset_rejected,
+                "dataset_jsd": jsd_val,
+                "fisher_mean": fisher_mean,
+                "fisher_max": fisher_max,
+                "fisher_diagonals": fisher_diagonals_serialized,
+            },
+        )
 
     @mlflow.trace(name="client_evaluate")
     def evaluate(self, parameters, config):
@@ -585,8 +721,12 @@ class CyberDefenseClient(NumPyClientClass):
                 X, y = self.X_val, self.y_val
             else:
                 # Fallback if evaluate is called without fit (e.g., initial evaluation)
-                X, y = load_ramdisk_flows(self.flows_dir, dos_threshold_ms=self.dos_threshold_ms, traffic_gen_ip=self.traffic_gen_ip)
-                
+                X, y = load_ramdisk_flows(
+                    self.flows_dir,
+                    dos_threshold_ms=self.dos_threshold_ms,
+                    traffic_gen_ip=self.traffic_gen_ip,
+                )
+
             dataset = TensorDataset(X, y)
             dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
 
@@ -615,16 +755,20 @@ class CyberDefenseClient(NumPyClientClass):
                     total += y_batch.size(0)
 
                     # Populate confusion matrix counts
-                    for t_val, p_val in zip(y_batch.cpu().numpy(), predicted.cpu().numpy()):
+                    for t_val, p_val in zip(
+                        y_batch.cpu().numpy(), predicted.cpu().numpy()
+                    ):
                         if 0 <= t_val < 5 and 0 <= p_val < 5:
                             class_cm[int(t_val)][int(p_val)] += 1
 
                     for label in range(5):
-                        label_mask = (y_batch == label)
-                        pred_mask = (predicted == label)
+                        label_mask = y_batch == label
+                        pred_mask = predicted == label
                         class_total[label] += label_mask.sum().item()
-                        class_correct[label] += ((predicted == y_batch) & label_mask).sum().item()
-                        
+                        class_correct[label] += (
+                            ((predicted == y_batch) & label_mask).sum().item()
+                        )
+
                         class_tp[label] += (pred_mask & label_mask).sum().item()
                         class_fp[label] += (pred_mask & ~label_mask).sum().item()
                         class_fn[label] += (~pred_mask & label_mask).sum().item()
@@ -635,14 +779,18 @@ class CyberDefenseClient(NumPyClientClass):
             class_metrics = {}
             for label in range(5):
                 if class_total[label] > 0:
-                    class_metrics[f"accuracy_class_{label}"] = class_correct[label] / class_total[label]
+                    class_metrics[f"accuracy_class_{label}"] = (
+                        class_correct[label] / class_total[label]
+                    )
                     tp = class_tp[label]
                     fp = class_fp[label]
                     fn = class_fn[label]
                     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
                     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
                     class_metrics[f"f1_class_{label}"] = (
-                        2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+                        2 * precision * recall / (precision + recall)
+                        if (precision + recall) > 0
+                        else 0.0
                     )
                 else:
                     class_metrics[f"accuracy_class_{label}"] = -1.0
@@ -657,7 +805,7 @@ class CyberDefenseClient(NumPyClientClass):
                 "accuracy": accuracy,
                 "client_id": self.client_id,
                 **class_metrics,
-                **cm_metrics
+                **cm_metrics,
             }
             return avg_loss, total, metrics
         except FileNotFoundError:
@@ -666,39 +814,112 @@ class CyberDefenseClient(NumPyClientClass):
 
 def main():
     parser = argparse.ArgumentParser(description="FL-CL Defender Client")
-    parser.add_argument("--server", default="10.10.130.10:8080", help="Aggregator address")
+    parser.add_argument(
+        "--server", default="10.10.130.10:8080", help="Aggregator address"
+    )
     parser.add_argument("--client-id", default="A", help="Client identifier (A or B)")
-    parser.add_argument("--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory")
-    parser.add_argument("--cl-strategy", default="EWC", help="Continual Learning strategy (EWC, GEM, Naive)")
-    parser.add_argument("--ewc-lambda", type=float, default=0.8, help="EWC regularization strength")
-    parser.add_argument("--gem-patterns", type=int, default=256, help="GEM patterns per experience")
-    parser.add_argument("--gem-memory-strength", type=float, default=0.5, help="GEM memory strength")
-    parser.add_argument("--class-weights", default="1.0,250.0,2.0,5.0,50.0", help="Comma-separated class weights")
+    parser.add_argument(
+        "--flows-dir", default="/mnt/ramdisk/flows", help="Flow CSV directory"
+    )
+    parser.add_argument(
+        "--cl-strategy",
+        default="EWC",
+        help="Continual Learning strategy (EWC, GEM, Naive)",
+    )
+    parser.add_argument(
+        "--ewc-lambda", type=float, default=0.8, help="EWC regularization strength"
+    )
+    parser.add_argument(
+        "--gem-patterns", type=int, default=256, help="GEM patterns per experience"
+    )
+    parser.add_argument(
+        "--gem-memory-strength", type=float, default=0.5, help="GEM memory strength"
+    )
+    parser.add_argument(
+        "--class-weights",
+        default="1.0,250.0,2.0,5.0,50.0",
+        help="Comma-separated class weights",
+    )
     parser.add_argument("--lr", type=float, default=0.01, help="SGD learning rate")
     parser.add_argument("--momentum", type=float, default=0.9, help="SGD momentum")
-    parser.add_argument("--dos-threshold-ms", type=float, default=2000.0, help="DoS flow duration threshold in ms")
-    parser.add_argument("--batch-size", type=int, default=32, help="Local training batch size")
-    parser.add_argument("--traffic-gen-ip", default=os.environ.get("TRAFFIC_GEN_IP", "10.10.140.10"), help="Traffic Generator IP address")
-    parser.add_argument("--baseline", default=None, help="Comma-separated baseline distribution (e.g. 2,150,3,7,18)")
-    parser.add_argument("--js-threshold", type=float, default=0.6, help="JSD threshold for rejecting batch")
-    parser.add_argument("--model-type", default="cnn", choices=["mlp", "cnn", "transformer"], help="Model architecture type")
-    
+    parser.add_argument(
+        "--dos-threshold-ms",
+        type=float,
+        default=2000.0,
+        help="DoS flow duration threshold in ms",
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=32, help="Local training batch size"
+    )
+    parser.add_argument(
+        "--traffic-gen-ip",
+        default=os.environ.get("TRAFFIC_GEN_IP", "10.10.140.10"),
+        help="Traffic Generator IP address",
+    )
+    parser.add_argument(
+        "--baseline",
+        default=None,
+        help="Comma-separated baseline distribution (e.g. 2,150,3,7,18)",
+    )
+    parser.add_argument(
+        "--js-threshold",
+        type=float,
+        default=0.6,
+        help="JSD threshold for rejecting batch",
+    )
+    parser.add_argument(
+        "--model-type",
+        default="cnn",
+        choices=["mlp", "cnn", "transformer"],
+        help="Model architecture type",
+    )
+
     # Security parameters
-    parser.add_argument("--poison-enabled", action="store_true", help="Enable label poisoning attack simulation")
-    parser.add_argument("--poison-rate", type=float, default=0.0, help="Fraction of labels to poison")
-    parser.add_argument("--poison-from", type=int, default=0, help="Source class for label poisoning")
-    parser.add_argument("--poison-to", type=int, default=4, help="Target class for label poisoning")
-    
-    parser.add_argument("--dp-enabled", action="store_true", help="Enable client-level Differential Privacy (DP-SGD)")
-    parser.add_argument("--dp-noise-multiplier", type=float, default=0.1, help="Noise multiplier for DP-SGD")
-    parser.add_argument("--dp-max-grad-norm", type=float, default=1.0, help="Gradient clip threshold for DP-SGD")
+    parser.add_argument(
+        "--poison-enabled",
+        action="store_true",
+        help="Enable label poisoning attack simulation",
+    )
+    parser.add_argument(
+        "--poison-rate", type=float, default=0.0, help="Fraction of labels to poison"
+    )
+    parser.add_argument(
+        "--poison-from", type=int, default=0, help="Source class for label poisoning"
+    )
+    parser.add_argument(
+        "--poison-to", type=int, default=4, help="Target class for label poisoning"
+    )
+
+    parser.add_argument(
+        "--dp-enabled",
+        action="store_true",
+        help="Enable client-level Differential Privacy (DP-SGD)",
+    )
+    parser.add_argument(
+        "--dp-noise-multiplier",
+        type=float,
+        default=0.1,
+        help="Noise multiplier for DP-SGD",
+    )
+    parser.add_argument(
+        "--dp-max-grad-norm",
+        type=float,
+        default=1.0,
+        help="Gradient clip threshold for DP-SGD",
+    )
     parser.add_argument("--mlflow-uri", default=None, help="MLflow Tracking Server URI")
-    parser.add_argument("--experiment-name", default=None, help="MLflow Experiment Name")
+    parser.add_argument(
+        "--experiment-name", default=None, help="MLflow Experiment Name"
+    )
     args = parser.parse_args()
 
     # Set up MLflow with environment and argument fallbacks
-    mlflow_uri = args.mlflow_uri or os.environ.get("MLFLOW_TRACKING_URI", "http://10.10.130.10:5000")
-    exp_name = args.experiment_name or os.environ.get("MLFLOW_EXPERIMENT_NAME", "FL-CL-CyberDefense")
+    mlflow_uri = args.mlflow_uri or os.environ.get(
+        "MLFLOW_TRACKING_URI", "http://10.10.130.10:5000"
+    )
+    exp_name = args.experiment_name or os.environ.get(
+        "MLFLOW_EXPERIMENT_NAME", "FL-CL-CyberDefense"
+    )
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment(exp_name)
 
@@ -710,31 +931,44 @@ def main():
     if args.cl_strategy.upper() == "EWC":
         _log.info("EWC Lambda:  %s", args.ewc_lambda)
     elif args.cl_strategy.upper() == "GEM":
-        _log.info("GEM Patterns: %s | Memory Strength: %s", args.gem_patterns, args.gem_memory_strength)
-    _log.info("SGD lr: %s | momentum: %s | batch_size: %s", args.lr, args.momentum, args.batch_size)
+        _log.info(
+            "GEM Patterns: %s | Memory Strength: %s",
+            args.gem_patterns,
+            args.gem_memory_strength,
+        )
+    _log.info(
+        "SGD lr: %s | momentum: %s | batch_size: %s",
+        args.lr,
+        args.momentum,
+        args.batch_size,
+    )
     _log.info("DoS duration threshold: %s ms", args.dos_threshold_ms)
     _log.info("Traffic Gen IP: %s", args.traffic_gen_ip)
 
     if args.poison_enabled:
         _log.warning(
             "POISON ENABLED: Flipping %.0f%% of class %d to %d",
-            args.poison_rate * 100, args.poison_from, args.poison_to,
+            args.poison_rate * 100,
+            args.poison_from,
+            args.poison_to,
         )
     if args.dp_enabled:
         _log.info(
             "DP ENABLED: Noise Multiplier=%s | Max Grad Norm=%s",
-            args.dp_noise_multiplier, args.dp_max_grad_norm,
+            args.dp_noise_multiplier,
+            args.dp_max_grad_norm,
         )
 
     net = get_model(args.model_type).to(device)
-    
+
     weights = [float(w) for w in args.class_weights.split(",")]
     from cl_strategy import get_continual_learner
+
     cl = get_continual_learner(
-        net, 
-        device, 
+        net,
+        device,
         strategy_name=args.cl_strategy,
-        ewc_lambda=args.ewc_lambda, 
+        ewc_lambda=args.ewc_lambda,
         patterns_per_exp=args.gem_patterns,
         memory_strength=args.gem_memory_strength,
         class_weights=weights,
@@ -743,7 +977,7 @@ def main():
         batch_size=args.batch_size,
         dp_enabled=args.dp_enabled,
         dp_noise_multiplier=args.dp_noise_multiplier,
-        dp_max_grad_norm=args.dp_max_grad_norm
+        dp_max_grad_norm=args.dp_max_grad_norm,
     )
 
     fl.client.start_numpy_client(
@@ -763,7 +997,7 @@ def main():
             poison_to=args.poison_to,
             dp_enabled=args.dp_enabled,
             dp_noise_multiplier=args.dp_noise_multiplier,
-            dp_max_grad_norm=args.dp_max_grad_norm
+            dp_max_grad_norm=args.dp_max_grad_norm,
         ),
     )
 

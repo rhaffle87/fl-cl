@@ -1,16 +1,15 @@
-"""
-export_onnx.py — Export PyTorch Backbones to ONNX with Dynamic Batch Dimensions
+# export_onnx.py — Export PyTorch Backbones to ONNX with Dynamic Batch Dimensions
+#
+# Exports CyberDefenseCNN, CyberDefenseTransformer, and CyberDefenseNet to ONNX format
+# and validates graph integrity and numerical parity.
 
-Exports CyberDefenseCNN, CyberDefenseTransformer, and CyberDefenseNet to ONNX format
-and validates graph integrity and numerical parity.
-"""
 import argparse
-
-import sys
 import os
+import sys
 from pathlib import Path
-import torch
+
 import numpy as np
+import torch
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src" / "defender"))
@@ -39,10 +38,7 @@ def export_and_verify(model_type: str, input_dim: int = 32, num_classes: int = 5
         do_constant_folding=True,
         input_names=["input"],
         output_names=["output"],
-        dynamic_axes={
-            "input": {0: "batch_size"},
-            "output": {0: "batch_size"}
-        }
+        dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},
     )
 
     file_size_kb = os.path.getsize(onnx_path) / 1024
@@ -51,7 +47,10 @@ def export_and_verify(model_type: str, input_dim: int = 32, num_classes: int = 5
     # Verify numerical parity with ONNX runtime if installed
     try:
         import onnxruntime as ort
-        session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+
+        session = ort.InferenceSession(
+            str(onnx_path), providers=["CPUExecutionProvider"]
+        )
         ort_inputs = {session.get_inputs()[0].name: dummy_input.numpy()}
         ort_outs = session.run(None, ort_inputs)[0]
 
@@ -59,9 +58,13 @@ def export_and_verify(model_type: str, input_dim: int = 32, num_classes: int = 5
             torch_outs = model(dummy_input).numpy()
 
         max_diff = np.max(np.abs(torch_outs - ort_outs))
-        print(f"  [VERIFY] Numerical parity check passed! Max absolute diff: {max_diff:.2e}")
+        print(
+            f"  [VERIFY] Numerical parity check passed! Max absolute diff: {max_diff:.2e}"
+        )
     except ImportError:
-        print("  [INFO] onnxruntime not installed locally; graph export verified via PyTorch.")
+        print(
+            "  [INFO] onnxruntime not installed locally; graph export verified via PyTorch."
+        )
     except Exception as e:
         print(f"  [WARN] Parity check warning: {e}")
 
@@ -84,6 +87,8 @@ def main():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="CyberDefenseNet / CNN ONNX Model Exporter and Numerical Parity Verifier")
+    parser = argparse.ArgumentParser(
+        description="CyberDefenseNet / CNN ONNX Model Exporter and Numerical Parity Verifier"
+    )
     _ = parser.parse_args()
     main()

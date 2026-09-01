@@ -6,14 +6,16 @@ Validator for FL-CL experiment configuration YAML files.
 Ensures adherence to repository schemas, model constraints, and security parameters.
 """
 
-import sys
 import argparse
+import sys
 from pathlib import Path
+
 import yaml
 
 VALID_MODELS = {"mlp", "cnn", "transformer"}
 VALID_CL_STRATEGIES = {"EWC", "GEM"}
 VALID_AGGREGATORS = {"FedAvg", "TrimmedMean", "FedMedian", "Krum"}
+
 
 def validate_experiment_config(config_path: Path) -> bool:
     if not config_path.is_file():
@@ -44,32 +46,42 @@ def validate_experiment_config(config_path: Path) -> bool:
     m_type = model_cfg.get("type")
     if m_type not in VALID_MODELS:
         errors.append(f"Invalid model type '{m_type}'. Must be one of {VALID_MODELS}")
-    
+
     input_dim = model_cfg.get("input_dim")
     if input_dim != 32:
-        errors.append(f"model.input_dim must be 32 (got {input_dim}) to match NFStream ETA feature count.")
+        errors.append(
+            f"model.input_dim must be 32 (got {input_dim}) to match NFStream ETA feature count."
+        )
 
     num_classes = model_cfg.get("num_classes")
     if num_classes != 5:
-        errors.append(f"model.num_classes must be 5 (got {num_classes}) for threat class taxonomy.")
+        errors.append(
+            f"model.num_classes must be 5 (got {num_classes}) for threat class taxonomy."
+        )
 
     if m_type == "transformer":
         token_len = model_cfg.get("token_len", 8)
         token_dim = model_cfg.get("token_dim", 4)
         if token_len * token_dim != 32:
-            errors.append(f"Transformer constraint violated: token_len ({token_len}) * token_dim ({token_dim}) != 32")
+            errors.append(
+                f"Transformer constraint violated: token_len ({token_len}) * token_dim ({token_dim}) != 32"
+            )
 
     # 3. Validate CL settings
     cl_cfg = cfg.get("cl", {})
     cl_strat = cl_cfg.get("strategy")
     if cl_strat not in VALID_CL_STRATEGIES:
-        errors.append(f"Invalid cl.strategy '{cl_strat}'. Must be one of {VALID_CL_STRATEGIES}")
+        errors.append(
+            f"Invalid cl.strategy '{cl_strat}'. Must be one of {VALID_CL_STRATEGIES}"
+        )
 
     # 4. Validate Security & FL
     sec_cfg = cfg.get("security", {})
     agg_strat = sec_cfg.get("aggregation_strategy", "FedAvg")
     if agg_strat not in VALID_AGGREGATORS:
-        errors.append(f"Invalid aggregation_strategy '{agg_strat}'. Must be one of {VALID_AGGREGATORS}")
+        errors.append(
+            f"Invalid aggregation_strategy '{agg_strat}'. Must be one of {VALID_AGGREGATORS}"
+        )
 
     fl_cfg = cfg.get("fl", {})
     rounds = fl_cfg.get("rounds", 0)
@@ -79,28 +91,43 @@ def validate_experiment_config(config_path: Path) -> bool:
     # 5. Check baseline stats file reference
     stats_file = Path("configs/baseline_feature_stats.json")
     if not stats_file.exists():
-        print(f"[WARNING] Baseline feature stats file not found at {stats_file}. Scaling might fallback to uncalibrated defaults.")
+        print(
+            f"[WARNING] Baseline feature stats file not found at {stats_file}. Scaling might fallback to uncalibrated defaults."
+        )
 
     if errors:
-        print(f"\n[FAILED] Configuration validation failed for {config_path.name} with {len(errors)} error(s):")
+        print(
+            f"\n[FAILED] Configuration validation failed for {config_path.name} with {len(errors)} error(s):"
+        )
         for err in errors:
             print(f"  - {err}")
         return False
 
-    print(f"[SUCCESS] Configuration {config_path.name} is valid and ready for execution.")
+    print(
+        f"[SUCCESS] Configuration {config_path.name} is valid and ready for execution."
+    )
     print(f"  - Model: {m_type} (input_dim=32, num_classes=5)")
     print(f"  - CL Strategy: {cl_strat}")
     print(f"  - Aggregator: {agg_strat}")
     print(f"  - Rounds: {rounds}")
     return True
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Validate FL-CL experiment YAML config.")
-    parser.add_argument("--config", type=str, default="configs/experiments/scenario_baseline.yaml", help="Path to experiment YAML")
+    parser = argparse.ArgumentParser(
+        description="Validate FL-CL experiment YAML config."
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/experiments/scenario_baseline.yaml",
+        help="Path to experiment YAML",
+    )
     args = parser.parse_args()
 
     success = validate_experiment_config(Path(args.config))
     sys.exit(0 if success else 1)
+
 
 if __name__ == "__main__":
     main()

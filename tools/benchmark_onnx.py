@@ -1,20 +1,16 @@
-"""
-benchmark_onnx.py — Multi-Runtime Edge Inference Benchmark
+# benchmark_onnx.py — Multi-Runtime Edge Inference Benchmark
+#
+# Compares PyTorch FP32, PyTorch Dynamic INT8, and ONNX Runtime CPU execution provider
+# across varied batch sizes (1, 16, 64, 256) for all three model backbones.
 
-Compares PyTorch FP32, PyTorch Dynamic INT8, and ONNX Runtime CPU execution provider
-across varied batch sizes (1, 16, 64, 256) for all three model backbones.
-"""
 import argparse
-
-import os
 import sys
 import time
-import json
 from pathlib import Path
-import torch
-import numpy as np
-import pandas as pd
+
 import onnxruntime as ort
+import pandas as pd
+import torch
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src" / "defender"))
@@ -26,7 +22,9 @@ REPORTS_DIR = PROJECT_ROOT / "data" / "reports"
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def benchmark_model_runtimes(model_type: str, batch_sizes=[1, 16, 64, 256], num_runs=500):
+def benchmark_model_runtimes(
+    model_type: str, batch_sizes=[1, 16, 64, 256], num_runs=500
+):
     print(f"\n[*] Benchmarking '{model_type}' across runtimes...")
     input_dim = 32
     num_classes = 5
@@ -38,7 +36,9 @@ def benchmark_model_runtimes(model_type: str, batch_sizes=[1, 16, 64, 256], num_
 
     # 2. PyTorch Dynamic INT8
     try:
-        q_model = torch.ao.quantization.quantize_dynamic(py_model, {torch.nn.Linear}, dtype=torch.qint8)
+        q_model = torch.ao.quantization.quantize_dynamic(
+            py_model, {torch.nn.Linear}, dtype=torch.qint8
+        )
         q_model.eval()
     except Exception:
         q_model = py_model
@@ -55,7 +55,10 @@ def benchmark_model_runtimes(model_type: str, batch_sizes=[1, 16, 64, 256], num_
             str(onnx_path),
             input_names=["flow_features"],
             output_names=["logits"],
-            dynamic_axes={"flow_features": {0: "batch_size"}, "logits": {0: "batch_size"}},
+            dynamic_axes={
+                "flow_features": {0: "batch_size"},
+                "logits": {0: "batch_size"},
+            },
             opset_version=14,
         )
 
@@ -63,7 +66,9 @@ def benchmark_model_runtimes(model_type: str, batch_sizes=[1, 16, 64, 256], num_
     opts.intra_op_num_threads = 2
     opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    ort_session = ort.InferenceSession(str(onnx_path), sess_options=opts, providers=["CPUExecutionProvider"])
+    ort_session = ort.InferenceSession(
+        str(onnx_path), sess_options=opts, providers=["CPUExecutionProvider"]
+    )
     ort_input_name = ort_session.get_inputs()[0].name
 
     results = []
@@ -112,20 +117,24 @@ def benchmark_model_runtimes(model_type: str, batch_sizes=[1, 16, 64, 256], num_
 
         speedup_ort_vs_fp32 = ort_fps / torch_fp32_fps if torch_fp32_fps > 0 else 1.0
 
-        results.append({
-            "model": model_type,
-            "batch_size": bs,
-            "torch_fp32_us": round(torch_fp32_latency_us, 2),
-            "torch_fp32_fps": round(torch_fp32_fps, 1),
-            "torch_int8_us": round(torch_int8_latency_us, 2),
-            "torch_int8_fps": round(torch_int8_fps, 1),
-            "onnx_runtime_us": round(ort_latency_us, 2),
-            "onnx_runtime_fps": round(ort_fps, 1),
-            "speedup_ort_vs_torch": round(speedup_ort_vs_fp32, 2)
-        })
+        results.append(
+            {
+                "model": model_type,
+                "batch_size": bs,
+                "torch_fp32_us": round(torch_fp32_latency_us, 2),
+                "torch_fp32_fps": round(torch_fp32_fps, 1),
+                "torch_int8_us": round(torch_int8_latency_us, 2),
+                "torch_int8_fps": round(torch_int8_fps, 1),
+                "onnx_runtime_us": round(ort_latency_us, 2),
+                "onnx_runtime_fps": round(ort_fps, 1),
+                "speedup_ort_vs_torch": round(speedup_ort_vs_fp32, 2),
+            }
+        )
 
-        print(f"  Batch {bs:3d} | Torch FP32: {torch_fp32_latency_us:6.2f} us ({torch_fp32_fps:9,.0f} f/s) | "
-              f"ONNX Runtime: {ort_latency_us:6.2f} us ({ort_fps:9,.0f} f/s) [Speedup: {speedup_ort_vs_fp32:.2f}x]")
+        print(
+            f"  Batch {bs:3d} | Torch FP32: {torch_fp32_latency_us:6.2f} us ({torch_fp32_fps:9,.0f} f/s) | "
+            f"ONNX Runtime: {ort_latency_us:6.2f} us ({ort_fps:9,.0f} f/s) [Speedup: {speedup_ort_vs_fp32:.2f}x]"
+        )
 
     return results
 
@@ -148,6 +157,8 @@ def main():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="ONNX Runtime vs PyTorch Edge Latency Benchmark")
+    parser = argparse.ArgumentParser(
+        description="ONNX Runtime vs PyTorch Edge Latency Benchmark"
+    )
     _ = parser.parse_args()
     main()

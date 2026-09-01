@@ -1,19 +1,18 @@
-"""
-tools/deploy_clean_testbed.py — Cluster Environment & State Cleanup Utility
-
-Wipes MLflow SQLite tracking databases, resets RAMDisk flow buffers, terminates
-stale defender/extractor processes, and cleans network services across the 3-node
-Proxmox VE testbed (aggregator, defenders, targets, traffic generator).
-
-Usage:
-    python tools/deploy_clean_testbed.py --config configs/experiment.yaml
-"""
+# tools/deploy_clean_testbed.py — Cluster Environment & State Cleanup Utility
+#
+# Wipes MLflow SQLite tracking databases, resets RAMDisk flow buffers, terminates
+# stale defender/extractor processes, and cleans network services across the 3-node
+# Proxmox VE testbed (aggregator, defenders, targets, traffic generator).
+#
+# Usage:
+# python tools/deploy_clean_testbed.py --config configs/experiment.yaml
 
 import argparse
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
+
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -41,7 +40,9 @@ def load_config(config_path: Path) -> dict:
         return yaml.safe_load(f)
 
 
-def run_ssh(ip: str, command: str, username: str = "root", key_path: str = None) -> subprocess.CompletedProcess:
+def run_ssh(
+    ip: str, command: str, username: str = "root", key_path: str = None
+) -> subprocess.CompletedProcess:
     opts = ["-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5"]
     if key_path:
         opts += ["-i", key_path]
@@ -69,7 +70,7 @@ def clean_testbed(config_path: Path, key_path: str) -> None:
         "rm -f /root/mlflow.db /root/mlflow.db-shm /root/mlflow.db-wal",
         "rm -rf /opt/mlflow-artifacts/*",
         "systemctl start mlflow",
-        "systemctl is-active mlflow || true"
+        "systemctl is-active mlflow || true",
     ]
     for cmd in cmds:
         res = run_ssh(aggregator, cmd, key_path=key_path)
@@ -83,7 +84,7 @@ def clean_testbed(config_path: Path, key_path: str) -> None:
         cmds = [
             "pkill -f 'client.py|extractor.py|flower' || true",
             "rm -rf /mnt/ramdisk/flows/*",
-            "df -h /mnt/ramdisk || true"
+            "df -h /mnt/ramdisk || true",
         ]
         for cmd in cmds:
             res = run_ssh(defender, cmd, key_path=key_path)
@@ -95,7 +96,7 @@ def clean_testbed(config_path: Path, key_path: str) -> None:
         cmds = [
             "pkill -9 -f 'simple_httpd.sh|nc' || killall -9 nc || true",
             "rm -f /tmp/httpd.log",
-            "ss -tulpn | grep :80 || true"
+            "ss -tulpn | grep :80 || true",
         ]
         for cmd in cmds:
             res = run_ssh(target, cmd, key_path=key_path)
@@ -103,10 +104,7 @@ def clean_testbed(config_path: Path, key_path: str) -> None:
                 print(f"  Remaining listeners:\n{res.stdout.strip()}")
 
     print("\n=== Cleaning Traffic Generator Node ===")
-    cmds = [
-        "pkill -9 -f 'slowloris|hydra|attack_flow.py' || true",
-        "rm -f /root/*.log"
-    ]
+    cmds = ["pkill -9 -f 'slowloris|hydra|attack_flow.py' || true", "rm -f /root/*.log"]
     for cmd in cmds:
         run_ssh(traffic_gen, cmd, key_path=key_path)
 
@@ -114,11 +112,19 @@ def clean_testbed(config_path: Path, key_path: str) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Clean FL-CL Proxmox VE Testbed Environment")
-    parser.add_argument("--config", default="configs/experiment.yaml", help="Path to experiment config YAML")
+    parser = argparse.ArgumentParser(
+        description="Clean FL-CL Proxmox VE Testbed Environment"
+    )
+    parser.add_argument(
+        "--config",
+        default="configs/experiment.yaml",
+        help="Path to experiment config YAML",
+    )
 
     default_key = os.path.expanduser("~/.ssh/id_ed25519")
-    if not os.path.exists(default_key) and os.path.exists(os.path.expanduser("~/.ssh/id_rsa")):
+    if not os.path.exists(default_key) and os.path.exists(
+        os.path.expanduser("~/.ssh/id_rsa")
+    ):
         default_key = os.path.expanduser("~/.ssh/id_rsa")
     default_key = os.environ.get("SSH_KEY_PATH") or default_key
 

@@ -1,24 +1,23 @@
-"""
-generate_llm_report.py — Automated Post-Run LLM Threat Intelligence Summary Generator.
+# generate_llm_report.py — Automated Post-Run LLM Threat Intelligence Summary Generator.
+#
+# Queries a local Ollama LLM endpoint (e.g. qwen-flcl:3b or llama3.1:8b) to synthesize
+# an executive cybersecurity report, loss dynamics analysis, and continual learning retention
+# evaluation based on active MLflow run metrics.
+#
+# Usage:
+# python3 tools/generate_llm_report.py --run-id <MLFLOW_RUN_ID> [--cl-strategy GEM]
 
-Queries a local Ollama LLM endpoint (e.g. qwen-flcl:3b or llama3.1:8b) to synthesize
-an executive cybersecurity report, loss dynamics analysis, and continual learning retention
-evaluation based on active MLflow run metrics.
-
-Usage:
-    python3 tools/generate_llm_report.py --run-id <MLFLOW_RUN_ID> [--cl-strategy GEM]
-"""
-from pathlib import Path
-
+import argparse
+import json
 import os
 import sys
-import json
+
 import requests
 import urllib3
-import argparse
 from mlflow.tracking import MlflowClient
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 def load_env(env_name: str = ".env"):
     """Load environment variables from a .env file searching upward from the script directory."""
@@ -42,24 +41,33 @@ def load_env(env_name: str = ".env"):
             break
         current_dir = parent
 
+
 # Load local environment variables
 load_env()
 
-def generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds, cl_strategy="EWC", gem_patterns=256, gem_memory_strength=0.5):
+
+def generate_llm_analysis(
+    run_id,
+    final_metrics,
+    lambda_ewc,
+    rounds,
+    cl_strategy="EWC",
+    gem_patterns=256,
+    gem_memory_strength=0.5,
+):
     """Queries the local LLM model via the Tailscale Ollama proxy."""
     endpoint = os.getenv("OLLAMA_ENDPOINT")
     key = os.getenv("OLLAMA_KEY")
     model = os.getenv("OLLAMA_MODEL", "qwen-flcl:3b")
 
     if not endpoint or not key:
-        print("[!] Warning: OLLAMA_ENDPOINT or OLLAMA_KEY is not set in .env. Skipping LLM report generation.")
+        print(
+            "[!] Warning: OLLAMA_ENDPOINT or OLLAMA_KEY is not set in .env. Skipping LLM report generation."
+        )
         return None
 
     url = f"{endpoint.rstrip('/')}/api/generate"
-    headers = {
-        "x-fcl-key": key,
-        "Content-Type": "application/json"
-    }
+    headers = {"x-fcl-key": key, "Content-Type": "application/json"}
 
     # Clean up metrics for readability in prompt
     formatted_metrics = {}
@@ -99,33 +107,60 @@ Please write your evaluation report. Start directly with the section header "## 
             "num_thread": 4,
             "num_ctx": 4096,
             "temperature": 0.3,
-            "num_predict": 512
-        }
+            "num_predict": 512,
+        },
     }
 
     try:
         print(f"[*] Querying local AI model '{model}' at '{endpoint}'...")
-        response = requests.post(url, headers=headers, json=payload, verify=False, timeout=180)
+        response = requests.post(
+            url, headers=headers, json=payload, verify=False, timeout=180
+        )
         if response.status_code == 200:
             result = response.json()
             return result.get("response", "").strip()
         else:
-            print(f"[!] Warning: Ollama API returned status code {response.status_code}: {response.text}")
+            print(
+                f"[!] Warning: Ollama API returned status code {response.status_code}: {response.text}"
+            )
             return None
     except Exception as e:
         print(f"[!] Warning: Failed to query Ollama proxy: {e}")
         return None
 
-def append_and_upload_report(run_dir, run_id, final_metrics, lambda_ewc, rounds, aggregator_ip, cl_strategy="EWC", gem_patterns=256, gem_memory_strength=0.5):
+
+def append_and_upload_report(
+    run_dir,
+    run_id,
+    final_metrics,
+    lambda_ewc,
+    rounds,
+    aggregator_ip,
+    cl_strategy="EWC",
+    gem_patterns=256,
+    gem_memory_strength=0.5,
+):
     """Generates the LLM report, appends it to run_summary.md, and uploads to MLflow."""
     summary_path = os.path.join(run_dir, "run_summary.md")
     if not os.path.exists(summary_path):
-        print(f"[!] Warning: Run summary file '{summary_path}' not found. Cannot append LLM analysis.")
+        print(
+            f"[!] Warning: Run summary file '{summary_path}' not found. Cannot append LLM analysis."
+        )
         return False
 
-    analysis = generate_llm_analysis(run_id, final_metrics, lambda_ewc, rounds, cl_strategy, gem_patterns, gem_memory_strength)
+    analysis = generate_llm_analysis(
+        run_id,
+        final_metrics,
+        lambda_ewc,
+        rounds,
+        cl_strategy,
+        gem_patterns,
+        gem_memory_strength,
+    )
     if not analysis:
-        print("[!] LLM analysis generation skipped or failed. Run summary remains unchanged.")
+        print(
+            "[!] LLM analysis generation skipped or failed. Run summary remains unchanged."
+        )
         return False
 
     # Get model name again for heading reference
@@ -137,9 +172,13 @@ def append_and_upload_report(run_dir, run_id, final_metrics, lambda_ewc, rounds,
         elif cl_strategy.upper() == "GEM":
             strategy_details_md = f"- **Continual Learning Strategy**: Avalanche Gradient Episodic Memory (GEM)\n- **GEM Rehearsal Buffer Patterns**: {gem_patterns}\n- **GEM Memory Strength**: {gem_memory_strength}\n"
         elif cl_strategy.upper() == "NAIVE":
-            strategy_details_md = f"- **Continual Learning Strategy**: Avalanche Naive SGD Baseline\n"
+            strategy_details_md = (
+                "- **Continual Learning Strategy**: Avalanche Naive SGD Baseline\n"
+            )
         else:
-            strategy_details_md = f"- **Continual Learning Strategy**: Avalanche {cl_strategy}\n"
+            strategy_details_md = (
+                f"- **Continual Learning Strategy**: Avalanche {cl_strategy}\n"
+            )
 
         with open(summary_path, "a") as f:
             f.write("\n---\n\n")
@@ -159,10 +198,13 @@ def append_and_upload_report(run_dir, run_id, final_metrics, lambda_ewc, rounds,
     print(f"[*] Connecting to remote MLflow tracker at {tracking_uri}...")
     try:
         import mlflow
+
         mlflow.set_tracking_uri(tracking_uri)
         os.environ["MLFLOW_TRACKING_URI"] = tracking_uri
         client = MlflowClient(tracking_uri=tracking_uri)
-        print(f"[*] Uploading updated 'run_summary.md' as artifact to MLflow run '{run_id}'...")
+        print(
+            f"[*] Uploading updated 'run_summary.md' as artifact to MLflow run '{run_id}'..."
+        )
         client.log_artifact(run_id, summary_path)
         print("[OK] Artifact successfully registered in MLflow dashboard.")
         return True
@@ -172,14 +214,32 @@ def append_and_upload_report(run_dir, run_id, final_metrics, lambda_ewc, rounds,
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate local LLM analysis report and upload to MLflow.")
-    parser.add_argument("--run-dir", required=True, help="Path to the run export directory containing run_summary.md")
+    parser = argparse.ArgumentParser(
+        description="Generate local LLM analysis report and upload to MLflow."
+    )
+    parser.add_argument(
+        "--run-dir",
+        required=True,
+        help="Path to the run export directory containing run_summary.md",
+    )
     parser.add_argument("--run-id", required=True, help="Active MLflow Run ID")
-    parser.add_argument("--metrics-json", required=True, help="JSON string representing final metrics dictionary")
-    parser.add_argument("--lambda-ewc", type=float, default=0.8, help="EWC lambda configuration")
-    parser.add_argument("--cl-strategy", default="EWC", help="Continual Learning Strategy")
-    parser.add_argument("--gem-patterns", type=int, default=256, help="GEM patterns per exp")
-    parser.add_argument("--gem-memory-strength", type=float, default=0.5, help="GEM memory strength")
+    parser.add_argument(
+        "--metrics-json",
+        required=True,
+        help="JSON string representing final metrics dictionary",
+    )
+    parser.add_argument(
+        "--lambda-ewc", type=float, default=0.8, help="EWC lambda configuration"
+    )
+    parser.add_argument(
+        "--cl-strategy", default="EWC", help="Continual Learning Strategy"
+    )
+    parser.add_argument(
+        "--gem-patterns", type=int, default=256, help="GEM patterns per exp"
+    )
+    parser.add_argument(
+        "--gem-memory-strength", type=float, default=0.5, help="GEM memory strength"
+    )
     parser.add_argument("--rounds", type=int, default=100, help="Total training rounds")
     parser.add_argument("--ip", default="10.10.130.10", help="Aggregator IP address")
     args = parser.parse_args()
@@ -199,6 +259,6 @@ if __name__ == "__main__":
         aggregator_ip=args.ip,
         cl_strategy=args.cl_strategy,
         gem_patterns=args.gem_patterns,
-        gem_memory_strength=args.gem_memory_strength
+        gem_memory_strength=args.gem_memory_strength,
     )
     sys.exit(0 if success else 1)

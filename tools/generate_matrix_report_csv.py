@@ -1,13 +1,12 @@
-"""
-tools/generate_matrix_report_csv.py — Extract all 72 matrix combinations into a standardized benchmark CSV via SSH/MLflow.
-"""
-import argparse
-from pathlib import Path
+# tools/generate_matrix_report_csv.py — Extract all 72 matrix combinations into a standardized benchmark CSV via SSH/MLflow.
+# Compiles evaluation data into a single master summary spreadsheet.
 
+import argparse
 import os
 import subprocess
+
 import pandas as pd
-import io
+
 
 def main():
     py_code = """
@@ -62,24 +61,34 @@ print(df[avail_cols].to_csv(index=False))
 """
 
     cmd = [
-        "ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=no",
         "root@10.10.130.10",
-        "/opt/flower-env/bin/python3", "-"
+        "/opt/flower-env/bin/python3",
+        "-",
     ]
-    res = subprocess.run(cmd, input=py_code, capture_output=True, text=True, encoding="utf-8")
+    res = subprocess.run(
+        cmd, input=py_code, capture_output=True, text=True, encoding="utf-8"
+    )
     if res.returncode != 0:
         print("ERROR:", res.stderr)
         return
 
-    os.makedirs("data/reports", exist_ok=True)
-    out_csv = "data/reports/master_matrix_benchmark_report.csv"
+    os.makedirs("data/reports/benchmarks", exist_ok=True)
+    out_csv = "data/reports/benchmarks/master_matrix_benchmark_report.csv"
     with open(out_csv, "w", encoding="utf-8") as f:
         f.write(res.stdout)
-    
+
     df_check = pd.read_csv(out_csv)
     print(f"[SUCCESS] Exported {len(df_check)} matrix run records to {out_csv}")
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="72-Combination Benchmark Matrix CSV Extractor")
+    parser = argparse.ArgumentParser(
+        description="72-Combination Benchmark Matrix CSV Extractor"
+    )
     _ = parser.parse_args()
     main()

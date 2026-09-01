@@ -12,10 +12,9 @@ Usage:
     python3 tools/deploy_menu.py [--dry-run]
 """
 
-import os
-import sys
 import argparse
 import subprocess
+import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -31,13 +30,13 @@ def display_menu():
     print("\n" + "=" * 75)
     print("           FL-CL INTERACTIVE EXPERIMENT & BENCHMARK LAUNCHER")
     print("=" * 75)
-    
+
     configs = get_available_experiments()
     print("\n[Available Experiment Configuration Profiles]:")
     for idx, cfg in enumerate(configs, 1):
         clean_name = cfg.stem.replace("_", " ").title()
         print(f"  [{idx:2d}] {cfg.name:38s} ({clean_name})")
-    
+
     print("  [ 0] Exit Launcher")
     print("=" * 75)
     return configs
@@ -46,14 +45,18 @@ def display_menu():
 def prompt_user_selection(configs):
     while True:
         try:
-            choice = input(f"\nSelect experiment [1-{len(configs)}] (or 0 to exit): ").strip()
+            choice = input(
+                f"\nSelect experiment [1-{len(configs)}] (or 0 to exit): "
+            ).strip()
             if choice == "0":
                 print("[*] Exiting launcher. Goodbye!")
                 sys.exit(0)
             idx = int(choice)
             if 1 <= idx <= len(configs):
                 return configs[idx - 1]
-            print(f"[!] Invalid selection. Please enter a number between 1 and {len(configs)}.")
+            print(
+                f"[!] Invalid selection. Please enter a number between 1 and {len(configs)}."
+            )
         except ValueError:
             print("[!] Please enter a valid numerical choice.")
 
@@ -63,7 +66,7 @@ def prompt_engine_selection():
     print("  [1] Auto-Detect (Kali native tools with Python fallback) [RECOMMENDED]")
     print("  [2] Kali Linux Native Tools (hping3, hydra, slowhttptest)")
     print("  [3] Pure Python Sockets (Zero-dependency standard library)")
-    
+
     while True:
         choice = input("Select engine [1-3, default=1]: ").strip()
         if choice in ("", "1"):
@@ -76,13 +79,21 @@ def prompt_engine_selection():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Interactive FL-CL Experiment Launcher")
-    parser.add_argument("--dry-run", action="store_true", help="Display menu and parse without executing orchestrator")
+    parser = argparse.ArgumentParser(
+        description="Interactive FL-CL Experiment Launcher"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Display menu and parse without executing orchestrator",
+    )
     args = parser.parse_args()
 
     configs = display_menu()
     if args.dry_run:
-        print("\n[OK] Dry-run check: Successfully discovered all 17 experiment profiles.")
+        print(
+            "\n[OK] Dry-run check: Successfully discovered all 17 experiment profiles."
+        )
         return
 
     selected_config = prompt_user_selection(configs)
@@ -96,8 +107,10 @@ def main():
     cmd = [
         sys.executable,
         str(PROJECT_ROOT / "src" / "orchestrate.py"),
-        "--config", str(selected_config),
-        "--attack-engine", selected_engine,
+        "--config",
+        str(selected_config),
+        "--attack-engine",
+        selected_engine,
     ]
 
     print(f"\n[*] Launching Orchestrator: {' '.join(cmd)}\n")

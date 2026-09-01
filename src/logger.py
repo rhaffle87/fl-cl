@@ -1,20 +1,18 @@
-"""
-logger.py — Centralised Logger Factory for FL-CL
-
-Provides a single get_logger(name) call that returns a pre-configured
-logging.Logger instance for any src/ module.
-
-Configuration:
-  - Log level: controlled by FL_LOG_LEVEL environment variable (default: INFO).
-  - Format:    [%(name)s] %(levelname)s: %(message)s
-  - Handler:   StreamHandler to stderr (no file sink — RAMDisk mandate).
-
-Usage:
-    from logger import get_logger
-    logger = get_logger(__name__)
-    logger.info("Training complete")
-    logger.warning("JSD gate failed: %.4f", jsd)
-"""
+# logger.py — Centralised Logger Factory for FL-CL
+#
+# Provides a single get_logger(name) call that returns a pre-configured
+# logging.Logger instance for any src/ module.
+#
+# Configuration:
+# - Log level: controlled by FL_LOG_LEVEL environment variable (default: INFO).
+# - Format:    [%(name)s] %(levelname)s: %(message)s
+# - Handler:   StreamHandler to stderr (no file sink — RAMDisk mandate).
+#
+# Usage:
+# from logger import get_logger
+# logger = get_logger(__name__)
+# logger.info("Training complete")
+# logger.warning("JSD gate failed: %.4f", jsd)
 
 import logging
 import os

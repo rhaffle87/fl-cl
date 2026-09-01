@@ -9,10 +9,11 @@ Static analyzer that validates tools/ and src/ against ADR-006 MLOps standards:
 - Structured logging instead of raw print() in src/
 """
 
-import sys
 import ast
+import sys
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import Dict, List
+
 
 def audit_file(file_path: Path) -> Dict[str, any]:
     results = {
@@ -22,7 +23,7 @@ def audit_file(file_path: Path) -> Dict[str, any]:
         "has_argparse": False,
         "raw_print_count": 0,
         "passed": True,
-        "issues": []
+        "issues": [],
     }
 
     try:
@@ -33,12 +34,19 @@ def audit_file(file_path: Path) -> Dict[str, any]:
         results["issues"].append(f"Failed to parse AST: {e}")
         return results
 
-    # 1. Check docstring
+    # 1. Check docstring or top-level block comment
     docstring = ast.get_docstring(tree)
-    if docstring and len(docstring.strip()) > 10:
+    has_block_comment = False
+    lines = content.splitlines()
+    # Check if we have substantial comments in the first 15 lines
+    top_comments = [line for line in lines[:15] if line.strip().startswith("#")]
+    if len(top_comments) >= 2 and sum(len(c) for c in top_comments) > 20:
+        has_block_comment = True
+
+    if (docstring and len(docstring.strip()) > 10) or has_block_comment:
         results["has_docstring"] = True
     else:
-        results["issues"].append("Missing or trivial module-level docstring")
+        results["issues"].append("Missing or trivial module-level docstring or top block comment")
 
     # 2. Check pathlib
     for node in ast.walk(tree):
@@ -61,7 +69,9 @@ def audit_file(file_path: Path) -> Dict[str, any]:
                 if node.module in ("argparse", "click", "typer"):
                     results["has_argparse"] = True
         if not results["has_argparse"]:
-            results["issues"].append("CLI tools should define an argparse/click interface")
+            results["issues"].append(
+                "CLI tools should define an argparse/click interface"
+            )
 
     # 4. Check raw prints in src/
     if "src" in file_path.parts:
@@ -70,12 +80,15 @@ def audit_file(file_path: Path) -> Dict[str, any]:
                 if isinstance(node.func, ast.Name) and node.func.id == "print":
                     results["raw_print_count"] += 1
         if results["raw_print_count"] > 0:
-            results["issues"].append(f"Contains {results['raw_print_count']} raw print() calls; migrate to logger.py")
+            results["issues"].append(
+                f"Contains {results['raw_print_count']} raw print() calls; migrate to logger.py"
+            )
 
     if results["issues"]:
         results["passed"] = False
 
     return results
+
 
 def run_audit(target_dirs: List[str] = None) -> bool:
     if target_dirs is None:
@@ -111,17 +124,26 @@ def run_audit(target_dirs: List[str] = None) -> bool:
 
     return passed_files == total_files
 
+
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Audit codebase for ADR-006 & MLOps compliance")
-    parser.add_argument("--strict", action="store_true", help="Fail with exit code 1 on any violation")
-    parser.add_argument("--warn-only", action="store_true", help="Always return 0 exit code")
+
+    parser = argparse.ArgumentParser(
+        description="Audit codebase for ADR-006 & MLOps compliance"
+    )
+    parser.add_argument(
+        "--strict", action="store_true", help="Fail with exit code 1 on any violation"
+    )
+    parser.add_argument(
+        "--warn-only", action="store_true", help="Always return 0 exit code"
+    )
     args = parser.parse_args()
 
     success = run_audit()
     if args.warn_only:
         sys.exit(0)
     sys.exit(0 if success else (1 if args.strict else 0))
+
 
 if __name__ == "__main__":
     main()

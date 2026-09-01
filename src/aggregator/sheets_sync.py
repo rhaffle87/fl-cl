@@ -1,26 +1,26 @@
-"""
-src/aggregator/sheets_sync.py — Google Spreadsheet Webhook Integration (Option 2).
+# src/aggregator/sheets_sync.py — Google Spreadsheet Webhook Integration (Option 2).
+#
+# Asynchronously pushes real-time federated learning round telemetry, benchmark tables,
+# and champion promotion governance events to Google Sheets via a Google Apps Script WebApp.
 
-Asynchronously pushes real-time federated learning round telemetry, benchmark tables,
-and champion promotion governance events to Google Sheets via a Google Apps Script WebApp.
-"""
-
-import os
 import json
 import threading
-import urllib.request
 import urllib.error
-from typing import Dict, Any, List, Optional
+import urllib.request
+from typing import Any, Dict, List
 
 try:
     from logger import get_logger
+
     _log = get_logger("sheets_sync")
 except ImportError:
     try:
         from src.logger import get_logger
+
         _log = get_logger("sheets_sync")
     except ImportError:
         import logging
+
         _log = logging.getLogger("sheets_sync")
 
 
@@ -30,14 +30,19 @@ def _post_json(url: str, payload: Dict[str, Any], timeout: float = 12.0) -> bool
         return False
     try:
         import requests
+
         resp = requests.post(url, json=payload, timeout=timeout, allow_redirects=True)
         if resp.status_code == 200:
             return True
         elif resp.status_code == 401:
-            _log.error(f"[sheets_sync] Error 401 Unauthorized: Ensure Web App deployment access is set to 'Anyone' in Google Apps Script.")
+            _log.error(
+                "[sheets_sync] Error 401 Unauthorized: Ensure Web App deployment access is set to 'Anyone' in Google Apps Script."
+            )
             return False
         else:
-            _log.info(f"[sheets_sync] Webhook returned status {resp.status_code}: {resp.text[:200]}")
+            _log.info(
+                f"[sheets_sync] Webhook returned status {resp.status_code}: {resp.text[:200]}"
+            )
             return False
     except ImportError:
         try:
@@ -87,8 +92,17 @@ def send_round_metric(
         "data": {
             "round": int(server_round),
             "loss": round(float(loss), 4),
-            "accuracy_pct": round(float(accuracy) * (100.0 if float(accuracy) <= 1.0 else 1.0), 2),
-            "macro_f1": round(float(metrics.get("crucial_model_performance", metrics.get("macro_f1", 0.0))), 4),
+            "accuracy_pct": round(
+                float(accuracy) * (100.0 if float(accuracy) <= 1.0 else 1.0), 2
+            ),
+            "macro_f1": round(
+                float(
+                    metrics.get(
+                        "crucial_model_performance", metrics.get("macro_f1", 0.0)
+                    )
+                ),
+                4,
+            ),
             "f1_normal_0": round(float(metrics.get("f1_class_0", -1.0)), 4),
             "f1_botnet_1": round(float(metrics.get("f1_class_1", -1.0)), 4),
             "f1_exfil_2": round(float(metrics.get("f1_class_2", -1.0)), 4),

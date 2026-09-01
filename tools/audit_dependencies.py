@@ -1,18 +1,15 @@
-"""
-tools/audit_dependencies.py — Dependency Vulnerability & Version Pinning Auditor
-
-Audits PyPI packages, versions, deprecation warnings, and license compatibility
-for the FL-CL cyber defense framework across all testbed node roles.
-
-Target environment: Local / Proxmox VE testbed
-Usage:
-    python tools/audit_dependencies.py [--requirements requirements.txt] [--strict]
-"""
+# tools/audit_dependencies.py — Dependency Vulnerability & Version Pinning Auditor
+#
+# Audits PyPI packages, versions, deprecation warnings, and license compatibility
+# for the FL-CL cyber defense framework across all testbed node roles.
+#
+# Target environment: Local / Proxmox VE testbed
+# Usage:
+# python tools/audit_dependencies.py [--requirements requirements.txt] [--strict]
 
 import argparse
 import importlib
 import importlib.metadata
-import os
 import sys
 from pathlib import Path
 
@@ -42,16 +39,24 @@ OPTIONAL_DEPENDENCIES = {
 }
 
 APPROVED_LICENSES = {
-    "MIT", "BSD", "BSD-3-Clause", "BSD-2-Clause", "Apache 2.0", "Apache-2.0",
-    "Python Software Foundation License", "PSF-2.0", "ISC", "MPL-2.0"
+    "MIT",
+    "BSD",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "Apache 2.0",
+    "Apache-2.0",
+    "Python Software Foundation License",
+    "PSF-2.0",
+    "ISC",
+    "MPL-2.0",
 }
 
 
 def audit_installed_packages():
     results = []
-    
+
     all_deps = {**CORE_DEPENDENCIES, **OPTIONAL_DEPENDENCIES}
-    
+
     for pkg_name, min_ver in all_deps.items():
         # Package distribution name might differ from import name
         dist_name = pkg_name.replace("-", "_")
@@ -64,15 +69,21 @@ def audit_installed_packages():
                 status = "INSTALLED"
             except importlib.metadata.PackageNotFoundError:
                 installed_ver = "N/A"
-                status = "MISSING (Optional)" if pkg_name in OPTIONAL_DEPENDENCIES else "MISSING (Required)"
+                status = (
+                    "MISSING (Optional)"
+                    if pkg_name in OPTIONAL_DEPENDENCIES
+                    else "MISSING (Required)"
+                )
 
-        results.append({
-            "package": pkg_name,
-            "required_min": min_ver,
-            "installed": installed_ver,
-            "status": status,
-            "is_core": pkg_name in CORE_DEPENDENCIES,
-        })
+        results.append(
+            {
+                "package": pkg_name,
+                "required_min": min_ver,
+                "installed": installed_ver,
+                "status": status,
+                "is_core": pkg_name in CORE_DEPENDENCIES,
+            }
+        )
     return results
 
 
@@ -83,14 +94,25 @@ def check_requirements_files():
         content = req_file.read_text(encoding="utf-8")
         for line in content.splitlines():
             clean = line.strip()
-            if clean and not clean.startswith("#") and "==" not in clean and ">=" not in clean:
+            if (
+                clean
+                and not clean.startswith("#")
+                and "==" not in clean
+                and ">=" not in clean
+            ):
                 warnings.append(f"Unpinned dependency in requirements.txt: {clean}")
     return warnings
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Dependency Vulnerability & Version Pinning Auditor")
-    parser.add_argument("--strict", action="store_true", help="Fail if any core dependency is missing or outdated")
+    parser = argparse.ArgumentParser(
+        description="Dependency Vulnerability & Version Pinning Auditor"
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail if any core dependency is missing or outdated",
+    )
     args = parser.parse_args()
 
     print("=" * 70)
@@ -98,17 +120,19 @@ def main():
     print("=" * 70)
 
     print(f"\nPython Version: {sys.version.split()[0]} ({sys.executable})")
-    
+
     results = audit_installed_packages()
     req_warnings = check_requirements_files()
 
     print(f"\n{'PACKAGE':<18} | {'MIN VER':<10} | {'INSTALLED':<14} | {'STATUS'}")
     print("-" * 70)
-    
+
     missing_core = 0
     for r in results:
         flag = "[OK]" if r["status"] == "INSTALLED" else "[!]"
-        print(f"{flag} {r['package']:<15} | {r['required_min']:<10} | {r['installed']:<14} | {r['status']}")
+        print(
+            f"{flag} {r['package']:<15} | {r['required_min']:<10} | {r['installed']:<14} | {r['status']}"
+        )
         if r["status"] == "MISSING (Required)":
             missing_core += 1
     print("-" * 70)
@@ -121,12 +145,18 @@ def main():
         print("\n[OK] Requirements specifications are cleanly defined.")
 
     print("\n[*] Deprecation & Future Compatibility Notices:")
-    print("  * PyTorch Quantization: 'torch.ao.quantization' will migrate to 'torchao' in PyTorch 2.10+.")
-    print("  * NumPy 2.0 Scalar Compatibility: Verified vectorized operations use standard float/int casts.")
+    print(
+        "  * PyTorch Quantization: 'torch.ao.quantization' will migrate to 'torchao' in PyTorch 2.10+."
+    )
+    print(
+        "  * NumPy 2.0 Scalar Compatibility: Verified vectorized operations use standard float/int casts."
+    )
 
     print("=" * 70)
     if args.strict and missing_core > 0:
-        print(f"[FAIL] Dependency audit failed: {missing_core} required core packages missing.")
+        print(
+            f"[FAIL] Dependency audit failed: {missing_core} required core packages missing."
+        )
         sys.exit(1)
     else:
         print("[PASS] Dependency compliance audit completed successfully.")

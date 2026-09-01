@@ -10,14 +10,13 @@ Usage:
     python3 tools/generate_thresholds.py [--model-path data/models/cyberdefense_cnn.pt] [--dry-run]
 """
 
-import os
-import sys
-import json
 import argparse
+import json
+import sys
 from pathlib import Path
+
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src" / "defender"))
@@ -27,7 +26,9 @@ from model import get_model
 LABEL_NAMES = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: "DoS"}
 
 
-def calculate_optimal_thresholds(logits: np.ndarray, y_true: np.ndarray, num_classes: int = 5):
+def calculate_optimal_thresholds(
+    logits: np.ndarray, y_true: np.ndarray, num_classes: int = 5
+):
     """
     Search for per-class probability thresholds that maximize F1 score.
     """
@@ -62,16 +63,32 @@ def calculate_optimal_thresholds(logits: np.ndarray, y_true: np.ndarray, num_cla
             "optimal_threshold": round(best_tau, 4),
             "max_f1": round(best_f1, 4),
         }
-        print(f"  - [{class_name:10s}] Optimal Threshold tau = {best_tau:.3f} | Peak F1 = {best_f1:.4f}")
+        print(
+            f"  - [{class_name:10s}] Optimal Threshold tau = {best_tau:.3f} | Peak F1 = {best_f1:.4f}"
+        )
 
     return thresholds
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Adaptive Per-Class Decision Threshold Optimizer")
-    parser.add_argument("--model-path", default="data/models/cyberdefense_cnn.pt", help="Path to PyTorch model checkpoint")
-    parser.add_argument("--dry-run", action="store_true", help="Run with synthetic validation data for testing")
-    parser.add_argument("--out", default="configs/optimal_thresholds.json", help="Path to save threshold configuration")
+    parser = argparse.ArgumentParser(
+        description="Adaptive Per-Class Decision Threshold Optimizer"
+    )
+    parser.add_argument(
+        "--model-path",
+        default="data/models/cyberdefense_cnn.pt",
+        help="Path to PyTorch model checkpoint",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run with synthetic validation data for testing",
+    )
+    parser.add_argument(
+        "--out",
+        default="configs/optimal_thresholds.json",
+        help="Path to save threshold configuration",
+    )
     args = parser.parse_args()
 
     print("=" * 70)
@@ -82,10 +99,14 @@ def main():
     input_dim = 32
 
     if args.dry_run or not Path(args.model_path).exists():
-        print(f"[*] Dry-run mode: Generating synthetic validation dataset (N=1000, Dim={input_dim})...")
+        print(
+            f"[*] Dry-run mode: Generating synthetic validation dataset (N=1000, Dim={input_dim})..."
+        )
         np.random.seed(42)
         # Generate synthetic imbalanced distribution (85% normal, rare botnet)
-        y_true = np.random.choice([0, 1, 2, 3, 4], size=1000, p=[0.85, 0.05, 0.05, 0.03, 0.02])
+        y_true = np.random.choice(
+            [0, 1, 2, 3, 4], size=1000, p=[0.85, 0.05, 0.05, 0.03, 0.02]
+        )
         model = get_model("cnn", input_dim=input_dim, num_classes=num_classes)
         model.eval()
 
@@ -99,7 +120,9 @@ def main():
         model.eval()
         # Evaluate on validation flows
         dummy_x = torch.randn(500, input_dim)
-        y_true = np.random.choice([0, 1, 2, 3, 4], size=500, p=[0.80, 0.05, 0.05, 0.05, 0.05])
+        y_true = np.random.choice(
+            [0, 1, 2, 3, 4], size=500, p=[0.80, 0.05, 0.05, 0.05, 0.05]
+        )
         with torch.no_grad():
             logits = model(dummy_x).numpy()
 
