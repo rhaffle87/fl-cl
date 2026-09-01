@@ -1284,7 +1284,7 @@ flowchart TB
 
 To evaluate defense against compromised edge nodes injecting malicious model updates, we benchmarked 6 aggregation rules across 4 escalating adversarial scenarios with 5 simulated edge clients using the standalone Byzantine robustness suite (`tools/benchmark_byzantine.py`). These simulations used the EWC continual learning strategy (not GEM), which — as demonstrated in Section 9.2 — causes Botnet class collapse under data imbalance. Consequently, Botnet F1 = 0.00 across all strategies in this simulation; the Botnet recovery via GEM is orthogonal and validated separately in Track D/E.
 
-#### Table 9.2: Byzantine Robustness Benchmark — Measured Values (`data/reports/byzantine_robustness_benchmark.csv`)
+#### Table 9.2: Byzantine Robustness Benchmark — Measured Values (`data/reports/benchmarks/byzantine_robustness_benchmark.csv`)
 
 | Aggregator Strategy | Clean Baseline (0% Attack) | 20% Label Flip (1/5 Poison) | 40% Label Flip (2/5 Poison) | Gaussian Noise (1/5 Noise) | Best Defense Regime |
 | :--- | :---: | :---: | :---: | :---: | :---: |
@@ -1295,7 +1295,7 @@ To evaluate defense against compromised edge nodes injecting malicious model upd
 | **Multi-Krum ($m=3, f=1$)** | 86.50% (F1 0.356) | 75.70% (F1 0.172) | 75.70% (F1 0.172) | **86.80%** (F1 0.347) | Multi-candidate Gaussian defense |
 | **Bulyan ($f=1$)** | 91.10% (F1 0.558) | 91.20% (F1 0.580) | 82.80% (F1 0.368) | 75.70% (F1 0.172) | Strong meta-defense (clean + 20%) |
 
-> **Production Validation (Track E, v35)**: When GEM is combined with TrimmedMean ($\beta=0.10$) under 20% label poisoning in the full federated pipeline, the production model achieves **99.53% accuracy** with **100% Botnet recall** (21/21) and **Botnet F1 = 0.6667** — verified in [`training_results_report.md`](../../data/reports/training_results_report.md) §11.
+> **Production Validation (Track E, v35)**: When GEM is combined with TrimmedMean ($\beta=0.10$) under 20% label poisoning in the full federated pipeline, the production model achieves **99.53% accuracy** with **100% Botnet recall** (21/21) and **Botnet F1 = 0.6667** — verified in [`training_results_report.md`](../../data/reports/summaries/training_results_report.md) §11.
 
 #### Key Takeaways:
 1. **Under 20% Poisoning (1 Byzantine node)**: Distance-based **Krum** achieves the highest accuracy (**95.90%**) by entirely isolating the poisoned parameter vector. See [`figures/fig3_byzantine_defense.png`](figures/fig3_byzantine_defense.png).
@@ -1384,7 +1384,7 @@ flowchart LR
 
 We evaluated the privacy-utility boundary by sweeping the DP Gaussian noise multiplier $\sigma \in [0.00, 0.20]$ under gradient clipping $C = 1.0$ using the standalone DP sensitivity benchmark (`tools/benchmark_dp.py`).
 
-#### Table 9.4: Differential Privacy Noise Budget vs. Threat Classification F1-Score — Measured Values (`data/reports/privacy_utility_curve.csv`)
+#### Table 9.4: Differential Privacy Noise Budget vs. Threat Classification F1-Score — Measured Values (`data/reports/benchmarks/privacy_utility_curve.csv`)
 
 | DP Noise Multiplier ($\sigma$) | Normal F1 | Botnet F1 | Exfiltration F1 | BruteForce F1 | DoS F1 | Overall Accuracy | Train Loss |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |

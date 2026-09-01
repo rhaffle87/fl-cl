@@ -46,7 +46,9 @@ def audit_file(file_path: Path) -> Dict[str, any]:
     if (docstring and len(docstring.strip()) > 10) or has_block_comment:
         results["has_docstring"] = True
     else:
-        results["issues"].append("Missing or trivial module-level docstring or top block comment")
+        results["issues"].append(
+            "Missing or trivial module-level docstring or top block comment"
+        )
 
     # 2. Check pathlib
     for node in ast.walk(tree):
