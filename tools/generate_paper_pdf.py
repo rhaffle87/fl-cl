@@ -13,11 +13,20 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+import time
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PAPER_DIR = PROJECT_ROOT / "docs" / "paper"
 
 
-def get_ssh_opts():
+def parse_host_port(host_str):
+    if ":" in host_str:
+        parts = host_str.split(":", 1)
+        return parts[0], int(parts[1])
+    return host_str, 22
+
+
+def get_ssh_opts(port=22, is_scp=False):
     key_path = Path.home() / ".ssh" / "id_ed25519"
     opts = [
         "-o",
@@ -25,19 +34,89 @@ def get_ssh_opts():
         "-o",
         "StrictHostKeyChecking=no",
         "-o",
-        "ConnectTimeout=10",
+        "ConnectTimeout=8",
+        "-o",
+        "ServerAliveInterval=5",
+        "-o",
+        "ServerAliveCountMax=3",
     ]
+    if port and port != 22:
+        if is_scp:
+            opts += ["-P", str(port)]
+        else:
+            opts += ["-p", str(port)]
     if key_path.exists():
         opts += ["-i", str(key_path)]
     return opts
 
 
-def run_ssh(cmd, host):
-    opts = get_ssh_opts()
-    res = subprocess.run(
-        ["ssh"] + opts + [f"root@{host}", cmd], capture_output=True, text=True
-    )
-    return res.returncode, res.stdout, res.stderr
+def run_ssh(cmd, host_str, retries=3):
+    host, port = parse_host_port(host_str)
+    opts = get_ssh_opts(port=port, is_scp=False)
+    rc, stdout, stderr = -1, "", ""
+    for attempt in range(retries):
+        res = subprocess.run(
+            ["ssh"] + opts + [f"root@{host}", cmd], capture_output=True, text=True
+        )
+        rc, stdout, stderr = res.returncode, res.stdout, res.stderr
+        if rc == 0:
+            return rc, stdout, stderr
+        if attempt < retries - 1:
+            time.sleep(1)
+    return rc, stdout, stderr
+
+
+def upload_tarball(tar_path, host_str):
+    host, port = parse_host_port(host_str)
+    opts = get_ssh_opts(port=port, is_scp=False)
+    with open(tar_path, "rb") as f:
+        tar_data = f.read()
+    for attempt in range(3):
+        res = subprocess.run(
+            ["ssh"] + opts + [f"root@{host}", "tar -xzf - -C /tmp/paper_build"],
+            input=tar_data,
+        )
+        if res.returncode == 0:
+            return 0
+        if attempt < 2:
+            time.sleep(1)
+    return -1
+
+
+def download_pdf(out_path, host_str):
+    host, port = parse_host_port(host_str)
+    opts = get_ssh_opts(port=port, is_scp=False)
+    for attempt in range(3):
+        res = subprocess.run(
+            ["ssh"] + opts + [f"root@{host}", "cat /tmp/paper_build/manuscript.pdf"],
+            capture_output=True,
+        )
+        if res.returncode == 0 and len(res.stdout) > 10000:
+            with open(out_path, "wb") as f:
+                f.write(res.stdout)
+            return 0
+        if attempt < 2:
+            time.sleep(1)
+    return -1
+
+
+def find_live_aggregator(preferred_host):
+    candidates = [
+        preferred_host,
+        "100.84.192.94:22",
+        "10.28.10.58:2224",
+        "10.10.130.10:22",
+        "100.117.17.27:22",
+    ]
+    seen = set()
+    for h in candidates:
+        if h in seen:
+            continue
+        seen.add(h)
+        rc, out, _ = run_ssh("echo ok", h, retries=1)
+        if rc == 0 and "ok" in out:
+            return h
+    return preferred_host
 
 
 def main():
@@ -46,8 +125,8 @@ def main():
     )
     parser.add_argument(
         "--aggregator",
-        default="10.10.130.10",
-        help="Aggregator node IP with TeX Live environment (default: 10.10.130.10)",
+        default="100.84.192.94:22",
+        help="Aggregator node IP/host:port with TeX Live environment (default: 100.84.192.94:22)",
     )
     parser.add_argument(
         "--output",
@@ -55,6 +134,8 @@ def main():
         help="Destination path for compiled PDF",
     )
     args = parser.parse_args()
+
+    args.aggregator = find_live_aggregator(args.aggregator)
 
     print("========================================================================")
     print("      FL-CL Publication Manuscript LaTeX PDF Compilation Suite")
@@ -66,7 +147,7 @@ def main():
         "rm -rf /tmp/paper_build && mkdir -p /tmp/paper_build/figures", args.aggregator
     )
 
-    # 2. Package and upload LaTeX sources and vector figures via scp
+    # 2. Package and upload LaTeX sources and vector figures
     print("[*] Uploading LaTeX sources and vector figures...")
     temp_tar = Path(tempfile.gettempdir()) / "flcl_paper_build.tar.gz"
     with tarfile.open(temp_tar, mode="w:gz") as tar:
@@ -75,14 +156,9 @@ def main():
         for fig in (PAPER_DIR / "figures").glob("*.*"):
             tar.add(fig, arcname=f"figures/{fig.name}")
 
-    scp_opts = get_ssh_opts()
-    subprocess.run(
-        ["scp"]
-        + scp_opts
-        + [str(temp_tar), f"root@{args.aggregator}:/tmp/paper_build.tar.gz"],
-        check=True,
-    )
-    run_ssh("tar -xzf /tmp/paper_build.tar.gz -C /tmp/paper_build", args.aggregator)
+    if upload_tarball(temp_tar, args.aggregator) != 0:
+        print("[FAIL] Failed to upload build tarball.")
+        sys.exit(1)
 
     # 3. Check and install IEEEtran.cls if missing
     print("[*] Checking IEEEtran document class...")
@@ -118,16 +194,12 @@ def main():
         args.aggregator,
     )
 
-    # 5. Fetch PDF back to local workspace via scp
+    # 5. Fetch PDF back to local workspace
     out_pdf = Path(args.output)
     print(f"[*] Fetching compiled PDF to {out_pdf}...")
-    res = subprocess.run(
-        ["scp"]
-        + scp_opts
-        + [f"root@{args.aggregator}:/tmp/paper_build/manuscript.pdf", str(out_pdf)]
-    )
+    fetch_rc = download_pdf(out_pdf, args.aggregator)
 
-    if res.returncode == 0 and out_pdf.exists() and out_pdf.stat().st_size > 10000:
+    if fetch_rc == 0 and out_pdf.exists() and out_pdf.stat().st_size > 10000:
         print(
             f"\n[SUCCESS] Compiled PDF generated: {out_pdf} ({out_pdf.stat().st_size:,} bytes)"
         )

@@ -7,10 +7,20 @@ import os
 import sqlite3
 
 
-def audit_mlflow():
-    db_path = "/root/mlflow.db" if os.path.exists("/root/mlflow.db") else "mlflow.db"
-    if not os.path.exists(db_path):
-        print(f"Error: Database {db_path} not found.")
+def audit_mlflow(db_override: str | None = None):
+    if db_override and os.path.exists(db_override):
+        db_path = db_override
+    elif os.path.exists("/root/mlflow.db"):
+        db_path = "/root/mlflow.db"
+    elif os.path.exists("mlflow.db"):
+        db_path = "mlflow.db"
+    else:
+        print(
+            "[*] Notice: MLflow SQLite database not found locally or at /root/mlflow.db."
+        )
+        print(
+            "[*] Note: Production MLflow tracking runs on Aggregator LXC 300 (http://10.10.130.10:5000)."
+        )
         return None
 
     conn = sqlite3.connect(db_path)
@@ -107,5 +117,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="MLflow Database Standardization and Integrity Auditor"
     )
-    _ = parser.parse_args()
-    audit_mlflow()
+    parser.add_argument(
+        "--db-path",
+        default=None,
+        help="Path to SQLite mlflow.db (default: /root/mlflow.db or local mlflow.db)",
+    )
+    args = parser.parse_args()
+    audit_mlflow(db_override=args.db_path)

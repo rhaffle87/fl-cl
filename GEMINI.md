@@ -4,6 +4,22 @@ Welcome! This document outlines key context, conventions, architecture details, 
 
 ---
 
+## 0. Authoritative Research Scope & Anti-Scope-Creep Boundary
+
+> [!IMPORTANT]
+> **Mandatory Scope Gatekeeper**: All implementations, experiments, datasets, and refactorings must strictly conform to [`scope.md`](file:///e:/Projects/fl-cl/scope.md) and [`.agents/rules/scope.md`](file:///e:/Projects/fl-cl/.agents/rules/scope.md).
+>
+> * **The 4 Bounded Claims**:
+>   - **C1: Forgetting Resistance**: Botnet $BWT$ recovery via class-weighted EWC ($\lambda=1.0$) and episodic memory GEM ($P=512$).
+>   - **C2: Collaborative Privacy**: Parameter-only Flower FL exchange + batch DP-SGD ($\sigma=0.30, C=1.0$).
+>   - **C3: Byzantine Robustness**: TrimmedMean ($\beta=0.1$) & FedMedian isolating up to 20% malicious label flipping.
+>   - **C4: Encrypted Traffic Detection**: 32-dimensional NFStream flow metadata without payload decryption or DPI.
+> * **Canonical 5-Class Threat Model**: `0: Normal`, `1: Botnet`, `2: Exfiltration`, `3: BruteForce`, `4: DoS`. Never modify or expand $C$ beyond 5.
+> * **Explicit Non-Goals**: No open-ended generic multi-dataset data platforms, no payload decryption / DPI, no duplicate experiment orchestrators bypassing `src/orchestrate.py`.
+> * **Decision Gate**: If a proposed change does not pass all 5 criteria in the Anti-Scope-Creep Decision Matrix ([`scope.md`](file:///e:/Projects/fl-cl/scope.md#8-anti-scope-creep-decision-matrix-gatekeeper)), reject it immediately.
+
+---
+
 ## 1. Project Overview
 
 `fl-cl` is a hybrid **Federated Learning (FL)** and **Continual Learning (CL)** intrusion detection system designed to analyze encrypted network traffic metadata across a 3-node Proxmox VE cluster.

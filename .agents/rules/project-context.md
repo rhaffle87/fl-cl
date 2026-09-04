@@ -22,7 +22,7 @@
 ```text
 fl-cl/
 ├── .agents/
-│   ├── rules/                <- Project context & coding invariants (project-context.md, ponytail.md)
+│   ├── rules/                <- Project context & coding invariants (scope.md, project-context.md, ponytail.md)
 │   └── skills/               <- Custom domain skills (runner, proxmox-ops, mlops, cl, edge-opt)
 ├── configs/
 │   ├── baseline_feature_stats.json <- Global Z-score scaling parameters (fixed source of truth)
@@ -49,6 +49,7 @@ fl-cl/
 
 ## 3. Mandatory Engineering Invariants
 
+0. **Scope & Anti-Scope-Creep Boundary**: All tasks must strictly comply with [`scope.md`](scope.md) and the 4 Bounded Claims (C1–C4), 5-Class Threat Model, and 32-dim ETA feature schema. Any work on generic multi-dataset ETL platforms, payload decryption, or expanding $C$ beyond 5 is strictly prohibited.
 1. **No Raw Data Across Boundaries**: Raw PCAP flows and payload bytes remain local on defender VMs (`/mnt/ramdisk/flows/`). Only aggregated model weights traverse the network via Flower gRPC (TCP/8080).
 2. **Standard Libraries & PyTorch Primitives First (Ponytail Rule)**: Favor native PyTorch modules (`nn.Linear`, `nn.Conv1d`, `nn.TransformerEncoderLayer`) over wrapper libraries.
 3. **No Hardcoded Shapes (CNN Dynamic FC Rule)**: When modifying `CyberDefenseCNN`, compute `fc_input_dim` dynamically via dummy forward pass. Hardcoding breaks hyperparameter sweeps.

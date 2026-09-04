@@ -13,6 +13,7 @@ import sys
 current_dir = os.path.dirname(os.path.abspath(__file__))
 workspace_root = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.append(workspace_root)
+sys.path.append(os.path.join(workspace_root, "src"))
 sys.path.append(os.path.join(workspace_root, "src/defender"))
 sys.path.append(os.path.join(workspace_root, "src/aggregator"))
 sys.path.append("/root")
@@ -23,9 +24,15 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 try:
-    import client
+    from defender import client
+    from defender.model import get_model
 except ImportError:
-    import client as client
+    try:
+        from src.defender import client  # type: ignore
+        from src.defender.model import get_model  # type: ignore
+    except ImportError:
+        import client  # type: ignore
+        from model import get_model  # type: ignore
 
 LABEL_NAMES = {0: "Normal", 1: "Botnet", 2: "Exfiltration", 3: "BruteForce", 4: "DoS"}
 
@@ -79,6 +86,113 @@ def evaluate_on_dataset(model, X, y, device):
     return overall_acc, class_f1s
 
 
+def map_label_text(lbl_str: object) -> int:
+    """Map string label to canonical 5 classes (0: Normal, 1: Botnet, 2: Exfil, 3: BruteForce, 4: DoS)."""
+    l = str(lbl_str).strip().lower()
+    if "benign" in l or "normal" in l:
+        return 0
+    elif "bot" in l:
+        return 1
+    elif "infil" in l or "exfil" in l:
+        return 2
+    elif any(k in l for k in ["patator", "brute", "web attack"]):
+        return 3
+    elif any(k in l for k in ["dos", "ddos", "slowloris", "hulk", "heartbleed"]):
+        return 4
+    return 0
+
+
+def load_dataset_flows(data_dir: str, max_samples: int = 5000):
+    """
+    Loads flow tensors from either:
+    1. Edge RAMDisk flows (/mnt/ramdisk/flows with NFStream schema)
+    2. Offline benchmark CSVs (e.g. datasets/CIC-IDS2017)
+    """
+    from pathlib import Path
+
+    p = Path(data_dir)
+    if not p.exists():
+        raise FileNotFoundError(f"Path does not exist: {data_dir}")
+
+    csv_files = sorted(list(p.glob("*.csv")))
+    if not csv_files:
+        raise FileNotFoundError(f"No CSV flow files found in {data_dir}")
+
+    first_df = pd.read_csv(csv_files[0], nrows=5)
+    clean_cols = {c.strip(): c for c in first_df.columns}
+
+    # Standard RAMDisk schema
+    if "bidirectional_packets" in clean_cols and "src_ip" in clean_cols:
+        return client.load_ramdisk_flows(str(p))
+
+    # CIC-IDS2017 style benchmark CSVs
+    if "Destination Port" in clean_cols or "Flow Duration" in clean_cols:
+        dfs = []
+        samples_per_file = max(100, max_samples // max(1, len(csv_files)))
+        for f in csv_files:
+            try:
+                df_sub = pd.read_csv(f, nrows=samples_per_file)
+                df_sub.columns = df_sub.columns.str.strip()
+                dfs.append(df_sub)
+            except Exception:
+                continue
+
+        if not dfs:
+            raise ValueError(f"No readable data from CSVs in {data_dir}")
+
+        df = pd.concat(dfs, ignore_index=True)
+
+        def _get_col_arr(col_name: str, divisor: float = 1.0) -> np.ndarray:
+            if col_name in df.columns:
+                series = pd.to_numeric(df[col_name], errors="coerce")  # type: ignore
+                arr = np.nan_to_num(np.asarray(series, dtype=np.float32), nan=0.0)
+            else:
+                arr = np.zeros(len(df), dtype=np.float32)
+            if divisor != 1.0:
+                arr = arr / np.float32(divisor)
+            return arr
+
+        fwd_pkts = _get_col_arr("Total Fwd Packets")
+        bwd_pkts = _get_col_arr("Total Backward Packets")
+        fwd_bytes = _get_col_arr("Total Length of Fwd Packets")
+        bwd_bytes = _get_col_arr("Total Length of Bwd Packets")
+        dur_ms = _get_col_arr("Flow Duration", divisor=1000.0)
+        fwd_piat = _get_col_arr("Fwd IAT Mean", divisor=1000.0)
+        bwd_piat = _get_col_arr("Bwd IAT Mean", divisor=1000.0)
+        dst_port = _get_col_arr("Destination Port")
+
+        feats = np.column_stack(
+            [
+                fwd_pkts + bwd_pkts,  # 0: bidirectional_packets
+                fwd_bytes + bwd_bytes,  # 1: bidirectional_bytes
+                dur_ms,  # 2: duration_ms
+                fwd_pkts,  # 3: src2dst_packets
+                fwd_bytes,  # 4: src2dst_bytes
+                bwd_pkts,  # 5: dst2src_packets
+                bwd_bytes,  # 6: dst2src_bytes
+                fwd_piat,  # 7: src2dst_mean_piat_ms
+                bwd_piat,  # 8: dst2src_mean_piat_ms
+                dst_port,  # 9: dst_port
+            ]
+        ).astype(np.float32)
+
+        padding = np.zeros((feats.shape[0], 22), dtype=np.float32)
+        X = np.hstack([feats, padding])
+
+        lbl_col = [c for c in df.columns if c.lower() == "label"]
+        if lbl_col:
+            y = np.array(
+                [map_label_text(v) for v in list(df[lbl_col[0]])],
+                dtype=np.int64,
+            )
+        else:
+            y = np.zeros(len(df), dtype=np.int64)
+
+        return torch.tensor(X), torch.tensor(y)
+
+    return client.load_ramdisk_flows(str(p))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Cross-Dataset Generalization Benchmark"
@@ -115,8 +229,6 @@ def main():
             model = torch.jit.load(args.checkpoint, map_location=device)
         except Exception:
             try:
-                from model import get_model
-
                 model = get_model("cnn", input_dim=32, num_classes=5)
                 model.load_state_dict(torch.load(args.checkpoint, map_location=device))
             except Exception as e:
@@ -124,8 +236,6 @@ def main():
                     f"[*] Warning: Checkpoint load error ({e}), initializing baseline model..."
                 )
     if model is None:
-        from model import get_model
-
         model = get_model("cnn", input_dim=32, num_classes=5)
         model.eval()
 
@@ -134,15 +244,15 @@ def main():
         std = X_tensor.std(dim=0, keepdim=True) + 1e-6
         return (X_tensor - mean) / std
 
-    # 1. Load Dataset A (CIC-IDS2017)
-    print(f"[*] Loading Dataset A (CIC-IDS2017) from: {args.dataset_a_dir}")
+    # 1. Load Dataset A
+    print(f"[*] Loading Dataset A from: {args.dataset_a_dir}")
     try:
-        X_a, y_a = client.load_ramdisk_flows(args.dataset_a_dir)
+        X_a, y_a = load_dataset_flows(args.dataset_a_dir)
         X_a = subnet_standardize(X_a)
         print(f"[*] Dataset A: Loaded {X_a.shape[0]} samples.")
     except Exception as e:
         print(
-            f"[*] Warning: Could not load Dataset A flow CSVs ({e}). Generating synthetic Dataset A..."
+            f"[*] Warning: Could not load Dataset A ({e}). Generating synthetic Dataset A..."
         )
         np.random.seed(42)
         X_np = np.random.randn(500, 32).astype(np.float32)
@@ -151,13 +261,16 @@ def main():
         y_a = torch.tensor(y_np)
         X_a = subnet_standardize(X_a)
 
-    # 2. Load or Simulate Dataset B (USTC-TFC2016)
+    # 2. Load or Simulate Dataset B
     loaded_b = False
+    X_b: torch.Tensor = torch.empty(0)
+    y_b: torch.Tensor = torch.empty(0)
     if args.dataset_b_dir:
-        print(f"[*] Loading Dataset B (USTC-TFC2016) from: {args.dataset_b_dir}")
+        print(f"[*] Loading Dataset B from: {args.dataset_b_dir}")
         try:
-            X_b, y_b = client.load_ramdisk_flows(args.dataset_b_dir)
-            X_b = subnet_standardize(X_b)
+            X_b_loaded, y_b_loaded = load_dataset_flows(args.dataset_b_dir)
+            X_b = subnet_standardize(X_b_loaded)
+            y_b = y_b_loaded
             print(f"[*] Dataset B: Loaded {X_b.shape[0]} samples.")
             loaded_b = True
         except Exception as e:
@@ -315,9 +428,9 @@ def main():
             mlflow.log_metric("gen_macro_f1_a", macro_f1_a)
             mlflow.log_metric("gen_macro_f1_b", macro_f1_b)
             mlflow.log_metric("gen_macro_f1_gap", gen_gap_f1)
-            print(
-                f"[*] Logged generalization metrics to active MLflow Run: {mlflow.active_run().info.run_id}"
-            )
+            active_run = mlflow.active_run()
+            run_id = active_run.info.run_id if active_run else "active"
+            print(f"[*] Logged generalization metrics to active MLflow Run: {run_id}")
             mlflow_logged = True
     except Exception as mlflow_err:
         print(

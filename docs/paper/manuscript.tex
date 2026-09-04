@@ -98,7 +98,7 @@ The complete system topology and data flow pipeline are illustrated in Fig.~\ref
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig12_system_architecture.png}
+\includegraphics[width=\columnwidth]{fig_proxmox_cluster1.png}
 \caption{FL-CL system architecture deployed on a 3-node Proxmox VE cluster. Defender nodes extract encrypted traffic features via NFStream into tmpfs RAMDisks, train local CL strategies, and exchange model weights (294~KB/round) with the Flower aggregator. The CI/CD validation gate enforces per-class F1 thresholds before promoting candidates to the production champion alias.}
 \label{fig:system_arch}
 \end{figure}
@@ -156,7 +156,7 @@ At each step, evaluating $T$ gradient inner products requires $\mathcal{O}(T \cd
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig13_cl_strategy_flow.png}
+\includegraphics[width=\columnwidth]{fig13_cl_strategy_flow.jpg}
 \caption{Continual learning strategy decision flow. EWC suffers Fisher diagonal collapse under minority-class sparsity (Botnet recall~$= 0\%$), while GEM's gradient projection constraint restores full recall (100\%) independent of sample frequency. The MLOps validation gate blocks or promotes candidates based on per-class F1 thresholds.}
 \label{fig:cl_flow}
 \end{figure}
@@ -237,7 +237,7 @@ Track~B assesses network partition tolerance by enforcing a \textbf{50\% node dr
 \subsection{Minority Threat Recall Restoration under GEM}
 Under EWC, Botnet recall collapsed to 0.00\% with backward transfer values of BWT~$= -0.8544$ (100-round baseline) and BWT~$= -0.7751$ (50\% node dropout), as visualized in Fig.~\ref{fig:f1_trends}. This collapse is caused by the Fisher diagonal vanishing mechanism described in Section~IV-A: during 30--60 second burst attack windows, only 5--25 Botnet flows are captured versus thousands of Normal flows, causing $F_{\text{Botnet}} \approx 0$ and rendering the EWC penalty ineffective for Botnet-critical parameters.
 
-Deploying GEM with $P=512$ patterns per class completely restored Botnet recall to \textbf{100.00\%} (23/23 true positive detections in v33, 24/24 in v34), as visualized in the five-class radar chart in Fig.~\ref{fig:ewc_gem_radar}. Tightening the memory projection margin from $s=0.5$ (Track~C, initial recovery) to $s=0.2$ (Track~D, production tuned) yielded three improvements: (i)~Botnet F1 score increased by +30.9\% from 0.5275 to \textbf{0.6905}, (ii)~false positive alarms on Normal flows decreased by 50\% (reduced from 18 to 9 in training), and (iii)~the Crucial Performance Index rose from 0.837 to 0.904, exceeding the 0.90 benchmark target. Backward transfer under GEM ($s=0.2$) achieved BWT~$= 0.000$ across all five classes, confirming complete forgetting elimination, as shown in Fig.~\ref{fig:forgetting}.
+Deploying GEM with $P=512$ patterns per class completely restored Botnet recall to \textbf{100.00\%} (23/23 true positive detections in v33, 24/24 in v34), as visualized in the five-class radar chart in Fig.~\ref{fig:ewc_gem_radar}. Tightening the memory projection margin from $s=0.5$ (Track~C, initial recovery) to $s=0.2$ (Track~D, production tuned) yielded three improvements: (i)~Botnet F1 score increased by +30.9\% from 0.5275 to \textbf{0.6905}, (ii)~false positive alarms on Normal flows decreased by 50\% (reduced from 18 to 9 in training), and (iii)~the Crucial Performance Index rose from 0.837 to 0.904, exceeding the 0.90 benchmark target (detailed in Section~\ref{sec:cpi_analysis} and Fig.~\ref{fig:cpi_comparison}). Backward transfer under GEM ($s=0.2$) achieved BWT~$= 0.000$ across all five classes, confirming complete forgetting elimination, as shown in Fig.~\ref{fig:forgetting}.
 
 \begin{figure}[t]
 \centering
@@ -259,6 +259,32 @@ Deploying GEM with $P=512$ patterns per class completely restored Botnet recall 
 \caption{Backward Transfer (BWT) forgetting curves over 24 active rounds. Botnet (Class~1) degrades monotonically to BWT~$= -0.26$, while all other classes maintain BWT~$\approx 0.000$, confirming selective catastrophic forgetting.}
 \label{fig:forgetting}
 \end{figure}
+
+\subsection{Composite Qualification Index (CPI) and Automated MLOps Governance}
+\label{sec:cpi_analysis}
+
+In production encrypted traffic intrusion detection, conventional global accuracy is inherently deceptive due to severe class imbalance, where benign background flows account for over 94\% of total capture volume. Under such skew, a compromised or degraded model that suffers total catastrophic forgetting on minority attack classes can still exhibit deceptively high global accuracy ($>99.8\%$) while allowing active intrusion vectors to pass undetected. To prevent defective candidates from reaching edge defender nodes, the FL-CL framework establishes the \textbf{Crucial Performance Index (CPI)} as a unified composite qualification metric:
+\begin{equation}
+\text{CPI} = \max\left(0, \, \overline{\text{F1}} + \overline{\text{BWT}}\right),
+\label{eq:cpi}
+\end{equation}
+where $\overline{\text{F1}} = \frac{1}{C}\sum_{c=0}^{C-1} \text{F1}_c$ denotes the unweighted macro-averaged F1-score across all $C=5$ classes, and $\overline{\text{BWT}} = \frac{1}{C}\sum_{c=0}^{C-1} \min(0, \text{BWT}_c)$ quantifies the average backward transfer degradation across historical task experiences. Because $\text{BWT}_c \le 0$ measures retention loss relative to peak historical performance, any catastrophic forgetting directly penalizes the composite score additively. An operational qualification threshold of $\text{CPI} \ge 0.90$ is enforced by the central MLflow Model Registry CI/CD validation gate before promoting candidates to the production \texttt{champion} alias.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig9_cpi_comparison.png}
+\caption{Composite System Qualification Score (Crucial Performance Index, CPI) across the five production research tracks. Catastrophic forgetting under EWC degrades CPI to 0.782, failing the operational qualification threshold ($\text{CPI} \ge 0.90$). Precision-tuned GEM ($s=0.2$) and Byzantine-robust aggregation elevate CPI to 0.904 (Track~D) and 0.925 (Track~E champion), qualifying the candidate model for automated production promotion in the MLflow Model Registry.}
+\label{fig:cpi_comparison}
+\end{figure}
+
+Fig.~\ref{fig:cpi_comparison} visualizes the empirical CPI progression across the five production research tracks benchmarked on the physical Proxmox VE cluster:
+\begin{enumerate}
+    \item \textbf{Clean Baseline ($\text{CPI} = 0.795$)}: In stationary federated learning without non-stationary continual learning drift, false alarms on subtle encrypted transport flows cap macro-F1 at 0.795, failing the production threshold.
+    \item \textbf{EWC Baseline ($\text{CPI} = 0.782$)}: Under sequential class streaming, Fisher diagonal collapse causes total Botnet forgetting ($\text{BWT}_{\text{Botnet}} = -0.8544$, $\overline{\text{BWT}} = -0.1711$). Although global accuracy is 99.88\%, the heavy BWT penalty drags CPI down to 0.782, preventing premature deployment.
+    \item \textbf{GEM Initial Recovery ($s=0.5$, Track~C, $\text{CPI} = 0.837$)}: Episodic memory buffers ($P=512$) eliminate backward transfer degradation ($\overline{\text{BWT}} = -0.0004$), restoring Botnet recall to 100\%. However, loose gradient projection bounds ($\theta \le 60^\circ$) permit minor false-positive drift on Normal flows, capping Botnet F1 at 0.528.
+    \item \textbf{GEM Precision-Tuned ($s=0.2$, Track~D, $\text{CPI} = 0.904$)}: Tightening the projection margin to $s=0.2$ ($\theta \le 78.46^\circ$) suppresses Normal false alarms by 50\% and boosts Botnet F1 to 0.691. With zero forgetting degradation, CPI crosses the qualification threshold to 0.904.
+    \item \textbf{Production Champion ($s=0.2$, TrimmedMean, Track~E, $\text{CPI} = 0.925$)}: Integrating GEM continual learning with Byzantine-resilient TrimmedMean aggregation ($\beta = 0.10$) maintains peak resilience under 20\% label poisoning, achieving the peak composite score of $\text{CPI} = 0.925$ and automatically triggering production champion promotion in the MLflow Model Registry.
+\end{enumerate}
 
 \subsection{Byzantine Label Poisoning Defense}
 

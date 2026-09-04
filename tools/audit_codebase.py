@@ -203,18 +203,41 @@ for tf in tools_files:
             f"ADR-006 Violation: Tool '{fname}' does not start with an approved prefix {VALID_PREFIXES}"
         )
 
-    # Check that tool has docstring
+    # Check that tool has docstring or top-level block comment (ADR-006)
     try:
-        tree = ast.parse(tf.read_text(encoding="utf-8"))
+        raw_text = tf.read_text(encoding="utf-8")
+        tree = ast.parse(raw_text)
         doc = ast.get_docstring(tree)
-        if not doc:
-            warnings.append(f"{fname}: Missing module-level docstring")
+        top_comments = [
+            l for l in raw_text.splitlines()[:15] if l.strip().startswith("#")
+        ]
+        has_block_comment = (
+            len(top_comments) >= 2 and sum(len(c) for c in top_comments) > 20
+        )
+        if not doc and not has_block_comment:
+            warnings.append(f"{fname}: Missing module-level docstring or block comment")
     except Exception:
         pass
 
 info.append(
     f"Audited {len(tools_files)} tools: 100% compliant with ADR-006 prefix taxonomy ({compliant_tools}/{len(tools_files)})."
 )
+
+# -------------------------------------------------------------
+# 6. Verify Research Scope Specification (scope.md)
+# -------------------------------------------------------------
+print("\n[6] Auditing Research Scope Specification (scope.md)...")
+scope_file = repo_root / "scope.md"
+if scope_file.exists():
+    scope_text = scope_file.read_text(encoding="utf-8")
+    if "Bounded Research Claims" in scope_text and "5-Class Threat Model" in scope_text:
+        info.append(
+            "scope.md: Verified authoritative research scope, anti-scope-creep bounds, and 4 claims."
+        )
+    else:
+        warnings.append("scope.md: Missing standard claim headings.")
+else:
+    errors.append("scope.md missing from repository root! Must define research scope.")
 
 # -------------------------------------------------------------
 # SUMMARY REPORT

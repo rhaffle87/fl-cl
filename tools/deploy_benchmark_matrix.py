@@ -50,7 +50,7 @@ def resolve_tier_configs(tier_name: str):
     if tier_name == "all":
         return sorted(list(CONFIGS_DIR.glob("*.yaml")))
 
-    file_list = TIER_MAP.get(tier_name, [])
+    file_list = TIER_MAP.get(tier_name) or []
     resolved = []
     for f in file_list:
         p = CONFIGS_DIR / f
@@ -81,6 +81,17 @@ def main():
         help="Simulate batch execution without launching remote cluster runners",
     )
     parser.add_argument(
+        "--resume-failed",
+        action="store_true",
+        help="Skip configs that previously exited with SUCCESS in out-report",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=None,
+        help="Timeout in seconds per configuration run (default: None)",
+    )
+    parser.add_argument(
         "--out-report",
         default="data/reports/benchmarks/batch_benchmark_matrix.csv",
         help="Destination CSV report path",
@@ -102,10 +113,30 @@ def main():
         print("[!] No configurations found for specified tier.")
         sys.exit(1)
 
+    # Check for previously completed successful runs if resume requested
+    completed_configs = set()
+    out_path = Path(PROJECT_ROOT / args.out_report)
+    if args.resume_failed and out_path.exists():
+        try:
+            prev_df = pd.read_csv(out_path)
+            if "Config" in prev_df.columns and "Status" in prev_df.columns:
+                completed_configs = set(
+                    prev_df[prev_df["Status"] == "SUCCESS"]["Config"].tolist()
+                )
+                print(
+                    f"[*] Resume active: Found {len(completed_configs)} previously successful runs to skip."
+                )
+        except Exception as e:
+            print(f"[*] Warning: Could not parse previous report for resume ({e})")
+
     if args.dry_run:
         print(
             "\n[OK] Dry-run validation passed. All target configuration profiles exist and resolve."
         )
+        if completed_configs:
+            print(
+                f"[*] Would skip {len(completed_configs)} already completed profiles."
+            )
         print("=" * 80)
         return
 
@@ -114,6 +145,20 @@ def main():
     start_total_time = time.time()
 
     for idx, cfg in enumerate(configs, 1):
+        if cfg.name in completed_configs:
+            print(f"[*] Skipping completed run [{idx}/{len(configs)}]: {cfg.name}")
+            results.append(
+                {
+                    "Tier": args.tier,
+                    "Config": cfg.name,
+                    "Attack_Engine": args.attack_engine,
+                    "Status": "SUCCESS (SKIPPED)",
+                    "Duration_sec": 0.0,
+                    "Exit_Code": 0,
+                }
+            )
+            continue
+
         print("\n" + "-" * 80)
         print(f"[*] Executing Run [{idx}/{len(configs)}]: {cfg.name}")
         print("-" * 80)
@@ -128,10 +173,23 @@ def main():
         ]
 
         t0 = time.time()
-        proc = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
-        elapsed = time.time() - t0
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=args.timeout,
+            )
+            elapsed = time.time() - t0
+            status = "SUCCESS" if proc.returncode == 0 else "FAILED"
+            exit_code = proc.returncode
+        except subprocess.TimeoutExpired:
+            elapsed = time.time() - t0
+            status = "TIMEOUT"
+            exit_code = -1
+            print(f"[!] Run exceeded timeout limit of {args.timeout}s.")
 
-        status = "SUCCESS" if proc.returncode == 0 else "FAILED"
         print(f"[*] Completed in {elapsed:.2f}s | Exit Status: {status}")
 
         results.append(
@@ -141,7 +199,7 @@ def main():
                 "Attack_Engine": args.attack_engine,
                 "Status": status,
                 "Duration_sec": round(elapsed, 2),
-                "Exit_Code": proc.returncode,
+                "Exit_Code": exit_code,
             }
         )
 
@@ -151,10 +209,37 @@ def main():
     print("=" * 80)
 
     df = pd.DataFrame(results)
-    out_path = Path(PROJECT_ROOT / args.out_report)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False)
-    print(f"[OK] Batch Benchmark Matrix scorecard saved to: {out_path}\n")
+    print(f"[OK] Batch Benchmark Matrix scorecard saved to: {out_path}")
+
+    # Generate companion markdown summary
+    md_summary_dir = PROJECT_ROOT / "data" / "reports" / "summaries"
+    md_summary_dir.mkdir(parents=True, exist_ok=True)
+    md_summary_path = md_summary_dir / "batch_benchmark_matrix.md"
+    try:
+        success_count = sum(1 for r in results if "SUCCESS" in r["Status"])
+        total_runs = len(results)
+        with open(md_summary_path, "w", encoding="utf-8") as f:
+            f.write("# Batch Benchmark Matrix Execution Summary\n\n")
+            f.write(f"- **Tier**: `{args.tier.upper()}`\n")
+            f.write(f"- **Total Configurations**: {total_runs}\n")
+            f.write(
+                f"- **Success Rate**: {success_count}/{total_runs} ({(success_count/max(total_runs,1))*100:.1f}%)\n"
+            )
+            f.write(f"- **Total Duration**: {total_elapsed:.2f}s\n\n")
+            f.write("## Detailed Results\n\n")
+            f.write(
+                "| # | Configuration Profile | Attack Engine | Status | Duration (s) | Exit Code |\n"
+            )
+            f.write("| :-: | :--- | :--- | :---: | :---: | :---: |\n")
+            for idx, r in enumerate(results, 1):
+                f.write(
+                    f"| {idx} | `{r['Config']}` | {r['Attack_Engine']} | **{r['Status']}** | {r['Duration_sec']} | {r['Exit_Code']} |\n"
+                )
+        print(f"[OK] Companion Markdown summary saved to: {md_summary_path}\n")
+    except Exception as md_err:
+        print(f"[*] Warning: Could not write markdown summary: {md_err}\n")
 
 
 if __name__ == "__main__":
