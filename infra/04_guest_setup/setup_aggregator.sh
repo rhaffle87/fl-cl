@@ -50,6 +50,8 @@ systemctl enable mlflow
 systemctl restart mlflow
 
 echo "[6/7] Configuring persistent network hardening (MTU 1280, MSS 1220, TCP keepalives)..."
+systemctl enable systemd-networkd
+systemctl start systemd-networkd
 cat << 'EOF' > /etc/systemd/network/10-eth0.network
 [Match]
 Name=eth0
@@ -63,6 +65,8 @@ LinkLocalAddressing=no
 [Link]
 MTUBytes=1280
 EOF
+networkctl reload || systemctl restart systemd-networkd
+networkctl status eth0 | grep -E -q "configuring|routable|configured" || networkctl status eth0
 
 cat << 'EOF' > /etc/sysctl.d/99-network-tuning.conf
 net.ipv4.tcp_keepalive_time = 15
@@ -89,7 +93,7 @@ EOF
 
 systemctl daemon-reload
 systemctl enable network-mss-clamp.service
-systemctl restart network-mss-clamp.service || true
+systemctl restart network-mss-clamp.service
 
 mkdir -p /etc/ssh/sshd_config.d
 cat << 'EOF' > /etc/ssh/sshd_config.d/99-keepalive.conf

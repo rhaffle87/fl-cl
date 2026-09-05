@@ -487,6 +487,8 @@ class CyberDefenseClient(NumPyClientClass):
         fisher_max = 0.0
         fisher_diagonals_serialized = ""
         current_round = int(config.get("server_round", 1))
+        train_acc = None
+        train_loss = 0.0
 
         try:
             X, y = load_ramdisk_flows(
@@ -607,6 +609,20 @@ class CyberDefenseClient(NumPyClientClass):
             self.cl.train(experience)
             _log.info("Trained on %d flows", num_samples)
 
+            if num_samples > 0:
+                try:
+                    self.net.eval()
+                    with torch.no_grad():
+                        train_logits = self.net(X_train)
+                        loss_fn = torch.nn.CrossEntropyLoss()
+                        train_loss = float(loss_fn(train_logits, y_train).item())
+                        train_preds = torch.argmax(train_logits, dim=1)
+                        train_acc = float(
+                            (train_preds == y_train).sum().item()
+                        ) / float(len(y_train))
+                except Exception as ex:
+                    _log.warning("Could not compute training accuracy: %s", ex)
+
             # Extract EWC Fisher Information Matrix diagonals (importance weights)
             ewc_plugin = None
             if hasattr(self.cl, "plugins"):
@@ -700,19 +716,22 @@ class CyberDefenseClient(NumPyClientClass):
             clean_params.append(t.numpy())
         # Return at least 1 so FedAvg aggregate_inplace never divides by zero
         # when all clients have an empty ramdisk (e.g. extractor not ready yet).
+        fit_metrics = {
+            "loss": train_loss,
+            "client_id": self.client_id,
+            "dataset_rejected": dataset_rejected,
+            "dataset_jsd": jsd_val,
+            "fisher_mean": fisher_mean,
+            "fisher_max": fisher_max,
+            "fisher_diagonals": fisher_diagonals_serialized,
+        }
+        if train_acc is not None:
+            fit_metrics["accuracy"] = train_acc
+
         return (
             clean_params,
             max(num_samples, 1),
-            {
-                "accuracy": 0.0,
-                "loss": 0.0,
-                "client_id": self.client_id,
-                "dataset_rejected": dataset_rejected,
-                "dataset_jsd": jsd_val,
-                "fisher_mean": fisher_mean,
-                "fisher_max": fisher_max,
-                "fisher_diagonals": fisher_diagonals_serialized,
-            },
+            fit_metrics,
         )
 
     @mlflow.trace(name="client_evaluate")

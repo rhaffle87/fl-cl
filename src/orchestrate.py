@@ -1030,9 +1030,14 @@ def main():
         else:
             node.cleanup(kill_mlflow=True)
             if node.name in ["defender-a", "defender-b"]:
-                _log.info(f"[{node.name}] Stopping edge inference service and cleaning up ramdisk flows directory...")
+                _log.info(f"[{node.name}] Verifying edge inference service and cleaning up ramdisk flows directory...")
                 node.run_cmd(
-                    "systemctl stop fl-cl-edge-inference.service 2>/dev/null || true; find /mnt/ramdisk/flows/ -maxdepth 1 -type f -delete || rm -rf /mnt/ramdisk/flows/* || true"
+                    "if systemctl list-unit-files fl-cl-edge-inference.service >/dev/null 2>&1; then "
+                    "systemctl stop fl-cl-edge-inference.service 2>/dev/null || true; "
+                    "if systemctl is-active --quiet fl-cl-edge-inference.service; then "
+                    "echo '[!] fl-cl-edge-inference.service remains active; skipping ramdisk deletion.' >&2; exit 0; fi; "
+                    "fi; "
+                    "find /mnt/ramdisk/flows/ -maxdepth 1 -type f -delete || rm -rf /mnt/ramdisk/flows/* || true"
                 )
 
     try:
