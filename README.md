@@ -77,6 +77,7 @@ fl-cl/
     ├── benchmark_onnx.py         <- Multi-runtime (PyTorch vs ONNX Runtime) latency benchmark
     ├── check_dataset.py          <- Inspect ramdisk flow label distribution
     ├── check_features.py         <- Per-class feature statistics
+    ├── check_network_stability.py <- Automated network stability, ARP collision, MTU & service health auditor
     ├── deploy_testbed.py         <- Automated multi-track testbed deployment runner
     ├── export_onnx.py            <- ONNX model graph exporter
     ├── generate_llm_report.py    <- Post-training local LLM threat report generator

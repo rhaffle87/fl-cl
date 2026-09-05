@@ -44,7 +44,7 @@ pct create $CTID $TEMPLATE \
     --hostname $HOSTNAME \
     --ostype ubuntu \
     --rootfs local-lvm:50 \
-    --net0 name=eth0,bridge=vmbr0,ip=192.168.30.50/24 \
+    --net0 name=eth0,bridge=vmbr0,ip=192.168.30.55/24 \
     --net1 name=eth1,bridge=vmbr1,ip=${AGGREGATOR_HOST:-10.10.130.10}/16 \
     --onboot 1 \
     --unprivileged 1

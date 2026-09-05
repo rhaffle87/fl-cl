@@ -67,6 +67,19 @@ Before any VMs can be provisioned, three infrastructure inconsistencies must be 
  * **Broad Range L3 Reachability:** By using a `/16` network mask (instead of `/24`), all guests on the L2 bridge can communicate directly across nodes, bypassing the switch's inability to route VLAN-tagged traffic.
  * **Port Mirroring Security:** Hypervisor-level port mirroring via `tc` operates directly on VM interfaces (`tap` queues) and remains fully functional, as it is independent of bridge VLAN filtering.
 
+### F. Management Bridge (vmbr0) IP Collisions & Path MTU Clamping
+
+* **The Conflict:** On management bridge `vmbr0` (`192.168.30.0/24`), static IP assignments on containers suffered intermittent dropouts. Duplicate Address Detection (DAD) revealed that external physical switch equipment claimed `192.168.30.50` (MAC `BC:24:11:80:A3:E4`) and `192.168.30.100` (MAC `BC:24:11:9F:C1:FF`). Furthermore, WireGuard/Tailscale encapsulation overhead caused 1500-byte packets to be dropped on intermediate hops that do not support Path MTU Discovery (PMTUD blackholing), stalling large transfers (`ollama pull`) and causing SSH timeouts.
+* **The Resolution:**
+  * **Conflict-Free Static Allocation:** Reassigned `fl-aggregator` to `192.168.30.55/24` and `ollama-server` to `192.168.30.105/24`. Validated via DAD (`arping -c 2 -D -I eth0 <IP>`) with zero duplicate ARP replies.
+  * **Path MTU & TCP MSS Clamping:** Configured interface MTU to `1280` in `/etc/systemd/network/10-eth0.network` and enforced persistent TCP MSS clamping to `1220` via `network-mss-clamp.service`:
+    ```bash
+    iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1220
+    iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1220
+    ```
+  * **Aggressive NAT & SSH Keepalives:** Prevent upstream stateful NAT firewalls from tearing down idle sessions by setting `net.ipv4.tcp_keepalive_time = 15` in `/etc/sysctl.d/99-network-tuning.conf` and configuring `ClientAliveInterval 15` in `/etc/ssh/sshd_config.d/99-keepalive.conf`.
+  * **Automated Audit:** Verified using `tools/check_network_stability.py` across both nodes.
+
 ---
 
 ## 2. Optimized Resource Placement Matrix
@@ -193,7 +206,7 @@ pveam download local ubuntu-24.04-standard_24.04-1_amd64.tar.zst
 pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
  -cores 4 -memory 8192 -swap 2048 \
  -hostname fl-aggregator -ostype ubuntu -rootfs local:50 \
- -net0 name=eth0,bridge=vmbr0,ip=dhcp \
+ -net0 name=eth0,bridge=vmbr0,ip=192.168.30.55/24 \
  -net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
  -onboot 1 -start 1
 ```
@@ -431,4 +444,8 @@ sudo tcpdump -i ens19 -c 10
 | `src/defender/cl_strategy.py` | EWC fails on short-duration Botnet attack flows ($<60\text{s}$). | **Root Cause**: Sample scarcity causes near-zero Fisher diagonal values. **Resolution**: Deploy Gradient Episodic Memory (GEM, $P=512$) with quadratic programming gradient projection. |
 | `src/defender/inference_loop.py` | Dynamic INT8 CPU quantization slower than FP32 for small batches ($N \le 64$). | **Root Cause**: Runtime quantization/dequantization scaling overhead on AVX2 CPUs. **Resolution**: Use FP32 TorchScript or ONNX Runtime CPU execution provider for maximum edge throughput. |
 | Windows Host CLI | Python CLI crashes with `UnicodeEncodeError` under Windows default `cp1252`. | **Resolution**: Use pure ASCII safe strings (`->`, `us`, `[OK]`) in all CLI logging and monitoring scripts. |
+| Management Bridge `vmbr0` | Recurrent SSH drops, Tailscale DERP flapping, and stalled transfers. | **Root Cause**: Duplicate IP collision with physical switch equipment (`BC:24:11:80:A3:E4` on `.50`, `BC:24:11:9F:C1:FF` on `.100`). **Resolution**: Migrate to conflict-free static IPs (`192.168.30.55`, `192.168.30.105`) verified via `arping -c 2 -D -I eth0 <IP>`. |
+| Tailscale / WireGuard | Large transfers stall (e.g. `ollama pull` stalls at 17-31%). | **Root Cause**: Path MTU blackholing over WireGuard encapsulation (1500 bytes drops). **Resolution**: Pin interface MTU to `1280` and enforce TCP MSS clamping to `1220` via `network-mss-clamp.service`. |
+| Stateful NAT Gateway | Idle SSH and telemetry sessions disconnect after short pauses. | **Root Cause**: Aggressive NAT firewall table state expiry. **Resolution**: Set `net.ipv4.tcp_keepalive_time=15` in `/etc/sysctl.d/99-network-tuning.conf` and `ClientAliveInterval 15` in SSH daemon. |
+
 

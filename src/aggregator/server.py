@@ -96,7 +96,7 @@ def weighted_avg(metrics):
         return {"accuracy": 0.0}
 
     # Aggregate overall accuracy
-    accs = [n * m["accuracy"] for n, m in metrics]
+    accs = [n * m.get("accuracy", 0.0) for n, m in metrics]
     avg_accuracy = sum(accs) / total_samples
 
     aggregated_metrics = {"accuracy": avg_accuracy}

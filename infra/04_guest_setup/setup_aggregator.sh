@@ -27,7 +27,7 @@ pip install --upgrade pip
 pip install flwr          # Federated Learning server
 pip install mlflow        # Experiment tracking
 
-echo "[5/6] Creating persistent MLflow systemd service..."
+echo "[5/7] Creating persistent MLflow systemd service..."
 cat << 'EOF' > /etc/systemd/system/mlflow.service
 [Unit]
 Description=MLflow Tracking Server
@@ -49,7 +49,56 @@ systemctl daemon-reload
 systemctl enable mlflow
 systemctl restart mlflow
 
-echo "[6/6] Verifying installation..."
+echo "[6/7] Configuring persistent network hardening (MTU 1280, MSS 1220, TCP keepalives)..."
+cat << 'EOF' > /etc/systemd/network/10-eth0.network
+[Match]
+Name=eth0
+
+[Network]
+Address=192.168.30.55/24
+Gateway=192.168.30.1
+DNS=1.1.1.1 8.8.8.8
+LinkLocalAddressing=no
+
+[Link]
+MTUBytes=1280
+EOF
+
+cat << 'EOF' > /etc/sysctl.d/99-network-tuning.conf
+net.ipv4.tcp_keepalive_time = 15
+net.ipv4.tcp_keepalive_intvl = 5
+net.ipv4.tcp_keepalive_probes = 5
+net.ipv4.tcp_mtu_probing = 1
+EOF
+sysctl -p /etc/sysctl.d/99-network-tuning.conf 2>/dev/null || true
+
+cat << 'EOF' > /etc/systemd/system/network-mss-clamp.service
+[Unit]
+Description=Clamp TCP MSS to 1220 for WireGuard/Tailscale encapsulation
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1220
+ExecStart=/sbin/iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1220
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable network-mss-clamp.service
+systemctl restart network-mss-clamp.service || true
+
+mkdir -p /etc/ssh/sshd_config.d
+cat << 'EOF' > /etc/ssh/sshd_config.d/99-keepalive.conf
+ClientAliveInterval 15
+ClientAliveCountMax 4
+EOF
+systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+
+echo "[7/7] Verifying installation..."
 python3 -c "import flwr; print(f'Flower version: {flwr.__version__}')"
 python3 -c "import mlflow; print(f'MLflow version: {mlflow.__version__}')"
 systemctl status mlflow --no-pager

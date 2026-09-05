@@ -226,6 +226,21 @@ def audit_facts():
             if not any(re.match(p, ip) for p in valid_patterns):
                 findings.append(f"[{rel_path}] Unrecognized cluster IP: '{ip}'")
 
+        # 3b. Check Management Bridge vmbr0 IPs (192.168.30.x)
+        for ip_match in re.finditer(r"192\.168\.30\.(\d+)", content):
+            checked_claims += 1
+            last_octet = int(ip_match.group(1))
+            valid_octets = {0, 2, 55, 105}
+            # Allow .50 and .100 ONLY in docs/07_troubleshooting.md when describing the resolved conflict
+            if last_octet not in valid_octets:
+                rel_str = str(rel_path)
+                if last_octet in {50, 100} and ("07_troubleshooting" in rel_str or "walkthrough" in rel_str):
+                    pass
+                else:
+                    findings.append(
+                        f"[{rel_str}] Deprecated or colliding management IP: '192.168.30.{last_octet}' (Expected .55 or .105)"
+                    )
+
         # 4. Check NFStream n_dissections (must be 20)
         for m in re.finditer(r"n_dissections\s*=\s*(\d+)", content):
             checked_claims += 1

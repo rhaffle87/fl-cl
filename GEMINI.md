@@ -119,6 +119,14 @@ Verifies end-to-end training convergence on a synthetic/dummy 5-class traffic fl
 python tools/test_local_train.py
 ```
 
+### Run Network Stability & Health Verification
+
+Audits SSH latency, duplicate IP collisions on `vmbr0`, MTU 1280, TCP MSS 1220 clamping, persistent sysctl keepalives, and live service endpoints (Ollama HTTPS & MLflow) across `ollama-server` and `fl-aggregator`.
+
+```bash
+python tools/check_network_stability.py
+```
+
 ---
 
 ## 6. Agent Skills & Operational Automation

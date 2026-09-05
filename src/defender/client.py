@@ -704,6 +704,8 @@ class CyberDefenseClient(NumPyClientClass):
             clean_params,
             max(num_samples, 1),
             {
+                "accuracy": 0.0,
+                "loss": 0.0,
                 "client_id": self.client_id,
                 "dataset_rejected": dataset_rejected,
                 "dataset_jsd": jsd_val,

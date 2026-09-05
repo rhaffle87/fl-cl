@@ -154,17 +154,21 @@ Create the aggregator LXC container. `net1` is bound to `vmbr1` on the flat L2 n
 
 ```bash
 pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
- --cores 4 \
- --memory 8192 \
- --swap 2048 \
- --hostname fl-aggregator \
- --ostype ubuntu \
- --rootfs local:50 \
- --net0 name=eth0,bridge=vmbr0,ip=dhcp \
- --net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
- --onboot 1 \
- --start 1
+    --cores 4 \
+    --memory 8192 \
+    --swap 2048 \
+    --hostname fl-aggregator \
+    --ostype ubuntu \
+    --rootfs local:50 \
+    --net0 name=eth0,bridge=vmbr0,ip=192.168.30.55/24 \
+    --net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
+    --onboot 1 \
+    --start 1
 ```
+
+> [!NOTE]
+> **Management IP & Path MTU Clamping**: Management interface `eth0` is allocated static `192.168.30.55/24` on `vmbr0` (matching `infra/02_vm_provision/create_aggregator.sh`), isolating it from duplicate address collisions. To ensure stability across WireGuard/Tailscale telemetry tunnels (`100.97.96.13`), interface MTU is clamped to 1280 with iptables TCP MSS set to 1220 via `network-mss-clamp.service`.
+
 
 #### Step 2.3: Provision the Defender and Target VMs
 

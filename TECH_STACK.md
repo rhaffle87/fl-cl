@@ -44,10 +44,14 @@ These run directly on the bare-metal Proxmox VE hosts (`its`, `node2` - Dell Pow
 | **Subnet Zone B** (10.10.120.0/16) | Organization B logical subnet | VM 320, VM 321 |
 | **Subnet Zone FL** (10.10.130.0/16) | FL Aggregation logical subnet | LXC 300 |
 | **Subnet Zone Traffic** (10.10.140.0/16) | Traffic generation logical subnet | VM 400 |
+| **Management Bridge (vmbr0)** (192.168.30.0/24) | Out-of-band control & host management | PVE (.2), LXC 300 (.55), Ollama (.105) |
+| **Tailscale Mesh Overlay** (100.64.0.0/10) | Encrypted telemetry & out-of-band access | Aggregator (.97.96.13), Ollama (.110.11.66) |
+| **Path MTU & MSS Clamping** (1280 / 1220) | Prevents WireGuard tunnel packet blackholing | LXC 300, Ollama Server |
 | **gRPC over TLS** | FL weight sync (Flower protocol) | Defenders ↔ Aggregator |
 | **TCP/8080** | Flower server port | LXC 300 |
 | **TCP/5000** | MLflow tracking UI | LXC 300 |
 | **TCP/6006** | TensorBoard UI | VM 310, VM 320 |
+| **TCP/443 (HTTPS)** | Nginx reverse proxy for Ollama inference | Ollama Server |
 
 ---
 
@@ -136,7 +140,7 @@ These packages run inside VM 310 and VM 320.
 | **Ollama** | Local LLM inference engine for threat reports (`llama3.1:8b`) | LXC / Tailscale Node | 11435 |
 | **Nginx Reverse Proxy** | Dual-key authenticated endpoint proxying local Ollama APIs | Tailscale Node | 443 / 80 |
 | **Model Promotion Gate** | Automated CI/CD promotion evaluating recall, latency, and drift | `tools/validate_promotion.py` | Local / Remote |
-
+| **Network Stability Auditor** | Automated ARP conflict, MTU 1280, MSS 1220, and live API audit | `tools/check_network_stability.py` | Local / Remote |
 
 ---
 

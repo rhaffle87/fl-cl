@@ -906,7 +906,7 @@ Deploy in dependency order: aggregator first (so clients can resolve it), then d
 pct create 300 local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst \
     -cores 4 -memory 8192 -swap 2048 -hostname fl-aggregator \
     -rootfs local:50 \
-    -net0 name=eth0,bridge=vmbr0,ip=dhcp \
+    -net0 name=eth0,bridge=vmbr0,ip=192.168.30.55/24 \
     -net1 name=eth1,bridge=vmbr1,ip=10.10.130.10/16 \
     -onboot 1 -start 1
 ```

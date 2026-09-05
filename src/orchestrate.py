@@ -366,10 +366,10 @@ class RemoteNode:
 
     def cleanup(self, kill_mlflow=False):
         opts = self._get_ssh_opts()
-        pattern = "server.py|client.py|extractor.py|attack_flow.py|busybox httpd|normal_traffic_loop|curl|simple_httpd.sh|ncrack|medusa|hydra|slowhttptest|hping3"
+        pattern = "server.py|client.py|extractor.py|attack_flow.py|busybox httpd|normal_traffic_loop|curl|simple_httpd.sh|ncrack|medusa|hydra|slowhttptest|hping3|onnx_edge_daemon.py"
         if kill_mlflow:
             pattern += "|mlflow"
-        kill_cmd = f"pkill -f '{pattern}' || pkill -x nc || true"
+        kill_cmd = f"systemctl stop fl-cl-edge-inference.service 2>/dev/null || true; pkill -f '{pattern}' || pkill -x nc || true"
         _log.info(f"[{self.name}] Cleaning up background processes...")
         ssh_cmd = ["ssh", "-n"] + opts + [f"{self.username}@{self.ip}", kill_cmd]
         subprocess.run(ssh_cmd, capture_output=True)
@@ -1030,9 +1030,9 @@ def main():
         else:
             node.cleanup(kill_mlflow=True)
             if node.name in ["defender-a", "defender-b"]:
-                _log.info(f"[{node.name}] Cleaning up ramdisk flows directory...")
+                _log.info(f"[{node.name}] Stopping edge inference service and cleaning up ramdisk flows directory...")
                 node.run_cmd(
-                    "find /mnt/ramdisk/flows/ -maxdepth 1 -type f -delete || rm -rf /mnt/ramdisk/flows/* || true"
+                    "systemctl stop fl-cl-edge-inference.service 2>/dev/null || true; find /mnt/ramdisk/flows/ -maxdepth 1 -type f -delete || rm -rf /mnt/ramdisk/flows/* || true"
                 )
 
     try:
